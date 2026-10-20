@@ -64,7 +64,7 @@ export const adjudicationSchema = z.strictObject({
 });
 export const featureVerificationSchema = z.strictObject({
   verdict: z.enum(['accepted', 'repair', 'needs-user', 'integration-review']), summary: text,
-  criteria: z.array(z.strictObject({ featureId: id, criterion: text, evidenceIds: z.array(text).min(1), satisfied: z.boolean() })),
+  criteria: z.array(z.strictObject({ featureId: id, criterion: text.optional(), criterionId: id.optional(), evidenceIds: z.array(text).min(1), satisfied: z.boolean() })),
   unprovenComposition: z.array(z.strictObject({ id, featureId: id, lens: text, boundary: text })).max(6).optional(),
   integrationDispositions: z.array(z.strictObject({ findingId: text, decision: z.enum(['fix', 'reject']), reason: text })).optional(),
   repairSectionIds: z.array(id), repairInstructions: z.string(), question: z.string().optional(),
