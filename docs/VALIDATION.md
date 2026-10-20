@@ -81,3 +81,5 @@ The original parallel parent-Section product implementation and automatic legacy
 **Verification limits:** deterministic actor fixtures are not a live-model end-to-end benchmark; the real Feishu bot and real external-subagent/ZCode/Codex credentials are not installed in GitHub Actions. Advisor secret scans are best-effort and require human inspection before any ZIP is forwarded. The generated `lib/` output and installed package need the final main commit build/pack consistency check. Do not claim those steps pass before their recorded CI status is available.
 
 Distribution refresh is explicitly requested only after the source parity changes are committed. The next verification run must confirm `lib/` byte-for-byte matches the source build before release.
+
+Source verification before final bundle regeneration: GitHub Actions [verify run 39517751880](https://github.com/iBobbyTS/dsh-sfd/actions/runs/39517751880) passed TypeScript typecheck, all current deterministic tests and source build; only the expected committed-lib freshness gate remained, requiring the explicit distribution sync.
