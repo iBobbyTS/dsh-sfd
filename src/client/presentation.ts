@@ -6,7 +6,7 @@ export const STATUS_LABELS: Record<RunStatus, string> = {
   blocked: 'Blocked', 'waiting-user': 'Needs your decision', cancelled: 'Cancelled', completed: 'Completed',
 };
 export const SECTION_LABELS: Record<SectionStage, string> = {
-  pending: 'Waiting on dependencies', implementing: 'Implementing', 'review-selection': 'Selecting risk lenses',
+  pending: 'Waiting on dependencies', implementing: 'Implementing', reroute: 'Rechecking repair-delta risks', 'review-selection': 'Selecting risk lenses',
   'review-a': 'Independent A review', 'adjudicating-a': 'Reconciling A evidence', repairing: 'Repairing',
   closure: 'Checking repair closure', 'review-b': 'Blind B review', 'adjudicating-b': 'Reconciling B evidence',
   accepted: 'Accepted', integrated: 'Integrated',
