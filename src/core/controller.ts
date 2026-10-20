@@ -630,7 +630,7 @@ export class WorkflowController {
       });
       return true;
     }
-    if (output.resolution === 'repair') return this.requestRepair(run, section, output.repairInstructions, output.material, isB ? 'b' : 'a', output.invalidatedSectionIds);
+    if (output.resolution === 'repair') return this.requestRepair(run, section, output.repairInstructions, output.material, isB ? 'b' : 'a', output.invalidatedSectionIds, output.dispositions.filter((item) => item.decision === 'fix').map((item) => item.findingId));
     await this.change(run.id, (draft) => {
       const state = draft.sections[section.id]!;
       if (isB) {
@@ -661,6 +661,7 @@ export class WorkflowController {
     for (const reuse of output.evidenceReuse) {
       const review = reviews.find((entry) => entry.id === reuse.evidenceId);
       if (!review || review.output.verdict === 'incomplete' || !reuse.reason.trim()) throw new Error('Coverage reuse requires an existing complete report and a semantic reason.');
+      if (section.freshRepairLensIds?.includes(review.lensId) && review.candidateId !== candidate.id) throw new Error('Invalidated A lens cannot reuse stale source evidence.');
     }
     if (output.resolution === 'repair' && !output.repairInstructions.trim()) throw new Error('A repair decision requires concrete repair instructions.');
     if (output.resolution !== 'accept') return;
@@ -669,6 +670,22 @@ export class WorkflowController {
     if (checks.some((spec) => !section.checks.some((evidence) => evidence.specId === spec.id && evidence.candidateId === candidate.id && evidence.status === 'passed'))) throw new Error('Acceptance requires actual passing host checks on the current candidate.');
     const current = this.currentReviews(reviews, candidate.id);
     if (current.some((review) => review.output.verdict === 'incomplete')) throw new Error('An incomplete review cannot provide accepted coverage.');
+    if (section.repairOrigin) {
+      const closure = [...current].reverse().find((review) => review.stage === 'closure');
+      if (!closure) throw new Error('Current repaired candidate lacks a targeted closure report.');
+      const outcomes = closure.output.closures ?? [];
+      const targets = section.closureFindingIds ?? [];
+      if (new Set(outcomes.map((entry) => entry.findingId)).size !== outcomes.length ||
+          outcomes.length !== targets.length ||
+          targets.some((id) => !outcomes.some((entry) => entry.findingId === id && entry.status === 'verified-closed' && entry.evidence.trim()))) {
+        throw new Error('Every admitted finding must have itemized VERIFIED_CLOSED evidence on the current candidate.');
+      }
+      for (const lensId of section.freshRepairLensIds ?? []) {
+        if (!current.some((review) => review.stage === 'a' && review.lensId === lensId && review.output.verdict !== 'incomplete')) {
+          throw new Error(`Repair-delta lens ${lensId} lacks fresh independent discovery.`);
+        }
+      }
+    }
     if (section.stage === 'adjudicating-b') {
       if (section.aAcceptedCandidateId !== candidate.id) throw new Error('B acceptance requires logical A coverage on the same candidate.');
       if (!current.some((review) => review.stage === 'b')) throw new Error('B acceptance requires an independent full current-candidate B report.');
@@ -677,11 +694,11 @@ export class WorkflowController {
       for (const lens of section.lenses) {
         if (!reviews.some((review) => review.stage === 'a' && review.lensId === lens.id && eligible.has(review.id))) throw new Error(`Missing logical A coverage for ${lens.id}; focused closure alone is insufficient.`);
       }
-      if (section.repairOrigin && !current.some((review) => review.stage === 'closure')) throw new Error('A repaired candidate requires targeted closure and direct regression evidence.');
+      // Exact finding closures and new risk evidence have been checked above.
     }
   }
 
-  private async requestRepair(run: DevelopmentRun, section: SectionState, instructions: string, material: boolean, origin: 'a' | 'b' | 'feature', invalidated: string[] = []): Promise<boolean> {
+  private async requestRepair(run: DevelopmentRun, section: SectionState, instructions: string, material: boolean, origin: 'a' | 'b' | 'feature', invalidated: string[] = [], findingIds: string[] = []): Promise<boolean> {
     const correctiveDecisions = run.events.filter((event) => event.type === 'repair-admitted' && event.sectionId === section.id).length;
     if (correctiveDecisions >= run.policy.maxRepairWaves + 2) {
       await this.block(run.id, `Section ${section.id} exhausted the bounded corrective workflow attempts, including non-material repairs. Diagnose or revise the contract without resetting its original lineage.`, 'budget', section.id); return false;
@@ -693,6 +710,7 @@ export class WorkflowController {
       const state = draft.sections[section.id]!;
       if (material) state.materialRepairWaves++;
       state.inputContractVersion++; state.stage = 'repairing'; state.repairInstructions = instructions; state.repairOrigin = origin;
+      state.closureFindingIds = [...new Set(findingIds)]; delete state.freshRepairLensIds;
       delete state.acceptedCandidateId; delete state.integratedCandidateId; delete state.aAcceptedCandidateId;
       draft.stage = 'sections'; draft.activeSectionId = section.id;
       delete draft.featureVerificationAttemptId;
@@ -788,6 +806,7 @@ export class WorkflowController {
           const state = draft.sections[id]!;
           state.stage = 'repairing'; state.materialRepairWaves++; state.inputContractVersion++;
           state.repairOrigin = 'feature'; state.repairInstructions = output.repairInstructions;
+          state.closureFindingIds = []; delete state.freshRepairLensIds;
           delete state.acceptedCandidateId; delete state.integratedCandidateId; delete state.aAcceptedCandidateId;
           this.event(draft, 'repair-admitted', 'Feature repair assigned to its own Section write owner and original material budget.', { sectionId: id });
         }
@@ -807,10 +826,22 @@ export class WorkflowController {
     if (Object.values(run.sections).some((section) => section.stage !== 'integrated')) throw new Error('Feature acceptance requires every parent Section to be accepted and integrated.');
     const candidateId = run.currentCandidateId;
     if (requiredChecks.some((id) => !run.featureChecks.some((check) => check.specId === id && check.candidateId === candidateId && check.status === 'passed'))) throw new Error('Required real business path checks did not pass on the delivered candidate.');
-    const evidenceIds = new Set([
-      ...run.reviews.map((item) => item.id), ...run.decisions.map((item) => item.id),
-      ...run.featureChecks.map((item) => item.id), ...Object.values(run.sections).flatMap((section) => section.checks.map((item) => item.id)),
-    ]);
+    // Evidence must still apply to the accepted Section or the final composed candidate.
+    const evidenceIds = new Set(run.featureChecks.filter((check) => check.candidateId === candidateId && check.status === 'passed').map((check) => check.id));
+    for (const section of Object.values(run.sections)) {
+      if (section.stage !== 'integrated' || !section.acceptedCandidateId) continue;
+      for (const check of section.checks) {
+        if (check.candidateId === section.acceptedCandidateId && check.status === 'passed') evidenceIds.add(check.id);
+      }
+      for (const review of run.reviews) {
+        if (review.sectionId === section.id && review.output.verdict !== 'incomplete' &&
+            (review.candidateId === section.acceptedCandidateId || section.aCoverageEvidenceIds.includes(review.id))) evidenceIds.add(review.id);
+      }
+      for (const decision of run.decisions) {
+        if (decision.sectionId === section.id && decision.candidateId === section.acceptedCandidateId &&
+            'resolution' in decision.output && decision.output.resolution === 'accept') evidenceIds.add(decision.id);
+      }
+    }
     const expected = run.plan!.features.flatMap((feature) => feature.acceptanceCriteria.map((criterion) => ({ featureId: feature.id, criterion })));
     if (output.criteria.length !== expected.length) throw new Error('Feature acceptance must account for each business criterion exactly once.');
     for (const entry of expected) {
