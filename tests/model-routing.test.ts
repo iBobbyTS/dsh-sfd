@@ -205,3 +205,19 @@ test('external review siblings share a workspace serially, avoiding daemon owner
     await first.dispose(); await second.dispose();
   } finally { await runner.dispose(); }
 });
+
+test('external transport retains a 90k task contract inline when under its 262k prompt ceiling', async () => {
+  const { task, store } = fixture('glm-5.3', 'zai', 'adjudicator');
+  task.input = { goal: 'Keep the approved user requirement.', evidence: 'E'.repeat(90_000) };
+  const cli = new FakeCli();
+  const runner = new ExternalSubagentRunner(store, cli);
+  try {
+    const handle = await runner.start(task, new AbortController().signal);
+    assert.equal((await handle.result).status, 'completed');
+    const sent = String(cli.calls.find((entry) => entry.command === 'spawn')?.input.prompt);
+    assert.ok(sent.includes('E'.repeat(10_000)));
+    assert.ok(Buffer.byteLength(sent, 'utf8') < 262_144);
+    assert.ok(!sent.includes('artifactPath'), 'In-range external inputs must not require out-of-worktree evidence files');
+    await handle.dispose();
+  } finally { await runner.dispose(); }
+});
