@@ -197,6 +197,7 @@ export interface SectionState {
   candidateId?: string;
   /** Frozen source just before this parent Section first became executable. */
   sectionBaseCandidateId?: string;
+  unfinishedContinuation?: { phase: 'implementing' | 'subsection-implementing'; subsectionId?: string; treeHash: string; remainingWork: string; repeats: number };
   lenses: Lens[];
   checks: CheckEvidence[];
   reviewIds: string[];
