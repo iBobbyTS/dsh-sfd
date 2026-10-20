@@ -180,6 +180,9 @@ export class WorkflowController {
       if (input.advisorAdoption === 'reject' && !['replan', 'cancel'].includes(input.action ?? '')) {
         throw new Error('A rejected external Advisor result cannot silently resume the old approach.');
       }
+      if (this.advisor) {
+        await this.advisor.saveHumanResponse(current, input.advisorResult!.trim(), input.advisorAdoption!, input.answer.trim(), input.action);
+      }
       if (input.advisorAdoption === 'clarify') {
         return this.change(id, (run) => {
           run.decisionHistory.push({ ...decision, answer: input.answer.trim(),
