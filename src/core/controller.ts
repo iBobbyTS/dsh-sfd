@@ -56,13 +56,13 @@ export class WorkflowController {
     const workspace = await this.workspace.inspect(input.workspacePath);
     const at = this.now();
     const intent = input.intent ?? 'execute';
-    if (intent === 'plan-handoff' && input.policy?.commit) throw new Error('PLAN_HANDOFF cannot create a product commit.');
+    if (intent !== 'execute' && input.policy?.commit) throw new Error('Non-execution intents cannot create product commits.');
     const run: DevelopmentRun = {
       id: this.id(), schemaVersion: 1, workflowVersion: CORE_VERSION,
       revision: 0, controlEpoch: 0, inputContractVersion: 1, createdAt: at, updatedAt: at,
       goal: input.goal.trim(), intent, requirementsHistory: [{ version: 1, goal: input.goal.trim(), at }],
       ...(input.requireInitialPlanApproval ? { initialPlanApprovalRequired: true } : {}),
-      workspace, policy: createPolicy({ ...input.policy, ...(intent === 'plan-handoff' ? { commit: false } : {}) }), status: 'draft', stage: 'planning',
+      workspace, policy: createPolicy({ ...input.policy, ...(intent !== 'execute' ? { commit: false } : {}) }), status: 'draft', stage: 'planning',
       planRevision: 0, planRepairs: 0, planFeedback: [], sections: {}, candidates: {},
       attempts: [], operations: [], reviews: [], decisions: [], featureChecks: [],
       decisionHistory: [], events: [],
@@ -371,7 +371,7 @@ export class WorkflowController {
   private async drivePlanning(run: DevelopmentRun): Promise<boolean> {
     const attempt = this.latest(run, 'planner');
     if (!attempt) return this.queueActor(run, 'planner', {
-      goal: run.goal, phase: run.stage, previousPlan: run.plan, feedback: run.planFeedback,
+      goal: run.goal, intent: run.intent ?? 'execute', phase: run.stage, previousPlan: run.plan, feedback: run.planFeedback,
       userDecisions: run.decisionHistory.map((decision) => ({ question: decision.question, answer: decision.answer, sectionId: decision.sectionId })),
       existingLineages: [...Object.values(run.sections), ...Object.values(run.retiredSections ?? {}).map((entry) => entry.state)].map((section) => ({ sectionId: section.id, lineageId: section.lineageId, materialRepairWaves: section.materialRepairWaves })),
     });
@@ -483,7 +483,7 @@ export class WorkflowController {
       Boolean((entry.admittedOutput as ReviewOutput).coverage.length));
     const reviewMode = previous ? 'PLAN_DELTA' : 'FULL';
     if (!attempt) return this.queueActor(run, kind, {
-      goal: run.goal, phase: run.stage, plan: run.plan, planRevision: run.planRevision,
+      goal: run.goal, intent: run.intent ?? 'execute', phase: run.stage, plan: run.plan, planRevision: run.planRevision,
       requirementsVersion: run.planRequirementsVersion, reviewMode,
       ...(previous ? {
         previousSlot: { attemptId: previous.id, planRevision: previous.task.input.planRevision,
@@ -606,10 +606,13 @@ export class WorkflowController {
           if (section.stage === 'pending') {
             // Freeze the actual source tree before this parent starts; reviews use
             // this Section-specific base rather than the cumulative Run diff.
-            section.sectionBaseTreeHash = run.currentCandidateId
-              ? run.candidates[run.currentCandidateId]?.treeHash : run.workspace.initialTreeHash;
+            section.sectionBaseTreeHash = run.intent === 'review-only' ? run.workspace.baseCommit
+              : run.currentCandidateId ? run.candidates[run.currentCandidateId]?.treeHash : run.workspace.initialTreeHash;
             const contract = draft.plan!.sections.find((entry) => entry.id === section.id)!;
-            if (contract.subsections.length) {
+            if (run.intent === 'review-only') {
+              // Review the exact existing dirty HEAD delta. Never dispatch a writer.
+              section.stage = 'review-selection';
+            } else if (contract.subsections.length) {
               section.subsectionIndex = 0; section.subsectionCheckpoints = [];
               section.stage = 'subsection-implementing';
             } else section.stage = 'implementing';
@@ -1201,6 +1204,13 @@ export class WorkflowController {
   private async requestRepair(run: DevelopmentRun, section: SectionState, instructions: string, material: boolean,
     origin: 'a' | 'b' | 'feature', invalidated: string[] = [], findingIds: string[] = [],
     simpDispositions: NonNullable<AdjudicationOutput['simplificationDispositions']> = []): Promise<boolean> {
+    if (run.intent === 'review-only') {
+      // REVIEW_ONLY reports confirmed defects to the owner. It does not grant
+      // implementation authority or consume an implementation repair budget.
+      await this.block(run.id, 'Review-only finding requires a separate authorized implementation: ' + instructions,
+        'semantic', section.id);
+      return false;
+    }
     // Every admitted implementation/test repair is one wave, regardless of a
     // model's material boolean. NITs and read-only/tool retries are not repairs.
     if (section.materialRepairWaves >= (section.recovery?.extraWaveLimit ?? run.policy.maxRepairWaves)) {
@@ -1510,7 +1520,7 @@ export class WorkflowController {
         }, (draft) => {
           draft.delivery = { mode: 'worktree', candidateId: candidate.id, path: draft.workspace.path, branch: draft.workspace.branch, createdAt: this.now() };
           draft.stage = 'done'; draft.status = 'completed';
-          this.event(draft, 'completed', 'Accepted development work verified and delivered in its dedicated worktree; no commit was requested.');
+          this.event(draft, 'completed', run.intent === 'review-only' ? 'Read-only review evidence completed; source unchanged and no commit made.' : 'Accepted development work verified and delivered in its dedicated worktree; no commit was requested.');
         }, candidate.id);
     }
     return this.operation(run, 'commit', `delivery:${candidate.id}`, undefined,
@@ -1526,7 +1536,7 @@ export class WorkflowController {
   private contractInput(run: DevelopmentRun, section: SectionState): Record<string, unknown> {
     const contract = this.sectionPlan(run, section);
     return {
-      goal: run.goal, phase: section.stage, section: contract,
+      goal: run.goal, intent: run.intent ?? 'execute', phase: section.stage, section: contract,
       features: run.plan!.features.filter((feature) => contract.featureIds.includes(feature.id)),
       upstream: contract.dependencies.map((id) => ({ contract: run.plan!.sections.find((entry) => entry.id === id), acceptedCandidateId: run.sections[id]!.integratedCandidateId })),
       candidate: section.candidateId ? run.candidates[section.candidateId] : run.currentCandidateId ? run.candidates[run.currentCandidateId] : undefined,
