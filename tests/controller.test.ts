@@ -1040,3 +1040,57 @@ test('an incomplete historical PLAN slot is not offered as reusable PLAN_DELTA a
   assert.equal(b[1]?.input.previousSlot, undefined);
   await controller.dispose();
 });
+
+test('subsection-specific implementation tier is frozen into the actual writer task', async () => {
+  const withChild = structuredClone(plan);
+  withChild.sections[0]!.subsections = [{
+    id: 'C1', objective: 'Build child', acceptanceCriteria: ['Child behavior'],
+    writeScope: ['src/export.ts'], safeIntermediateState: 'No public export yet',
+    consumer: 'Parent export', checks: [{ id: 'child', command: ['node', '--test'], required: true }],
+    implementation: 'large',
+  }];
+  const { controller, actors } = rig(withChild);
+  const id = await launch(controller);
+  const reached = await waitFor(controller, id, () => actors.calls.some(task => task.kind === 'implementer'));
+  const writer = actors.calls.find(task => task.kind === 'implementer')!;
+  assert.equal(writer.implementationTier, 'large');
+  assert.equal(writer.input.implementation, 'large');
+  assert.equal(reached.plan?.sections[0]?.implementation, 'standard');
+  await controller.dispose();
+});
+
+test('PLAN_HANDOFF completes after independent PLAN A/B without a task worktree or product writes', async () => {
+  const { controller, actors, workspace } = rig();
+  const created = await controller.create({ goal: 'Plan a scoped export safely.', workspacePath: '/project',
+    intent: 'plan-handoff', policy: { commit: false } });
+  assert.equal(created.intent, 'plan-handoff');
+  await controller.start(created.id);
+  const done = await waitFor(controller, created.id, run => ['completed', 'blocked', 'waiting-user'].includes(run.status));
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.stage, 'done');
+  assert.equal(done.workspace.prepared, undefined);
+  assert.equal(done.policy.commit, false);
+  assert.ok(done.plan);
+  assert.equal(done.operations.some(operation => operation.kind === 'prepare' || operation.kind === 'commit'), false);
+  assert.deepEqual(actors.calls.map(task => task.kind), ['planner', 'plan-review-a', 'plan-review-b']);
+  assert.equal(workspace.commitCalls, 0);
+  assert.equal(workspace.checkCalls, 0);
+  await controller.dispose();
+});
+
+test('PLAN_HANDOFF owner approval resumes without workspace recovery or implementation', async () => {
+  const { controller, actors } = rig();
+  const created = await controller.create({ goal: 'Plan only.', workspacePath: '/project',
+    intent: 'plan-handoff', requireInitialPlanApproval: true });
+  await controller.start(created.id);
+  const held = await waitFor(controller, created.id, run => run.status === 'waiting-user' && !!run.pendingDecision);
+  assert.equal(held.workspace.prepared, undefined);
+  const done = await controller.decide(created.id, {
+    decisionId: held.pendingDecision!.id, action: 'continue', answer: 'Approve this plan.'
+  });
+  assert.equal(done.status, 'running');
+  const finished = await waitFor(controller, created.id, run => ['completed', 'blocked'].includes(run.status));
+  assert.equal(finished.status, 'completed', finished.blockedReason);
+  assert.equal(actors.calls.some(task => task.kind === 'implementer'), false);
+  await controller.dispose();
+});

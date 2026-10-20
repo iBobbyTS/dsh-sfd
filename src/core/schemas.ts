@@ -22,6 +22,7 @@ const task = z.strictObject({
   id: identity, runId: identity, kind: actorKind,
   sectionId: identity.optional(), featureId: identity.optional(), lens: lens.optional(),
   inputContractVersion: integer, candidateId: identity.optional(), controlEpoch: integer,
+  implementationTier: z.enum(['standard', 'large']).optional(),
   route: route.optional(), workspace, input: object, outputSchema: object, timeoutMs: z.number().int().positive(),
 });
 const actorIdentity = z.strictObject({
@@ -74,6 +75,7 @@ const decision = z.strictObject({
 });
 const persistedRunSchema = z.strictObject({
   id: identity, schemaVersion: z.literal(1), workflowVersion: z.literal(CORE_VERSION),
+  intent: z.enum(['execute', 'plan-handoff']).optional(),
   revision: integer, controlEpoch: integer, inputContractVersion: integer,
   createdAt: identity, updatedAt: identity, goal: identity,
   requirementsHistory: z.array(z.strictObject({ version: integer, goal: identity, at: identity })).min(1),
@@ -128,7 +130,21 @@ const persistedRunSchema = z.strictObject({
   for (const [id, entry] of Object.entries(run.candidates)) if (id !== entry.id) issue('Candidate map key does not match its identity.');
   if (run.currentCandidateId && !run.candidates[run.currentCandidateId]) issue('Current candidate is missing.');
   if (run.activeSectionId && !run.sections[run.activeSectionId]) issue('Active Section is missing.');
-  if (run.status === 'completed' && (run.stage !== 'done' || !run.delivery || !run.featureVerificationAttemptId)) issue('Completed task lacks delivery evidence.');
+  if (run.status === 'completed') {
+    if (run.stage !== 'done') issue('Completed task must reach the done stage.');
+    if (run.intent === 'plan-handoff') {
+      // PLAN_HANDOFF delivers the reviewed plan itself, not a product candidate.
+      if (!run.plan || run.policy.commit || run.commit || run.delivery || run.featureVerificationAttemptId)
+        issue('PLAN_HANDOFF cannot have implementation or commit delivery evidence.');
+      const admitted = (kind: 'plan-review-a' | 'plan-review-b'): boolean => run.attempts.some(entry =>
+        entry.task.kind === kind && entry.state === 'admitted' &&
+        entry.task.input.planRevision === run.planRevision);
+      if (!admitted('plan-review-b') || (!admitted('plan-review-a') && !run.planSilentRetirement))
+        issue('PLAN_HANDOFF requires independent current PLAN A/B evidence or the recorded PLAN-only A retirement.');
+    } else if (!run.delivery || !run.featureVerificationAttemptId) {
+      issue('Completed task lacks delivery evidence.');
+    }
+  }
   if (run.delivery?.mode === 'commit' && (!run.commit || run.commit.commit !== run.delivery.commit)) issue('Commit delivery lacks matching actual commit evidence.');
   if (run.stage === 'done' && run.status !== 'completed') issue('A done task must be completed.');
   for (const entry of run.attempts) {

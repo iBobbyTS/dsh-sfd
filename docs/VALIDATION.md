@@ -56,6 +56,10 @@ The package targets the pinned DSH SDK. `standard` and `large` implementation co
 
 No successful live paid-model end-to-end long-run benchmark, sanitized external Advisor ZIP generator, native third-party notification or old-Run migration is claimed by these deterministic tests. The exact build and test count on the final main commit should be checked in its own CI run.
 
+## 2026-10-20 parity increment
+
+The [feature-branch verification](https://github.com/iBobbyTS/dsh-sfd/actions/runs/39500500796) passed on Node 24 with **102 deterministic tests** (100 previous tests plus two new PLAN_HANDOFF checks after the earlier test additions), TypeScript typecheck and bundle build. The generated `lib/` was committed from that checked source. The new cases exercise child-level implementation tier routing, child-scope Git candidate enforcement, plan-only A/B completion and the automatic-activation approval path without workspace preparation. An earlier branch check intentionally failed on the previously product-only completed-Run invariant; that invariant has been corrected with a separate, evidence-checked PLAN_HANDOFF completion contract. Live paid-model execution remains NOT_RUN.
+
 ## External-runtime verification limit
 
 The GitHub runner has neither the user's enabled external-subagent daemon nor live authenticated ZCode/Codex model sessions. It tests the published CLI projection contract through an executable stdin fixture, and the SFD external actor state machine through deterministic task fixtures. Successful live GLM→ZCode and GPT→Codex execution, enabled daemon status, explicit ZCode model selection on the installed version, and persistence/recovery under real external process failure remain **NOT_RUN** and must not be inferred from CI success. An unavailable or mismatched route is a blocker, not authorization to run the task natively.

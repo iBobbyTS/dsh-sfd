@@ -5,7 +5,7 @@ import { ROLE_PRESETS } from '../roles/specs.js';
 import type { DomainRunStore } from './store.js';
 import { NativeActorRunner, validateActorRoute } from './actors.js';
 import { ExternalSubagentCli, ExternalSubagentRunner, type ExternalSubagentClient } from './external-actor.js';
-import { transportForModel } from './model-routing.js';
+import { configuredActorRoute, transportForModel } from './model-routing.js';
 
 /** One Host-owned dispatch authority. DeepSeek is native, GLM/GPT are external. */
 export class ModelFamilyActorRunner implements ActorRunner {
@@ -20,11 +20,7 @@ export class ModelFamilyActorRunner implements ActorRunner {
     const run = await this.store.get(task.runId);
     const owner = this.store.ownerOf(task.runId);
     if (!run || !owner) throw new Error(`SFD actor has no owning Run: ${task.runId}`);
-    const section = task.kind === 'implementer' && task.sectionId
-      ? run.plan?.sections.find((entry) => entry.id === task.sectionId) : undefined;
-    const expected = section?.implementation === 'large'
-      ? run.policy.largeImplementerRoute : run.policy.routes[task.kind];
-    if (section?.implementation === 'large' && !expected) throw new Error('MODEL_CONFIGURATION_UNVERIFIED: impl_large route is missing.');
+    const expected = configuredActorRoute(task, run);
     validateActorRoute(task, expected);
     const route = task.route ?? expected ?? { preset: ROLE_PRESETS[task.kind] };
     const model = route.model ?? owner.model;

@@ -7,7 +7,7 @@ import {
   type Attempt, type Candidate, type CheckEvidence, type CreateRunInput, type DecideInput,
   type DevelopmentPlan, type DevelopmentRun, type DiagnosticOutput, type FeatureVerificationOutput,
   type ImplementationOutput, type Lens, type Operation, type PlanOutput, type ReviewEvidence,
-  type ReviewOutput, type ReviewSelectionOutput, type SectionPlan, type SectionState,
+  type ReviewOutput, type ReviewSelectionOutput, type SectionPlan, type SectionState, type WorkspaceRecovery,
 } from './types.js';
 
 export interface ControllerOptions {
@@ -53,12 +53,14 @@ export class WorkflowController {
     if (!input.goal.trim()) throw new Error('A development goal is required.');
     const workspace = await this.workspace.inspect(input.workspacePath);
     const at = this.now();
+    const intent = input.intent ?? 'execute';
+    if (intent === 'plan-handoff' && input.policy?.commit) throw new Error('PLAN_HANDOFF cannot create a product commit.');
     const run: DevelopmentRun = {
       id: this.id(), schemaVersion: 1, workflowVersion: CORE_VERSION,
       revision: 0, controlEpoch: 0, inputContractVersion: 1, createdAt: at, updatedAt: at,
-      goal: input.goal.trim(), requirementsHistory: [{ version: 1, goal: input.goal.trim(), at }],
+      goal: input.goal.trim(), intent, requirementsHistory: [{ version: 1, goal: input.goal.trim(), at }],
       ...(input.requireInitialPlanApproval ? { initialPlanApprovalRequired: true } : {}),
-      workspace, policy: createPolicy(input.policy), status: 'draft', stage: 'planning',
+      workspace, policy: createPolicy({ ...input.policy, ...(intent === 'plan-handoff' ? { commit: false } : {}) }), status: 'draft', stage: 'planning',
       planRevision: 0, planRepairs: 0, planFeedback: [], sections: {}, candidates: {},
       attempts: [], operations: [], reviews: [], decisions: [], featureChecks: [],
       decisionHistory: [], events: [],
@@ -99,7 +101,10 @@ export class WorkflowController {
     if (!['paused', 'blocked'].includes(before.status)) throw new Error('Only paused or resolved blocked work can resume.');
     if (before.pendingDecision) throw new Error('Resolve the pending decision before resuming.');
     if ([...this.activeActors.values(), ...this.activeOperations.values()].some((active) => active.runId === id)) throw new Error('An interrupted activation is still stopping; wait for actual teardown before resuming.');
-    const recovery = await this.workspace.reconcile(before);
+    // PLAN_HANDOFF has no writer, task worktree, Git commit or other workspace
+    // side effect. Resuming an owner decision must not require a nonexistent
+    // workspace manifest; the unchanged plan authority is still checked below.
+    const recovery = before.intent === 'plan-handoff' ? { safe: true } : await this.workspace.reconcile(before);
     if (!recovery.safe) {
       await this.block(id, recovery.reason ?? 'Workspace execution state is uncertain.', 'recovery');
       return this.status(id);
@@ -186,7 +191,9 @@ export class WorkflowController {
     if (decision.kind === 'budget' && input.action !== 'replan') {
       throw new Error('An exhausted repair budget cannot be reset by retry. Revise the plan or cancel; existing Section lineage is preserved.');
     }
-    const recovery = decision.kind === 'recovery' ? await this.workspace.reconcile(current) : undefined;
+    const recovery: WorkspaceRecovery | undefined = decision.kind === 'recovery'
+      ? current.intent === 'plan-handoff' ? { safe: true } : await this.workspace.reconcile(current)
+      : undefined;
     if (recovery && !recovery.safe && !recovery.candidate) {
       throw new Error(`Actual workspace state must be inspected before acknowledging recovery: ${recovery.reason ?? 'inspection unavailable'}`);
     }
@@ -337,7 +344,9 @@ export class WorkflowController {
     for (const attempt of run.attempts.filter((value) => value.state === 'intent' && !value.rejection)) {
       if (!this.activeActors.has(attempt.id)) this.launchActor(run.id, attempt);
     }
-    if (!run.workspace.prepared) {
+    // PLAN_HANDOFF only reads the existing repository, without a task worktree
+    // or any product/test commits. Reviews still use fresh independent actors.
+    if (!run.workspace.prepared && run.intent !== 'plan-handoff') {
       return this.operation(run, 'prepare', 'prepare', undefined, async (snapshot) => this.workspace.prepare(snapshot), (draft, result) => {
         draft.workspace = { ...result as DevelopmentRun['workspace'], prepared: true };
       });
@@ -542,8 +551,13 @@ export class WorkflowController {
     }
     if (!admittedCorrections.length && !output.limitations.length && output.coverage.length) {
       await this.change(run.id, (draft) => {
-        draft.stage = kind === 'plan-review-a' ? 'plan-review-b' : 'sections';
-        this.event(draft, 'plan-review-accepted', `${kind}: current independent coverage and admitted PLAN finding dispositions are complete.`);
+        if (kind === 'plan-review-b' && draft.intent === 'plan-handoff') {
+          draft.stage = 'done'; draft.status = 'completed';
+          this.event(draft, 'plan-handoff-completed', 'Independent PLAN A/B accepted; deliver the reviewed plan without implementation or commits.');
+        } else {
+          draft.stage = kind === 'plan-review-a' ? 'plan-review-b' : 'sections';
+          this.event(draft, 'plan-review-accepted', `${kind}: current independent coverage and admitted PLAN finding dispositions are complete.`);
+        }
       });
     } else if (run.planRepairs >= run.policy.maxPlanRepairs) {
       await this.change(run.id, (draft) => {
@@ -1516,14 +1530,20 @@ export class WorkflowController {
     section?: SectionState, lens?: Lens, featureId?: string): Promise<boolean> {
     const candidateId = section?.candidateId ?? run.currentCandidateId;
     const candidate = candidateId ? run.candidates[candidateId] : undefined;
+    const implementationTier = kind === 'implementer' && section
+      ? section.stage === 'subsection-implementing'
+        ? this.subsection(run, section).implementation ?? this.sectionPlan(run, section).implementation
+        : this.sectionPlan(run, section).implementation
+      : undefined;
     const task: ActorTask = {
       id: this.id(), runId: run.id, kind, inputContractVersion: section?.inputContractVersion ?? run.inputContractVersion,
       controlEpoch: run.controlEpoch, workspace: kind === 'implementer' || !candidate ? run.workspace : { ...run.workspace, path: candidate.workspacePath },
       input: JSON.parse(JSON.stringify(input)) as Record<string, unknown>,
       outputSchema: outputSchemaFor(kind), timeoutMs: run.policy.actorTimeoutMs,
+      ...(implementationTier ? { implementationTier } : {}),
       ...(section ? { sectionId: section.id } : {}), ...(lens ? { lens } : {}), ...(featureId ? { featureId } : {}),
       ...(candidateId ? { candidateId } : {}),
-      ...(kind === 'implementer' && section && this.sectionPlan(run, section).implementation === 'large' && run.policy.largeImplementerRoute
+      ...(kind === 'implementer' && implementationTier === 'large' && run.policy.largeImplementerRoute
         ? { route: run.policy.largeImplementerRoute }
         : run.policy.routes[kind] ? { route: run.policy.routes[kind] } : {}),
     };

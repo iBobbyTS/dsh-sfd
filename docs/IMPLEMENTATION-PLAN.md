@@ -40,6 +40,12 @@ Target SDK: DSH **0.2.1-rc.2**, source commit `687f282e8625c6b8d11ff58211a90524b
 
 Use the real published SDK for static/build and Host integration checks, deterministic actor doubles for reproducible business and crash/race scenarios, and real temporary Git repositories/processes for workspace/evidence tests. A live paid model end-to-end run is reported separately and is not implied by deterministic tests. Check generated output and the package manifest as an installable unit.
 
+## Incremental parity work after the native baseline
+
+The baseline implementation remains a durable DSH-native orchestration engine; it is not being replaced by conversational Skill dispatch. The first follow-up slice fixes Subsection effective-tier routing and Git-scoped candidate admission and adds `PLAN_HANDOFF`, including independent plan coverage without a writable session. The existing Adjudicator continues to make semantic review decisions; programmatic transitions still gate acceptance.
+
+Outstanding migration scope: `REVIEW_ONLY` with explicit existing-code diff identity; approved isolated parent-Section parallelism; independent Feature-integration repair lineage; branch-base and mid-feature adoption; original human Advisor packaging/notification; bounded per-finding verification, native dynamic probes and a possible native provider adapter for external-subagent. These require separate design, tests and evidence; neither source parity docs nor fixture tests imply that they already work.
+
 ## Delivery checklist
 
 - [x] Native controller and all bounded roles are implemented.

@@ -9,7 +9,7 @@ import { Context } from '@deepseek-ai/cordis';
 import { ModelFamilyActorRunner } from '../src/dsh/routing-runner.js';
 import type { ActorTask, ActorRoute, DevelopmentRun } from '../src/core/types.js';
 import { ExternalSubagentCli, ExternalSubagentRunner, externalActorPrompt, type ExternalSubagentClient, type ExternalCommand } from '../src/dsh/external-actor.js';
-import { externalTarget, freezeModelRoute, transportForModel } from '../src/dsh/model-routing.js';
+import { configuredActorRoute, externalTarget, freezeModelRoute, transportForModel } from '../src/dsh/model-routing.js';
 import type { DomainRunStore, RunOwner } from '../src/dsh/store.js';
 import { ROLE_PRESETS } from '../src/roles/specs.js';
 
@@ -220,4 +220,15 @@ test('external transport retains a 90k task contract inline when under its 262k 
     assert.ok(!sent.includes('artifactPath'), 'In-range external inputs must not require out-of-worktree evidence files');
     await handle.dispose();
   } finally { await runner.dispose(); }
+});
+
+test('a frozen child implementation tier overrides the parent route without fallback', () => {
+  const standard = freezeModelRoute(ROLE_PRESETS.implementer, owner, { provider: 'deepseek', model: 'deepseek-flash' });
+  const large = freezeModelRoute(ROLE_PRESETS.implementer, owner, { provider: 'openai', model: 'gpt-6.1-sol' });
+  const { task } = fixture('deepseek-flash', 'deepseek', 'implementer');
+  const run = { policy: createPolicy({ routes: { implementer: standard }, largeImplementerRoute: large }) } as DevelopmentRun;
+  assert.deepEqual(configuredActorRoute({ ...task, implementationTier: 'large', route: large }, run), large);
+  assert.deepEqual(configuredActorRoute({ ...task, implementationTier: 'standard', route: standard }, run), standard);
+  assert.throws(() => configuredActorRoute({ ...task, implementationTier: 'large' },
+    { policy: createPolicy({ routes: { implementer: standard } }) } as DevelopmentRun), /impl_large/);
 });

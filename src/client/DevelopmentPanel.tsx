@@ -43,16 +43,21 @@ function CreateForm({ controller, workspacePath, busy, onClose }: {
 }): ReactNode {
   const [goal, setGoal] = useState('');
   const [path, setPath] = useState(workspacePath ?? '');
+  const [intent, setIntent] = useState<'execute' | 'plan-handoff'>('execute');
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    const created = await controller.create({ goal: goal.trim(), ...(path.trim() ? { workspacePath: path.trim() } : {}) });
+    const created = await controller.create({ goal: goal.trim(), intent, ...(path.trim() ? { workspacePath: path.trim() } : {}) });
     if (created) onClose();
   };
   return <form className="sfd-card sfd-form" onSubmit={(event) => { void submit(event); }}>
     <h2>New development run</h2>
     <label>Goal and acceptance constraints<textarea required value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Describe the complete outcome, important constraints, and how you will know it works." disabled={busy}/></label>
     <label>Repository path<input value={path} onChange={(event) => setPath(event.target.value)} placeholder="Use the owner conversation's working directory" disabled={busy}/></label>
-    <p>The accepted candidate is committed on its dedicated non-main branch. This workflow never pushes or merges automatically.</p>
+    <label>Intent<select value={intent} onChange={(event) => setIntent(event.target.value as typeof intent)} disabled={busy}>
+      <option value="execute">Implement and commit accepted result</option>
+      <option value="plan-handoff">PLAN_HANDOFF — reviewed plan only</option>
+    </select></label>
+    <p>{intent === 'execute' ? 'The accepted candidate is committed on its dedicated non-main branch. This workflow never pushes or merges automatically.' : 'PLAN_HANDOFF runs independent PLAN A/B and delivers the reviewed plan without creating a worktree, editing product code or committing.'}</p>
     <p className="sfd-muted">The selected conversation supplies the execution permissions. The run keeps its own goal, progress, reviews, and recovery state.</p>
     <div className="sfd-row"><button className="sfd-primary" disabled={busy || !goal.trim()} type="submit">Create run</button><button disabled={busy} type="button" onClick={onClose}>Close</button></div>
   </form>;
@@ -193,7 +198,7 @@ export function RunDetail({ run, busy, controller }: {
     <section className="sfd-card">
       <div className="sfd-row"><Badge status={run.status}>{STATUS_LABELS[run.status]}</Badge><span>{phaseLabel(run)}</span></div>
       <h2 style={{ marginTop: 14 }}>{run.plan?.title ?? 'Development run'}</h2><p style={{ whiteSpace: 'pre-wrap' }}>{run.goal}</p>
-      <dl><dt>Repository</dt><dd><code>{run.workspace.path}</code></dd><dt>Branch</dt><dd><code>{run.workspace.branch}</code></dd><dt>Goal version</dt><dd>{run.inputContractVersion}</dd><dt>Run</dt><dd><code>{run.id}</code></dd></dl>
+      <dl><dt>Repository</dt><dd><code>{run.workspace.path}</code></dd><dt>Branch</dt><dd><code>{run.workspace.branch}</code></dd><dt>Intent</dt><dd>{run.intent === 'plan-handoff' ? 'PLAN_HANDOFF' : 'EXECUTE_WITH_COMMIT'}</dd><dt>Goal version</dt><dd>{run.inputContractVersion}</dd><dt>Run</dt><dd><code>{run.id}</code></dd></dl>
       <div className="sfd-row">
         {availableActions(run).map((action) => <button key={action} type="button" disabled={busy} className={action === 'cancel' ? 'sfd-danger' : action === 'start' || action === 'resume' ? 'sfd-primary' : ''} onClick={() => { void controller.act(action, run.id); }}>{ACTION_LABELS[action]}</button>)}
         {active && <button disabled={busy} type="button" onClick={() => { setGoal(run.goal); setEditingGoal(!editingGoal); }}>Revise goal</button>}

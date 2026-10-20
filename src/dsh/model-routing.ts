@@ -1,4 +1,4 @@
-import type { ActorRoute, RouteTransport } from '../core/types.js';
+import type { ActorRoute, ActorTask, DevelopmentRun, RouteTransport } from '../core/types.js';
 import type { RunOwner } from './store.js';
 
 /** The requested model family, not the selected chat Host, owns the execution transport. */
@@ -29,6 +29,22 @@ export interface ExternalTarget {
   model: string;
   effort?: string;
   permission_mode: 'plan' | 'build' | 'yolo';
+}
+
+/** The effective Subsection model tier is frozen by the controller. Older
+ * attempts fall back to their authored tier rather than silently using an
+ * unrelated parent tier. No large task can fall back to a standard route. */
+export function configuredActorRoute(task: ActorTask, run: Pick<DevelopmentRun, 'plan' | 'policy'>): ActorRoute | undefined {
+  if (task.kind !== 'implementer') return run.policy.routes[task.kind];
+  const legacyTier = task.input.implementation === 'large' || task.input.implementation === 'standard'
+    ? task.input.implementation
+    : run.plan?.sections.find(section => section.id === task.sectionId)?.implementation ?? 'standard';
+  const tier = task.implementationTier ?? legacyTier;
+  if (tier === 'large') {
+    if (!run.policy.largeImplementerRoute) throw new Error('MODEL_CONFIGURATION_UNVERIFIED: impl_large needs its explicitly authorized model route.');
+    return run.policy.largeImplementerRoute;
+  }
+  return run.policy.routes.implementer;
 }
 
 /** Exact public external-subagent spawn tokens, with no new write manifest. */

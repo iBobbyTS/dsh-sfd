@@ -76,6 +76,12 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 
 不会自动联系外部 Advisor，也不会把项目源码或对话上传给第三方。当前提供的是持久化的证据索引和人工接管 UI，**不自动生成原 Skill 的脱敏 Advisor ZIP，也不自动通过飞书发送通知**；需要用户自行检查候选代码和敏感内容后交接。未人工裁决的 Advisor hold 不允许通过 `revise` 或 `resume` 绕过。
 
+## PLAN_HANDOFF（只规划、不写产品代码）
+
+原 SFD 的 `PLAN_HANDOFF` 现在可以直接使用：在 Development 面板将 Intent 选择为 **PLAN_HANDOFF** 后创建并启动，或在拥有仓库的会话中输入 `/sfd plan <goal>`。程序执行 Planner → 独立 PLAN A → 独立 PLAN B（含必要的有界修订/裁决），完成后在 Run 中保留已审查的结构化计划和证据。此模式不创建任务 worktree、不运行产品 Implementer、不执行产品检查、不提交 Git；它允许原生只读 Session。`sfd_run` 工具也可通过 `create` 的 `intent: plan-handoff` 创建，随后显式 `start`。旧 Run 未设置 Intent 时保持原执行模式。
+
+`REVIEW_ONLY`、跨 Section 并行实施及旧版任务中途接管尚未在这一阶段实现，不应把 PLAN_HANDOFF 的交付错误标记成已实现这些模式。
+
 ## 执行过程
 
 | 阶段 | Host 控制的行为 |

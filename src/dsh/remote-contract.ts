@@ -7,7 +7,7 @@ import { runSchema } from '../core/schemas.js';
 
 export interface SessionRequest { sessionId: string }
 export interface RunRequest extends SessionRequest { runId: string }
-export interface CreateRequest extends SessionRequest { goal: string; workspacePath?: string; commit?: boolean }
+export interface CreateRequest extends SessionRequest { goal: string; workspacePath?: string; commit?: boolean; intent?: 'execute' | 'plan-handoff' }
 export interface DecideRequest extends RunRequest {
   decisionId: string; answer: string; action?: 'continue' | 'retry' | 'replan' | 'cancel';
   advisorResult?: string; advisorAdoption?: 'accept' | 'reject' | 'clarify';
@@ -18,6 +18,7 @@ export const sessionRequestSchema = z.object({ sessionId: z.string().min(1) }).s
 export const runRequestSchema = sessionRequestSchema.extend({ runId: z.string().min(1) }).strict();
 export const createRequestSchema = sessionRequestSchema.extend({
   goal: z.string().trim().min(1).max(100_000), workspacePath: z.string().min(1).optional(), commit: z.boolean().optional(),
+  intent: z.enum(['execute', 'plan-handoff']).optional(),
 }).strict();
 export const decideRequestSchema = runRequestSchema.extend({
   decisionId: z.string().min(1), answer: z.string().trim().min(1).max(100_000),
