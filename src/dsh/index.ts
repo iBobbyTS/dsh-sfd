@@ -13,6 +13,7 @@ import { WorkflowController } from '../core/controller.js';
 import type { WorkspacePort } from '../core/ports.js';
 import type { ActorKind, ActorRoute, DevelopmentRun, WorkflowPolicy } from '../core/types.js';
 import { GitWorkspace } from '../workspace/git-workspace.js';
+import { NativeAdvisorHandoff } from './advisor.js';
 import { ROLE_PRESETS } from '../roles/index.js';
 import { DomainRunStore, type RunOwner } from './store.js';
 import { ModelFamilyActorRunner } from './routing-runner.js';
@@ -286,7 +287,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const store = await DomainRunStore.open(ctx.storageDomain);
   const actors = new ModelFamilyActorRunner(ctx, store, new ExternalSubagentCli(config.externalSubagentExecutable));
   const workspace = new GitWorkspace({ stateRoot: config.stateRoot, executeCheck: nativeCheckExecutor(ctx, store) });
-  const controller = new WorkflowController({ store, actors, workspace });
+  const controller = new WorkflowController({ store, actors, workspace, advisor: new NativeAdvisorHandoff(config.stateRoot) });
   ctx.effect(() => async () => {
     try { await controller.dispose(); }
     finally { try { await actors.dispose(); } finally { await store.close(); } }
