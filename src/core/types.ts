@@ -10,7 +10,8 @@ export type ActorKind =
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
 export type RunStage = 'planning' | 'plan-review-a' | 'plan-review-b' | 'sections' | 'feature-verification' | 'delivery' | 'done';
 export type SectionStage = 'pending' | 'subsection-implementing' | 'subsection-review' | 'subsection-adjudicating' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
-export interface ActorRoute { preset: string; model?: string; provider?: string; effort?: string }
+export type RouteTransport = 'dsh-native' | 'external-subagent/zcode' | 'external-subagent/codex';
+export interface ActorRoute { preset: string; model?: string; provider?: string; effort?: string; transport?: RouteTransport }
 export interface WorkflowPolicy {
   version: string;
   actorTimeoutMs: number;
@@ -141,6 +142,8 @@ export type ActorOutput = PlanOutput | ReviewOutput | ImplementationOutput | Rev
 
 export interface ExecutionIdentity {
   requested?: ActorRoute;
+  /** External admission is not an observed runtime model echo. */
+  external?: { subagent: 'zcode' | 'codex'; agentId: number; admittedModel?: string; admittedEffort?: string };
   observed?: { provider?: string; model?: string; effort?: string; preset?: string };
   transport: 'dsh-native' | 'external' | 'test';
   sessionId?: string;
