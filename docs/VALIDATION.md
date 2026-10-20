@@ -63,3 +63,19 @@ The [feature-branch verification](https://github.com/iBobbyTS/dsh-sfd/actions/ru
 ## External-runtime verification limit
 
 The GitHub runner has neither the user's enabled external-subagent daemon nor live authenticated ZCode/Codex model sessions. It tests the published CLI projection contract through an executable stdin fixture, and the SFD external actor state machine through deterministic task fixtures. Successful live GLM→ZCode and GPT→Codex execution, enabled daemon status, explicit ZCode model selection on the installed version, and persistence/recovery under real external process failure remain **NOT_RUN** and must not be inferred from CI success. An unavailable or mismatched route is a blocker, not authorization to run the task natively.
+
+## Native Advisor and read-only migration increment (2026-10-20)
+
+The new source-level deterministic regression tests cover:
+
+- Original SFD Advisor exporter retained under `scripts/advisor_pack.py`; local `request/` evidence and source/Git archive entries, filtered .env, checked SHA-256, missing Feishu config, and at-most-once delivery receipt.
+- A deterministic HTTP transport verifies the HMAC signature and **exactly** project / feature / reason text fields; ZIP paths, hashes and sensitive source content never enter that outgoing message. This is **NOT** proof of delivery to a real Feishu tenant.
+- A real temporary Git repo verifies `REVIEW_ONLY` consumes a staged/dirty candidate snapshot with independent A/B and Feature semantic checks, **never** dispatches a product writer, creates a feature branch, or modifies the source worktree.
+- Native and external fake-transport actors now return a separate human-readable Markdown report (heading followed immediately by one JSON metadata line), with final state transitions admitting only the distinct machine JSON. Missing Markdown is explicitly rejected for *live* role completion, while pre-existing mock actors remain schema-compatible.
+- Invalid Finding/Evidence references get at most one targeted same-role correction; real failed Host checks never change into a format retry or review acceptance.
+- The current and unresolved Adjudicator evidence set retains the latest relevant prior complete A lens for explicit semantic reuse while avoiding repeated historical reports.
+- Feature acceptance criteria can use Host-generated `C001`-style identities rather than re-emit exact prose.
+
+The original parallel parent-Section product implementation and automatic legacy state import were **deliberately removed by user instruction**. Independent read-only Code A evidence can still run concurrently.
+
+**Verification limits:** deterministic actor fixtures are not a live-model end-to-end benchmark; the real Feishu bot and real external-subagent/ZCode/Codex credentials are not installed in GitHub Actions. Advisor secret scans are best-effort and require human inspection before any ZIP is forwarded. The generated `lib/` output and installed package need the final main commit build/pack consistency check. Do not claim those steps pass before their recorded CI status is available.
