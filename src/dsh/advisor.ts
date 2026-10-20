@@ -131,7 +131,10 @@ export class NativeAdvisorHandoff implements AdvisorPort {
     if (result.exitCode !== 0 || result.timedOut || result.truncated)
       throw new Error('Advisor pack generation failed; consult the local exporter diagnostics, and keep the Run blocked.');
     let receipt: Record<string, unknown>;
-    try { receipt = JSON.parse(result.output.split('\n')[0] ?? '') as Record<string, unknown>; }
+    try {
+      const line = result.output.split('\n').find(line => line.trim().startsWith('{"path":'));
+      receipt = JSON.parse(line ?? '') as Record<string, unknown>;
+    }
     catch { throw new Error('Advisor pack receipt is not valid JSON.'); }
     const path = receipt.path;
     const digest = receipt.sha256;
