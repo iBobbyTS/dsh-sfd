@@ -83,7 +83,7 @@ test('native Advisor ZIP includes request, business evidence and source; secrets
   assert.equal(sent.status, 'sent');
   assert.equal(called, 1);
   assert.ok(payload && typeof payload.timestamp === 'string' && typeof payload.sign === 'string');
-  assert.equal(payload.sign, createHmac('sha256', payload.timestamp + '\\n' + 'fixture-secret-not-real').digest('base64'));
+  assert.equal(payload.sign, createHmac('sha256', payload.timestamp + '\n' + 'fixture-secret-not-real').digest('base64'));
   assert.equal(payload.msg_type, 'text');
   const delivered = (payload.content as { text:string }).text;
   assert.ok(delivered.includes('项目：SFD test'));
