@@ -170,7 +170,8 @@ export class GitWorkspace implements WorkspacePort {
   }
 
   private async assertPrepared(run: DevelopmentRun): Promise<string> {
-    if (!run.workspace.prepared || !run.workspace.branch.startsWith('sfd/')) throw new Error('Writing requires a dedicated prepared workflow branch.');
+    if (!run.workspace.prepared || !(run.workspace.branch.startsWith('sfd/') || (run.intent === 'review-only' && run.workspace.branch === '(detached)')))
+      throw new Error('Workflow requires an owned prepared source snapshot, or a detached read-only review snapshot.');
     const root = await this.claim(run);
     const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Manifest;
     if (manifest.runId !== run.id || await realpath(manifest.workspace.path) !== await realpath(run.workspace.path)) throw new Error('Workspace is outside this Run ownership.');
