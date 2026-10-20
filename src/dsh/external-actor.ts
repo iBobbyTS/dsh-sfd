@@ -100,7 +100,27 @@ const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 
 export class ExternalSubagentRunner implements ActorRunner {
   private readonly active = new Set<ActorHandle>();
+  /** external-subagent does not admit overlapping tasks on an owned workspace. */
+  private readonly workspaceQueues = new Map<string, Promise<void>>();
   private disposed = false;
+  private async reserveWorkspace(path: string, signal: AbortSignal): Promise<() => void> {
+    const key = resolve(path);
+    const previous = this.workspaceQueues.get(key) ?? Promise.resolve();
+    let unlock!: () => void;
+    const slot = new Promise<void>((done) => { unlock = done; });
+    const next = previous.then(() => slot);
+    this.workspaceQueues.set(key, next);
+    await previous;
+    const release = (): void => {
+      unlock();
+      if (this.workspaceQueues.get(key) === next) this.workspaceQueues.delete(key);
+    };
+    if (this.disposed || signal.aborted) {
+      release();
+      throw new Error('External workspace dispatch was cancelled before its reservation.');
+    }
+    return release;
+  }
   constructor(private readonly store: DomainRunStore, private readonly client: ExternalSubagentClient) {}
 
   async start(task: ActorTask, signal: AbortSignal): Promise<ActorHandle> {
@@ -121,14 +141,30 @@ export class ExternalSubagentRunner implements ActorRunner {
     const prepared = await prepareActorPrompt(task, { directory: join(dirname(run.workspace.path), 'actor-context', task.id) });
     const prompt = await externalActorPrompt(task, prepared.prompt);
     if (signal.aborted || this.disposed) throw new Error('External actor was cancelled before spawn.');
+    // A shared frozen candidate can be read by many independent reviewers, but
+    // external-subagent reserves that workspace for one active task at a time.
+    const releaseWorkspace = await this.reserveWorkspace(task.workspace.path, signal);
     // A successful spawn is non-idempotent. Do not cancel its CLI transport and
     // lose the durable task ID: a stopped Host must first recover the ID and cancel it.
-    const spawn = await this.client.call('spawn', {
-      subagent: target.subagent, repository: task.workspace.path,
-      permission_mode: target.permission_mode, prompt, model: target.model,
-      ...(target.effort ? { effort: target.effort } : {}),
-    });
-    const id = agentId(spawn.agent_id);
+    let spawn: Record<string, unknown>;
+    try {
+      spawn = await this.client.call('spawn', {
+        subagent: target.subagent, repository: task.workspace.path,
+        permission_mode: target.permission_mode, prompt, model: target.model,
+        ...(target.effort ? { effort: target.effort } : {}),
+      });
+    } catch (error) {
+      releaseWorkspace();
+      // Transport loss might have occurred after daemon admission; never
+      // replay a non-idempotent spawn as an ordinary infrastructure retry.
+      throw new Error(`EXTERNAL_SUBAGENT_SPAWN_UNCERTAIN: ${String(error)}`);
+    }
+    let id: number;
+    try { id = agentId(spawn.agent_id); }
+    catch (error) {
+      releaseWorkspace();
+      throw new Error(`EXTERNAL_SUBAGENT_SPAWN_UNCERTAIN: ${String(error)}`);
+    }
     const identity: ExecutionIdentity = {
       transport: 'external',
       requested: { ...route },
@@ -141,6 +177,7 @@ export class ExternalSubagentRunner implements ActorRunner {
       if (stopped) return;
       await this.client.call('close', { agent_id: id });
       stopped = true;
+      releaseWorkspace();
     };
     const stop = (): Promise<void> => ending ??= (async () => {
       await this.client.call('cancel', { agent_id: id });
