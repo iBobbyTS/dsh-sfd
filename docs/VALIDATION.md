@@ -15,7 +15,7 @@ npm pack --ignore-scripts
 node scripts/verify-package.mjs
 ```
 
-The implementation verification passed TypeScript checking, **80 named tests with zero failures or skips**, and JavaScript/declaration builds. The package verifier checks required files, every declared export, compiled Host/role/core/client imports, and the absence of installation-time build hooks. GitHub CI repeats these checks on Node 24 and checks that committed `lib/` matches a fresh build.
+The post-parity verification passed TypeScript checking, **88 named tests with zero failures or skips**, and JavaScript/declaration builds. The eight added cases cover first-plan approval, material PLAN finding rejection, forward-progress continuation, no-progress diagnosis, repair-wave counting, incomplete PLAN_DELTA source exclusion, exact Section delta, and one-Feature Section ownership. The package verifier checks required files, every declared export, compiled Host/role/core/client imports, and the absence of installation-time build hooks. The current PR CI also verified the committed compiled distribution matches a fresh build, and the packed plugin contains the declared outputs. GitHub CI repeats these checks on Node 24 and checks that committed `lib/` matches a fresh build.
 
 ## What the tests establish
 
