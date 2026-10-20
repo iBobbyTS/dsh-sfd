@@ -418,6 +418,7 @@ export class WorkflowController {
     }
     if (active.stage === 'implementing' || active.stage === 'repairing') return this.driveImplementation(run, active);
     if (active.stage === 'review-selection') return this.driveSelection(run, active);
+    if (active.stage === 'reroute') return this.driveReroute(run, active);
     if (active.stage === 'review-a') return this.driveA(run, active);
     if (active.stage === 'closure') return this.driveClosure(run, active);
     if (active.stage === 'adjudicating-a' || active.stage === 'adjudicating-b') return this.driveAdjudication(run, active);
@@ -485,7 +486,7 @@ export class WorkflowController {
     }
     await this.change(run.id, (draft) => {
       const next = draft.sections[section.id]!;
-      next.stage = section.stage === 'repairing' ? 'closure' : 'review-selection';
+      next.stage = section.stage === 'repairing' ? 'reroute' : 'review-selection';
       this.event(draft, 'implementation-captured', 'Actual implementation candidate and host-run checks recorded.', { sectionId: section.id, attemptId: attempt.id });
     });
     return true;
@@ -517,6 +518,30 @@ export class WorkflowController {
     return true;
   }
 
+  /** The old Skill re-routes the repair delta before closing A; it does not restart unaffected lenses. */
+  private async driveReroute(run: DevelopmentRun, section: SectionState): Promise<boolean> {
+    const attempt = this.latest(run, 'review-selector', section);
+    if (!attempt) return this.queueActor(run, 'review-selector', {
+      ...this.contractInput(run, section), repairDelta: section.repairInstructions,
+      priorLenses: section.lenses,
+      previousReviews: run.reviews.filter((review) => review.sectionId === section.id),
+      obligation: 'Inspect actual repair delta and direct consumers. Select R01-R12 risk coverage, declare invalidated previous A lenses only with a source-specific reason; do not restart unaffected A discovery.',
+    }, section);
+    if (attempt.state !== 'admitted') return false;
+    const output = attempt.admittedOutput as ReviewSelectionOutput;
+    const known = new Set(section.lenses.map((lens) => lens.id));
+    for (const id of output.invalidatedLensIds ?? []) if (!known.has(id)) throw new Error(`Unknown invalidated A lens ${id}.`);
+    const fresh = [...new Set([...output.lenses.filter((lens) => !known.has(lens.id)).map((lens) => lens.id), ...(output.invalidatedLensIds ?? [])])];
+    const lenses = [...section.lenses, ...output.lenses.filter((lens) => !known.has(lens.id))];
+    if (lenses.length > 6) throw new Error('Repair adds more than six required A lenses; reassess coverage and the Section boundary.');
+    await this.change(run.id, (draft) => {
+      const state = draft.sections[section.id]!;
+      state.lenses = lenses; state.freshRepairLensIds = fresh; state.stage = 'closure';
+      this.event(draft, 'repair-risk-rerouted', `Fresh A risk coverage: ${fresh.join(', ') || 'none'}.`, { sectionId: state.id });
+    });
+    return true;
+  }
+
   private async driveA(run: DevelopmentRun, section: SectionState): Promise<boolean> {
     const attempts = section.lenses.map((lens) => this.latest(run, 'reviewer-a', section, lens.id));
     const inflight = attempts.filter((attempt) => attempt && attempt.state !== 'admitted').length;
@@ -535,12 +560,27 @@ export class WorkflowController {
   }
 
   private async driveClosure(run: DevelopmentRun, section: SectionState): Promise<boolean> {
+    // Dispatch only new/invalidated independent A lenses identified on the repair delta.
+    const tasks = (section.freshRepairLensIds ?? []).map((id) => ({
+      id, lens: section.lenses.find((lens) => lens.id === id)!,
+      attempt: this.latest(run, 'reviewer-a', section, id),
+    }));
+    let capacity = run.policy.maxParallelReviews - tasks.filter((entry) => entry.attempt && entry.attempt.state !== 'admitted').length;
+    for (const entry of tasks) if (!entry.attempt && capacity > 0) {
+      await this.queueActor(await this.status(run.id), 'reviewer-a', {
+        ...this.contractInput(run, section), lens: entry.lens,
+        obligation: 'Fresh independent A evidence for a newly triggered or invalidated repair-delta risk.',
+      }, section, entry.lens);
+      capacity--;
+    }
+    if (!tasks.every((entry) => entry.attempt?.state === 'admitted')) return false;
     const attempt = this.latest(run, 'closure-reviewer', section);
     if (!attempt) return this.queueActor(run, 'closure-reviewer', {
       ...this.contractInput(run, section), instructions: section.repairInstructions,
+      targetFindingIds: section.closureFindingIds ?? [],
       previousReviews: run.reviews.filter((review) => review.sectionId === section.id),
       previousDecisions: run.decisions.filter((decision) => decision.sectionId === section.id),
-      obligation: 'Close admitted fixes and check direct regressions. Identify materially new uncovered risk. Do not claim a focused report is a fresh full parent review.',
+      obligation: 'Report exactly one per-finding status for every targetFindingId, with actual current-candidate evidence. No generic CLEAN may replace closure; examine direct regressions. Do not repeat the full A group.',
     }, section);
     if (attempt.state !== 'admitted') return false;
     await this.change(run.id, (draft) => { draft.sections[section.id]!.stage = 'adjudicating-a'; });
