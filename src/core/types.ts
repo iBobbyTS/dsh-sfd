@@ -130,7 +130,7 @@ export interface AdjudicationOutput {
 export interface FeatureVerificationOutput {
   verdict: 'accepted' | 'repair' | 'needs-user' | 'integration-review'; summary: string;
   /** One item for every actual business acceptance criterion, with evidence references. */
-  criteria: { featureId: string; criterion: string; evidenceIds: string[]; satisfied: boolean }[];
+  criteria: { featureId: string; criterion?: string; criterionId?: string; evidenceIds: string[]; satisfied: boolean }[];
   unprovenComposition?: { id: string; featureId: string; lens: string; boundary: string }[];
   integrationDispositions?: { findingId: string; decision: 'fix' | 'reject'; reason: string }[];
   repairSectionIds: string[]; repairInstructions: string; question?: string;
