@@ -335,3 +335,26 @@ test('parent Section review receives its own base-to-head delta rather than prev
   assert.ok(second.diff.includes('first parent'), 'Full candidate still retains earlier code context');
   assert.deepEqual(second.changedFiles.sort(), ['next.ts', 'source.txt']);
 });
+
+test('a Subsection cannot write outside its narrower scope even when the parent owns that path', async (t) => {
+  const { workspace, run } = await fixture(t);
+  run.plan = {
+    title: 'Child scope', assumptions: [],
+    features: [{ id: 'F1', title: 'Scoped feature', outcome: 'Child source is correct', acceptanceCriteria: ['Child owns source'], sectionIds: ['S1'], checks: [] }],
+    sections: [{ id: 'S1', title: 'Parent', featureIds: ['F1'], objective: 'Child then consumer', dependencies: [],
+      writeScope: ['source.txt', 'consumer.txt'], acceptanceCriteria: ['Parent complete'], implementation: 'standard', checks: [],
+      subsections: [{ id: 'C1', objective: 'Child source', acceptanceCriteria: ['source updated'],
+        writeScope: ['source.txt'], safeIntermediateState: 'Consumer not yet exposed', consumer: 'C2',
+        checks: [{ id: 'child', command: ['true'], required: true }] }] }],
+  };
+  run.sections = { S1: { id: 'S1', stage: 'subsection-implementing', subsectionIndex: 0,
+    inputContractVersion: 1, lineageId: 'S1-original', materialRepairWaves: 0, diagnosticCount: 0,
+    lenses: [], checks: [], reviewIds: [], decisionIds: [], aCoverageEvidenceIds: [] } };
+  run.workspace = await workspace.prepare(run);
+  await writeFile(join(run.workspace.path, 'source.txt'), 'valid child edit\n');
+  const accepted = await workspace.capture(run, 'S1');
+  run.currentCandidateId = accepted.id;
+  run.candidates[accepted.id] = accepted;
+  await writeFile(join(run.workspace.path, 'consumer.txt'), 'premature consumer edit\n');
+  await assert.rejects(workspace.capture(run, 'S1'), /outside its admitted writeScope: consumer\.txt/);
+});

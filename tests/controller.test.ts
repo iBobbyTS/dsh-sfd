@@ -1040,3 +1040,21 @@ test('an incomplete historical PLAN slot is not offered as reusable PLAN_DELTA a
   assert.equal(b[1]?.input.previousSlot, undefined);
   await controller.dispose();
 });
+
+test('subsection-specific implementation tier is frozen into the actual writer task', async () => {
+  const withChild = structuredClone(plan);
+  withChild.sections[0]!.subsections = [{
+    id: 'C1', objective: 'Build child', acceptanceCriteria: ['Child behavior'],
+    writeScope: ['src/export.ts'], safeIntermediateState: 'No public export yet',
+    consumer: 'Parent export', checks: [{ id: 'child', command: ['node', '--test'], required: true }],
+    implementation: 'large',
+  }];
+  const { controller, actors } = rig(withChild);
+  const id = await launch(controller);
+  const reached = await waitFor(controller, id, () => actors.calls.some(task => task.kind === 'implementer'));
+  const writer = actors.calls.find(task => task.kind === 'implementer')!;
+  assert.equal(writer.implementationTier, 'large');
+  assert.equal(writer.input.implementation, 'large');
+  assert.equal(reached.plan?.sections[0]?.implementation, 'standard');
+  await controller.dispose();
+});
