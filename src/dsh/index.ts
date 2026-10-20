@@ -41,7 +41,7 @@ export const Config: Schema<Config> = Schema.object({
   maxParallelReviews: Schema.natural().min(1).max(6).default(3),
   maxInfrastructureRetries: Schema.natural().max(3).default(1),
   modelRoutes: Schema.dict(Schema.object({ provider: Schema.string().min(1).required(), model: Schema.string().min(1).required(), effort: Schema.string().min(1) })).default({}),
-  largeImplementerModel: Schema.object({ provider: Schema.string().min(1).required(), model: Schema.string().min(1).required(), effort: Schema.string().min(1) }),
+  largeImplementerModel: Schema.object({ provider: Schema.string().min(1).required(), model: Schema.string().min(1).required(), effort: Schema.string().min(1) }).optional(),
   allowCommits: Schema.boolean().default(true),
 });
 
