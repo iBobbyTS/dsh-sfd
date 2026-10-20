@@ -20,6 +20,9 @@ export interface Config {
         model: string;
         effort?: string;
     }>>;
+    largeImplementerProvider?: string;
+    largeImplementerModel?: string;
+    largeImplementerEffort?: string;
     allowCommits?: boolean;
 }
 export declare const Config: Schema<Config>;
