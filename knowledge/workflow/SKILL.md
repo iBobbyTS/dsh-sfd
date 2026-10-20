@@ -46,7 +46,7 @@ Use one report path per dispatch. Task packets contain relevant authority, candi
 | Condition | Authority |
 |---|---|
 | A Section has real internal increments with a joint acceptance contract | [Subsections](references/subsections.md): actual child checkpoint, cumulative reconciliation, one Section A/B |
-| Approved independent work overlaps | [Parallel execution](references/parallel-execution.md): separate worktrees and real path/contract/resource independence |
+| Potential concurrent parent Section work | Deliberately retired in DSH SFD: the Host serializes all product Section writers; no PLAN can authorize parallel Section implementation. Independent read-only Code A passes may still run concurrently on frozen candidates. |
 | Genuine multi-session program | [Long horizon](references/long-horizon.md) |
 | Proposed extra owner, guarantee or mechanism | [Scope control](references/scope-control.md) |
 | Mid-task adoption or exhausted repair allowance | [Recovery](references/recovery-and-migration.md) |
