@@ -149,6 +149,8 @@ export interface ExecutionIdentity {
   sessionId?: string;
 }
 export interface ActorTask {
+  /** Effective writer tier frozen at dispatch: a Subsection can override its parent. */
+  implementationTier?: 'standard' | 'large';
   id: string; runId: string; kind: ActorKind;
   sectionId?: string; featureId?: string; lens?: Lens;
   /** Version of semantic input; independent of Run.revision. */

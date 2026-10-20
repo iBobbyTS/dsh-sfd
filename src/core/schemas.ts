@@ -22,6 +22,7 @@ const task = z.strictObject({
   id: identity, runId: identity, kind: actorKind,
   sectionId: identity.optional(), featureId: identity.optional(), lens: lens.optional(),
   inputContractVersion: integer, candidateId: identity.optional(), controlEpoch: integer,
+  implementationTier: z.enum(['standard', 'large']).optional(),
   route: route.optional(), workspace, input: object, outputSchema: object, timeoutMs: z.number().int().positive(),
 });
 const actorIdentity = z.strictObject({

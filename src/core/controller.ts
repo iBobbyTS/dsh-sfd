@@ -1516,14 +1516,20 @@ export class WorkflowController {
     section?: SectionState, lens?: Lens, featureId?: string): Promise<boolean> {
     const candidateId = section?.candidateId ?? run.currentCandidateId;
     const candidate = candidateId ? run.candidates[candidateId] : undefined;
+    const implementationTier = kind === 'implementer' && section
+      ? section.stage === 'subsection-implementing'
+        ? this.subsection(run, section).implementation ?? this.sectionPlan(run, section).implementation
+        : this.sectionPlan(run, section).implementation
+      : undefined;
     const task: ActorTask = {
       id: this.id(), runId: run.id, kind, inputContractVersion: section?.inputContractVersion ?? run.inputContractVersion,
       controlEpoch: run.controlEpoch, workspace: kind === 'implementer' || !candidate ? run.workspace : { ...run.workspace, path: candidate.workspacePath },
       input: JSON.parse(JSON.stringify(input)) as Record<string, unknown>,
       outputSchema: outputSchemaFor(kind), timeoutMs: run.policy.actorTimeoutMs,
+      ...(implementationTier ? { implementationTier } : {}),
       ...(section ? { sectionId: section.id } : {}), ...(lens ? { lens } : {}), ...(featureId ? { featureId } : {}),
       ...(candidateId ? { candidateId } : {}),
-      ...(kind === 'implementer' && section && this.sectionPlan(run, section).implementation === 'large' && run.policy.largeImplementerRoute
+      ...(kind === 'implementer' && implementationTier === 'large' && run.policy.largeImplementerRoute
         ? { route: run.policy.largeImplementerRoute }
         : run.policy.routes[kind] ? { route: run.policy.routes[kind] } : {}),
     };
