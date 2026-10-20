@@ -43,17 +43,16 @@ function CreateForm({ controller, workspacePath, busy, onClose }: {
 }): ReactNode {
   const [goal, setGoal] = useState('');
   const [path, setPath] = useState(workspacePath ?? '');
-  const [commit, setCommit] = useState(false);
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    const created = await controller.create({ goal: goal.trim(), ...(path.trim() ? { workspacePath: path.trim() } : {}), commit });
+    const created = await controller.create({ goal: goal.trim(), ...(path.trim() ? { workspacePath: path.trim() } : {}) });
     if (created) onClose();
   };
   return <form className="sfd-card sfd-form" onSubmit={(event) => { void submit(event); }}>
     <h2>New development run</h2>
     <label>Goal and acceptance constraints<textarea required value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Describe the complete outcome, important constraints, and how you will know it works." disabled={busy}/></label>
     <label>Repository path<input value={path} onChange={(event) => setPath(event.target.value)} placeholder="Use the owner conversation's working directory" disabled={busy}/></label>
-    <label className="sfd-check"><input type="checkbox" checked={commit} onChange={(event) => setCommit(event.target.checked)} disabled={busy}/> Commit the accepted candidate on the run branch</label>
+    <p>The accepted candidate is committed on its dedicated non-main branch. This workflow never pushes or merges automatically.</p>
     <p className="sfd-muted">The selected conversation supplies the execution permissions. The run keeps its own goal, progress, reviews, and recovery state.</p>
     <div className="sfd-row"><button className="sfd-primary" disabled={busy || !goal.trim()} type="submit">Create run</button><button disabled={busy} type="button" onClick={onClose}>Close</button></div>
   </form>;

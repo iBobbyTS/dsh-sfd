@@ -42,7 +42,7 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 2. 点击 **New run**，填写完整目标、约束和验收要求。
 3. 创建后点击 **Start**。创建与启动分开，便于先检查任务目标和交付选项。
 
-默认交付经过验证的独立工作区。创建时选中 **Commit the accepted candidate on the run branch**，才会在该任务分支生成提交。插件不会向用户项目的远端自动 push、合并到默认分支或删除原有工作。
+与原 SFD 的 `EXECUTE_WITH_COMMIT` 一致，任务验收后会在独立的 `sfd/<run-id>` 非 main 分支提交精确候选。不会自动 push、合并到默认分支或删除原有工作。显式 no-commit 执行请求会被拒绝，而不会悄悄改变原工作流的交付模式。
 
 同样的操作可以通过命令完成：
 

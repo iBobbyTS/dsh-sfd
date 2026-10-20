@@ -338,7 +338,7 @@ test('real Host service mounts strict Remote/command surfaces and fences Run and
     const service = ctx.developmentWorkflow;
     assert.ok(service instanceof DevelopmentWorkflowService);
     const run = await service.create({ sessionId: 'owner', goal: 'Native workflow task' });
-    assert.equal(run.status, 'draft'); assert.equal(run.policy.commit, false);
+    assert.equal(run.status, 'draft'); assert.equal(run.policy.commit, true);
     assert.equal((await service.list({ sessionId: 'owner' })).length, 1);
     assert.deepEqual(await service.list({ sessionId: 'unrelated' }), []);
     await assert.rejects(service.status({ sessionId: 'unrelated', runId: run.id }), (error: unknown) => error instanceof RemoteError && error.code === 'development-workflow/not-found');

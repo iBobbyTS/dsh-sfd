@@ -117,14 +117,15 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
       ...(route.reasoningEffort === undefined ? {} : { effort: route.reasoningEffort }),
       ...(permissionPreset === undefined ? {} : { permissionPreset }),
     };
-    if (request.commit && this.config.allowCommits === false) throw new RemoteError('development-workflow/forbidden', 'This deployment disables workflow commits.', { sessionId: request.sessionId });
+    if (request.commit === false) throw new RemoteError('development-workflow/forbidden', 'EXECUTE_WITH_COMMIT requires an accepted commit on the isolated run branch; choose a separately authorized plan-only workflow for no-commit work.', { sessionId: request.sessionId });
+    if (this.config.allowCommits === false) throw new RemoteError('development-workflow/forbidden', 'This deployment disables workflow commits.', { sessionId: request.sessionId });
     const routes: Partial<Record<ActorKind, ActorRoute>> = {};
     for (const kind of Object.keys(ROLE_PRESETS) as ActorKind[]) routes[kind] = { preset: ROLE_PRESETS[kind], ...this.config.modelRoutes?.[kind] };
     const policy: Partial<WorkflowPolicy> = {
       actorTimeoutMs: this.config.actorTimeoutMs ?? 1_800_000,
       maxParallelReviews: this.config.maxParallelReviews ?? 3,
       maxInfrastructureRetries: this.config.maxInfrastructureRetries ?? 1,
-      commit: request.commit === true, routes,
+      commit: true, routes,
     };
     return this.store.withOwner(owner, () => this.controller.create({ goal: request.goal, workspacePath, policy }));
   }
