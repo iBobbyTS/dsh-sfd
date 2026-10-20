@@ -101,7 +101,10 @@ export class WorkflowController {
     if (!['paused', 'blocked'].includes(before.status)) throw new Error('Only paused or resolved blocked work can resume.');
     if (before.pendingDecision) throw new Error('Resolve the pending decision before resuming.');
     if ([...this.activeActors.values(), ...this.activeOperations.values()].some((active) => active.runId === id)) throw new Error('An interrupted activation is still stopping; wait for actual teardown before resuming.');
-    const recovery = await this.workspace.reconcile(before);
+    // PLAN_HANDOFF has no writer, task worktree, Git commit or other workspace
+    // side effect. Resuming an owner decision must not require a nonexistent
+    // workspace manifest; the unchanged plan authority is still checked below.
+    const recovery = before.intent === 'plan-handoff' ? { safe: true } : await this.workspace.reconcile(before);
     if (!recovery.safe) {
       await this.block(id, recovery.reason ?? 'Workspace execution state is uncertain.', 'recovery');
       return this.status(id);
@@ -188,7 +191,9 @@ export class WorkflowController {
     if (decision.kind === 'budget' && input.action !== 'replan') {
       throw new Error('An exhausted repair budget cannot be reset by retry. Revise the plan or cancel; existing Section lineage is preserved.');
     }
-    const recovery = decision.kind === 'recovery' ? await this.workspace.reconcile(current) : undefined;
+    const recovery = decision.kind === 'recovery'
+      ? current.intent === 'plan-handoff' ? { safe: true } : await this.workspace.reconcile(current)
+      : undefined;
     if (recovery && !recovery.safe && !recovery.candidate) {
       throw new Error(`Actual workspace state must be inspected before acknowledging recovery: ${recovery.reason ?? 'inspection unavailable'}`);
     }
