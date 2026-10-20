@@ -1060,7 +1060,13 @@ export class WorkflowController {
       await this.block(run.id, `Section adjudication requires external Advisor: ${output.summary}`, 'advisor', section.id, output.advisorTrigger, attempt.id);
       return false;
     }
-    this.validateAdjudication(run, section, output, attempt.id);
+    try { this.validateAdjudication(run, section, output, attempt.id); }
+    catch (error) {
+      // A mistaken finding/evidence ID is an actor output error, not a broken Run.
+      // Retry this decision once with bounded, exact valid IDs. Never redo reviews,
+      // consume a product repair wave, or enter an unbounded validator loop.
+      return this.correctSemanticOutput(run, attempt, message(error), section.id);
+    }
     if (output.resolution === 'needs-user') {
       await this.block(run.id, output.question ?? output.summary, 'semantic', section.id); return false;
     }
@@ -1096,6 +1102,25 @@ export class WorkflowController {
         ])];
         state.stage = 'review-b';
       }
+    });
+    return true;
+  }
+
+  private async correctSemanticOutput(run: DevelopmentRun, attempt: Attempt, detail: string, sectionId?: string): Promise<boolean> {
+    const previous = run.attempts.filter(item => item.task.kind === attempt.task.kind &&
+      item.task.sectionId === attempt.task.sectionId &&
+      item.task.input.phase === attempt.task.input.phase &&
+      item.task.candidateId === attempt.task.candidateId &&
+      item.rejection?.startsWith('Decision-correction:'));
+    if (previous.length >= 1) {
+      await this.block(run.id, 'Decision evidence could not be made consistent after one bounded correction: ' + detail,
+        'semantic', sectionId);
+      return false;
+    }
+    await this.change(run.id, draft => {
+      const current = draft.attempts.find(entry => entry.id === attempt.id);
+      if (current) current.rejection = 'Decision-correction: ' + detail;
+      this.event(draft, 'decision-output-correction', 'Retry the same semantic decision with exact valid references; source reviews and repair budget unchanged.', { attemptId: attempt.id, ...(sectionId ? { sectionId } : {}) });
     });
     return true;
   }
@@ -1543,10 +1568,24 @@ export class WorkflowController {
         ? this.subsection(run, section).implementation ?? this.sectionPlan(run, section).implementation
         : this.sectionPlan(run, section).implementation
       : undefined;
+    const lastRejected = [...run.attempts].reverse().find(entry =>
+      entry.task.kind === kind && entry.task.sectionId === section?.id &&
+      entry.task.lens?.id === lens?.id && entry.task.input.phase === (section?.stage ?? run.stage) &&
+      entry.task.candidateId === candidateId && entry.rejection &&
+      (entry.rejection.startsWith('Decision-correction:') || entry.rejection.startsWith('Invalid role result:')));
+    // Only failed output, not peer discoveries, is supplied as corrective context.
+    // The model does not re-run the source investigation just to repair an ID.
+    const correctedInput = lastRejected ? { ...input, outputCorrection: {
+      reason: lastRejected.rejection,
+      allowedFindingIds: run.reviews.filter(review => !section || review.sectionId === section.id)
+        .flatMap(review => review.output.findings.map(finding => review.id + ':' + finding.id)),
+      allowedEvidenceIds: run.reviews.filter(review => !section || review.sectionId === section.id).map(review => review.id),
+      instruction: 'Correct only the state-machine output and its exact references. Keep the evidence findings unchanged.',
+    } } : input;
     const task: ActorTask = {
       id: this.id(), runId: run.id, kind, inputContractVersion: section?.inputContractVersion ?? run.inputContractVersion,
       controlEpoch: run.controlEpoch, workspace: kind === 'implementer' || !candidate ? run.workspace : { ...run.workspace, path: candidate.workspacePath },
-      input: JSON.parse(JSON.stringify(input)) as Record<string, unknown>,
+      input: JSON.parse(JSON.stringify(correctedInput)) as Record<string, unknown>,
       outputSchema: outputSchemaFor(kind), timeoutMs: run.policy.actorTimeoutMs,
       ...(implementationTier ? { implementationTier } : {}),
       ...(section ? { sectionId: section.id } : {}), ...(lens ? { lens } : {}), ...(featureId ? { featureId } : {}),
@@ -1878,7 +1917,7 @@ export class WorkflowController {
       } catch {
         // A missing or malformed notice must not silently skip the required notification.
         // The Host has sufficient verified trigger facts for a safe deterministic fallback.
-        this.event(await this.status(id), 'advisor-notice-fallback', 'Host is using its bounded trigger-only notification fields.');
+        await this.change(id, draft => { this.event(draft, 'advisor-notice-fallback', 'Host is using its bounded trigger-only notification fields.'); });
       }
       await this.change(id, draft => {
         if (draft.advisorCase) draft.advisorCase.notice = notice;
