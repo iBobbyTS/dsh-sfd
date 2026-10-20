@@ -83,3 +83,7 @@ The original parallel parent-Section product implementation and automatic legacy
 Distribution refresh is explicitly requested only after the source parity changes are committed. The next verification run must confirm `lib/` byte-for-byte matches the source build before release.
 
 Source verification before final bundle regeneration: GitHub Actions [verify run 39517751880](https://github.com/iBobbyTS/dsh-sfd/actions/runs/39517751880) passed TypeScript typecheck, all current deterministic tests and source build; only the expected committed-lib freshness gate remained, requiring the explicit distribution sync.
+
+### Checked installable distribution
+
+GitHub Actions [explicit source-build run 39517891418](https://github.com/iBobbyTS/dsh-sfd/actions/runs/39517891418) **passed**: `npm ci --ignore-scripts`, TypeScript, full deterministic tests, source build and automated generation of committed `lib/`. The build bot pushed commit [`fd6f4f86b`](https://github.com/iBobbyTS/dsh-sfd/commit/fd6f4f86bebc1de7e26c41ebf13028123a2b4620). A subsequent ordinary `main` push must verify `git diff --exit-code -- lib` and the packed-plugin verifier on the final head. No real Feishu/paid-model run is implied.
