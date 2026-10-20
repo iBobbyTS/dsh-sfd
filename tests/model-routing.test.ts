@@ -47,7 +47,7 @@ class FakeCli implements ExternalSubagentClient {
     if (command === 'wait') return { task: { agent_id: 12345678,
       status: this.cancelled ? 'cancelled' : this.initialRunning ? 'running' : 'completed' }, pending_requests: [] };
     const spawn = this.calls.find((entry) => entry.command === 'spawn')!.input;
-    const role = /\"role\"\\s*:\\s*\"([^\"]+)\"/.exec(String(spawn.prompt ?? ''))?.[1] ?? 'reviewer-a';
+    const role = /"role"\s*:\s*"([^"]+)"/.exec(String(spawn.prompt ?? ''))?.[1] ?? 'reviewer-a';
     const reportMarkdown = '# SFD Role Report\n' +
       JSON.stringify({ role, taskId: 'external-fixture' }) + '\n' +
       '## Evidence\n' + JSON.stringify({ status: 'observed', sourceRefs: ['test'] }) +
