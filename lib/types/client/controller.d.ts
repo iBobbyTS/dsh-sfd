@@ -39,7 +39,7 @@ export declare class DevelopmentClientController {
     private mutate;
     create(input: Omit<CreateRequest, 'sessionId'>): Promise<boolean>;
     act(action: RunAction, runId: string): Promise<boolean>;
-    decide(runId: string, decisionId: string, answer: string, action: DecideRequest['action']): Promise<boolean>;
+    decide(runId: string, decisionId: string, answer: string, action: DecideRequest['action'], advisor?: Pick<DecideRequest, 'advisorResult' | 'advisorAdoption'>): Promise<boolean>;
     revise(runId: string, goal: string): Promise<boolean>;
     dispose(): void;
 }

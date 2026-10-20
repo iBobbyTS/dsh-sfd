@@ -61,6 +61,10 @@ class FakeActors implements ActorRunner {
   }
   defaultResult(task: ActorTask): unknown {
     if (task.kind === 'planner') return { plan: this.configuredPlan, explanation: 'The plan maps business outcomes to parent Sections.' };
+    if ((task.kind === 'plan-review-a' || task.kind === 'plan-review-b') && task.input.reviewMode === 'PLAN_DELTA') {
+      const prior = task.input.previousSlot as { attemptId: string };
+      return { ...clean, planEvidenceReuse: [{ attemptId: prior.attemptId, reason: 'The corrected current plan retains still-valid reviewed requirements and all changed source/owner relationships were inspected.' }] };
+    }
     if (task.kind === 'implementer') {
       this.workspace.version++;
       return { summary: 'Implemented required behavior.', completedCriteria: ['Export respects account ownership.'], remainingWork: [], changedInterfaces: [] };
@@ -369,7 +373,7 @@ test('replanning cannot turn an exhausted repair lineage into a sixth implementa
   await store.update(id, (run) => { run.sections.S1.materialRepairWaves = 5; return run; });
   await controller.revise(id, 'Keep the same export obligation and resolve the outstanding defect.');
   const stopped = await waitFor(controller, id, (run) => ['blocked', 'waiting-user'].includes(run.status));
-  assert.match(stopped.blockedReason!, /sixth implementation/);
+  assert.match(stopped.blockedReason!, /Hard-cap|hard-cap|HARD_CAP_RECOVERY|exhausted/);
   assert.equal(actors.calls.filter((task) => task.kind === 'implementer').length, 1);
   assert.equal(stopped.sections.S1.materialRepairWaves, 5);
   await controller.dispose();
@@ -557,5 +561,341 @@ test('original standard/large implementation tiers select distinct Host-authoriz
   assert.equal(large.route?.model, 'fixture-large');
   assert.equal(large.route?.provider, 'fixture');
   assert.equal(large.route?.preset, 'sfd-implementer');
+  await controller.dispose();
+});
+
+test('native Subsections enforce serial R01 checkpoints before consumer and parent A/B release', async () => {
+  const p = structuredClone(plan);
+  p.sections[0]!.subsections = [
+    { id: 'S1a', objective: 'Produce the internal owner mapping.', acceptanceCriteria: ['Mapping produces correct ownership'],
+      writeScope: ['src/export.ts'], safeIntermediateState: 'Internal mapping remains valid', consumer: 'S1b',
+      checks: [{ id: 'child-a', command: ['node','--test'], required: true }] },
+    { id: 'S1b', objective: 'Connect mapping to export entry.', acceptanceCriteria: ['Export calls mapping'],
+      writeScope: ['src/export.ts'], safeIntermediateState: 'Export is ready for joint verification', consumer: 'Final user API',
+      checks: [{ id: 'child-b', command: ['node','--test'], required: true }] },
+  ];
+  const { controller, actors } = rig(p);
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  const section = done.sections.S1;
+  assert.deepEqual(section.subsectionCheckpoints?.map((checkpoint) => checkpoint.subsectionId), ['S1a','S1b']);
+  assert.equal(new Set(section.subsectionCheckpoints?.map((checkpoint) => checkpoint.candidateId)).size, 2);
+  assert.equal(actors.calls.filter((call) => call.kind === 'implementer').length, 2);
+  assert.equal(actors.calls.filter((call) => call.kind === 'reviewer-b').length, 1);
+  assert.equal(actors.calls.filter((call) => call.kind === 'reviewer-a').length, 3);
+  const calls = actors.calls.filter((call) => ['implementer','reviewer-a'].includes(call.kind));
+  assert.ok(calls.findIndex((call) => call.kind === 'reviewer-a' && (call.input.subsection as { id?: string } | undefined)?.id === 'S1a') <
+    calls.findIndex((call) => call.kind === 'implementer' && (call.input.subsection as { id?: string } | undefined)?.id === 'S1b'));
+  assert.equal(section.stage, 'integrated');
+  assert.equal(section.subsectionChecks?.length, 2, 'parent preserves both scoped check results');
+  const parentR01 = actors.calls.find((call) => call.kind === 'reviewer-a' &&
+    call.input.checkpointMode === 'PARENT_RECONCILIATION');
+  assert.equal((parentR01?.input.previousCheckpoints as unknown[])?.length, 2);
+  await controller.dispose();
+});
+
+test('Subsection repairs retain parent wave budget and require R01 closure of actual finding IDs', async () => {
+  const p = structuredClone(plan);
+  p.sections[0]!.subsections = [{ id: 'S1a', objective: 'Make owner map', acceptanceCriteria: ['Owner map correct'],
+    writeScope: ['src/export.ts'], safeIntermediateState: 'Mapping safe', consumer: 'Parent export API',
+    checks: [{ id: 'child', command: ['node','--test'], required: true }] }];
+  const { controller, actors } = rig(p);
+  let findingsSent = false;
+  actors.responder = (task) => {
+    if (task.kind === 'review-selector' && task.input.subsection && task.input.repairDelta) {
+      return { lenses: [{ id: 'R01', name: 'Child baseline', focus: 'Scoped child invariant' },
+        { id: 'R03', name: 'State regression', focus: 'New state risk from the repaired child' }],
+        rationale: 'The admitted child repair affects shared state.',
+      };
+    }
+    if (task.kind === 'reviewer-a' && task.input.subsection && !findingsSent) {
+      findingsSent = true;
+      return { ...clean, verdict: 'findings', findings: [{ id: 'CHILD-1', title: 'Map leak', body: 'Cross-account leak',
+        severity: 'major', invariant: 'Only current user records' }] };
+    }
+    if (task.kind === 'adjudicator' && task.input.purpose === 'subsection-checkpoint') {
+      const findings = task.input.findings as { id: string }[];
+      return accept({ resolution: 'repair', material: true,
+        repairInstructions: 'Fix the exact child owner map leak.',
+        dispositions: findings.map(({ id }) => ({ findingId: id, decision: 'fix', reason: 'Reproduced.' })) });
+    }
+    if (task.kind === 'reviewer-a' && task.input.subsection && task.input.checkpointMode === 'REPAIR_DELTA') {
+      return { ...clean, closures: ((task.input.targetFindingIds ?? []) as string[]).map((findingId) => ({
+        findingId, status: 'verified-closed', evidence: 'Retested repaired child identity path.',
+      })) };
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.sections.S1.materialRepairWaves, 1);
+  assert.equal(done.sections.S1.subsectionCheckpoints?.length, 1);
+  assert.equal(actors.calls.filter((call) => call.kind === 'implementer').length, 2);
+  assert.equal(actors.calls.filter((call) => call.kind === 'reviewer-a' &&
+    call.input.subsection && call.lens?.id === 'R03').length, 1,
+    'new child repair risks receive a bounded focused reviewer without another child A/B');
+  await controller.dispose();
+});
+
+test('PLAN-only silent A slot retires after two independently clean A passes followed by material B changes', async () => {
+  const { controller, actors } = rig();
+  let b = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'plan-review-b' && ++b <= 2)
+      return { ...clean, verdict: 'findings', findings: [{ id: 'P1', title: 'Plan scope', body: 'Remove unrequested owner.',
+        invariant: 'Do not expand scope', severity: 'major', classification: 'PLAN_SCOPE_EXPANSION' }] };
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.planRepairs, 2);
+  assert.equal(done.planSilentRetirement?.slot, 'plan-review-a');
+  assert.equal(actors.calls.filter((call) => call.kind === 'plan-review-a').length, 2);
+  assert.equal(actors.calls.filter((call) => call.kind === 'plan-review-b').length, 3);
+  await controller.dispose();
+});
+
+test('PLAN_NIT alone is not another correction wave and OWNER_DECISION requires a real response', async () => {
+  const { controller, actors } = rig();
+  let asked = false;
+  actors.responder = (task) => {
+    if (task.kind === 'plan-review-a' && !asked) {
+      asked = true;
+      return { ...clean, verdict: 'findings', findings: [{ id: 'OWNER1', title: 'Compatibility semantics',
+        body: 'Choose externally supported format', severity: 'major', invariant: 'Owner decides',
+        classification: 'OWNER_DECISION' }] };
+    }
+    if (task.kind === 'plan-review-b') return { ...clean, verdict: 'findings', findings: [{
+      id: 'NIT', title: 'Optional rename', body: 'Could improve name', severity: 'minor', invariant: 'Readable plan',
+      classification: 'PLAN_NIT',
+    }] };
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const blocked = await waitFor(controller, id, (run) => run.status === 'waiting-user');
+  assert.equal(blocked.planRepairs, 0);
+  await controller.decide(id, { decisionId: blocked.pendingDecision!.id, answer: 'Use existing public format.', action: 'continue' });
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.planRepairs, 0);
+  await controller.dispose();
+});
+
+test('R02 optional SAFE_SIMPLIFICATION stays nonblocking when no material repair is admitted', async () => {
+  const { controller, actors } = rig();
+  actors.responder = (task) => {
+    if (task.kind === 'review-selector') return {
+      lenses: [{ id: 'R01', name: 'Behavior', focus: 'Complete behavior' },
+        { id: 'R02', name: 'Simplification', focus: 'Unnecessary structural layer' }],
+      rationale: 'Changed state structure requires R02.',
+    };
+    if (task.kind === 'reviewer-a' && task.lens?.id === 'R02') return {
+      ...clean, simplifications: [{ mechanism: 'Redundant adapter', simplerPath: 'Use existing export owner',
+        preservedInvariants: ['Account scoping'], preservationOracle: 'Business export test',
+        affectedConsumers: ['Export entry'] }],
+    };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'a-admission') {
+      const actions = task.input.simplificationActions as { id: string }[];
+      return accept({ simplificationDispositions: actions.map((action) => ({
+        actionId: action.id, decision: 'defer', reason: 'No independent material defect was admitted.',
+      })) });
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.sections.S1.materialRepairWaves, 0);
+  assert.deepEqual(done.sections.S1.simplifications?.map((entry) => [entry.id, entry.status]), [['SIMP-001','deferred']]);
+  assert.equal(actors.calls.filter((call) => call.kind === 'implementer').length, 1);
+  await controller.dispose();
+});
+
+test('a SIMP preservation oracle is a distinct mandatory closure when batched with admitted material repair', async () => {
+  const { controller, actors, workspace } = rig();
+  let initial = true;
+  actors.responder = (task) => {
+    if (task.kind === 'review-selector') return { lenses: [
+      { id: 'R01', name: 'Behavior', focus: 'Complete behavior' },
+      { id: 'R02', name: 'Simplification', focus: 'Remove redundant adapter' }],
+      rationale: 'Changed structure.' };
+    if (task.kind === 'reviewer-a' && initial && task.lens?.id === 'R01') return { ...clean,
+      verdict: 'findings', findings: [{ id: 'BUG', title: 'Account leak', body: 'Cross-user read',
+        severity: 'major', invariant: 'Account isolation' }] };
+    if (task.kind === 'reviewer-a' && initial && task.lens?.id === 'R02') return { ...clean,
+      simplifications: [{ mechanism: 'Extra adapter', simplerPath: 'Existing owner',
+        preservedInvariants: ['Export result stable'], preservationOracle: 'Verified export fixture', affectedConsumers: ['Export'] }] };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'a-admission' && initial) {
+      initial = false;
+      const findings = task.input.findings as { id: string }[];
+      const actions = task.input.simplificationActions as { id: string }[];
+      return accept({ resolution: 'repair', material: true, repairInstructions: 'Fix scoping and remove extra adapter.',
+        dispositions: findings.map((finding) => ({ findingId: finding.id, decision: 'fix', reason: 'Confirmed leak.' })),
+        simplificationDispositions: actions.map((action) => ({ actionId: action.id, decision: 'batch', reason: 'Already repairing a real leak.' })) });
+    }
+    if (task.kind === 'closure-reviewer') return { ...clean,
+      closures: ((task.input.targetFindingIds ?? []) as string[]).map((findingId) => ({
+        findingId, status: 'verified-closed', evidence: 'Account isolation checked.',
+      })),
+      simplificationClosures: ((task.input.simplificationActions ?? []) as { id: string }[]).map((action) => ({
+        actionId: action.id, status: 'preserved', evidence: 'Export fixture passes without redundant adapter.',
+      })) };
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.sections.S1.materialRepairWaves, 1);
+  assert.equal(done.sections.S1.simplifications?.[0]?.status, 'preserved');
+  assert.equal(done.sections.S1.simplifications?.[0]?.closureCandidateId, done.sections.S1.acceptedCandidateId);
+  assert.equal(workspace.version, 2);
+  await controller.dispose();
+});
+
+test('an external Advisor result never substitutes for separate explicit owner adoption', async () => {
+  const { controller, actors } = rig();
+  let trigger = true;
+  actors.responder = (task) => {
+    if (task.kind === 'plan-review-a' && trigger) {
+      trigger = false;
+      return { ...clean, advisorTrigger: 'ADV-02' };
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const pending = await waitFor(controller, id, (run) => run.status === 'waiting-user' && run.pendingDecision?.kind === 'advisor');
+  assert.equal(pending.advisorCase?.trigger, 'ADV-02');
+  assert.equal(pending.advisorCase?.status, 'waiting-external');
+  assert.match(pending.advisorCase!.request, /requirementsHistory/);
+  assert.match(pending.advisorCase!.request, /reviewEvidence/);
+  assert.match(pending.advisorCase!.request, /not a sanitized ZIP/);
+  await assert.rejects(controller.revise(id, 'Silently change the goal and bypass external adjudication.'),
+    /external Advisor hold/i);
+  await assert.rejects(controller.decide(id, { decisionId: pending.pendingDecision!.id, answer: 'Continue', action: 'continue' }),
+    /actual advisor result/);
+  const clarify = await controller.decide(id, { decisionId: pending.pendingDecision!.id, answer: 'Need evidence',
+    advisorResult: 'Independent reviewer needs a controlled test.', advisorAdoption: 'clarify', action: 'continue' });
+  assert.equal(clarify.status, 'waiting-user');
+  assert.equal(clarify.advisorCase?.status, 'waiting-human-decision');
+  await controller.decide(id, { decisionId: pending.pendingDecision!.id, answer: 'Adopt the narrow test resolution.',
+    advisorResult: 'Independent reviewer recommends the minimal existing-owner change.', advisorAdoption: 'accept', action: 'continue' });
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.advisorCase?.status, 'adopted');
+  assert.ok(done.decisionHistory.some((entry) => entry.advisorAdoption === 'accept' &&
+    entry.advisorResult?.includes('existing-owner')));
+  await controller.dispose();
+});
+
+test('five-wave hard cap grants at most one diagnosed nonstructural recovery wave and then ADV-01', async () => {
+  const { controller, actors, workspace } = rig();
+  actors.responder = (task) => {
+    if (task.kind === 'reviewer-b') return {
+      ...clean, verdict: 'findings', findings: [{ id: 'BUG1', title: 'Still leaking', body: 'Account boundary remains vulnerable.',
+        severity: 'major', invariant: 'Owner isolation' }],
+    };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'b-admission') {
+      const findings = task.input.findings as { id: string }[];
+      return accept({ resolution: 'repair', material: true, repairInstructions: 'Repair owner isolation at the original contract.',
+        dispositions: findings.map(({ id }) => ({ findingId: id, decision: 'fix', reason: 'Confirmed same root cause.' })) });
+    }
+    if (task.kind === 'diagnostician' && String(task.input.reason).startsWith('HARD_CAP_RECOVERY:'))
+      return { summary: 'One final local repair remains', recommendation: 'retry', recoveryClass: 'CONTINUE_CURRENT',
+        instructions: 'One scoped final repair, then FINAL_BOUNDED.' };
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const blocked = await waitFor(controller, id, (run) => run.status === 'waiting-user' && run.pendingDecision?.kind === 'advisor', 20000);
+  assert.equal(blocked.pendingDecision?.advisorTrigger, 'ADV-01');
+  assert.equal(blocked.sections.S1.materialRepairWaves, 6);
+  assert.equal(blocked.sections.S1.recovery?.classification, 'CONTINUE_CURRENT');
+  assert.equal(blocked.sections.S1.recovery?.extraWaveLimit, 6);
+  assert.equal(actors.calls.filter((task) => task.kind === 'diagnostician' && String(task.input.reason).startsWith('HARD_CAP_RECOVERY:')).length, 1);
+  await assert.rejects(controller.decide(id, { decisionId: blocked.pendingDecision!.id, answer: 'Continue',
+    advisorResult: 'External advice', advisorAdoption: 'accept', action: 'continue' }), /ADV-01/);
+  assert.equal(workspace.version, 7);
+  await controller.dispose();
+});
+
+test('actual residual Feature risk invokes one independent bounded integration reviewer, not another parent A/B', async () => {
+  const { controller, actors } = rig(twoSectionPlan());
+  let verifierCalls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'feature-verifier' && ++verifierCalls === 1) {
+      return { verdict: 'integration-review', summary: 'Shared session boundary is not covered by the local Section evidence.',
+        criteria: [], repairSectionIds: [], repairInstructions: '',
+        unprovenComposition: [{ id: 'BOUNDARY1', featureId: 'F1', lens: 'R05', boundary: 'Consumer reads producer-owned session in real export flow.' }] };
+    }
+    if (task.kind === 'feature-verifier') {
+      const check = (task.input.checks as { id: string }[])[0]!;
+      const reviews = task.input.evidence as { id: string }[];
+      const integration = reviews.find((entry) => entry.id.startsWith('integration:'))!;
+      assert.ok(integration);
+      return { verdict: 'accepted', summary: 'Composed path checked by independent focused evidence.',
+        criteria: [{ featureId: 'F1', criterion: 'User can export exactly their records.',
+          evidenceIds: [check.id, integration.id], satisfied: true }],
+        repairSectionIds: [], repairInstructions: '', integrationDispositions: [] };
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(verifierCalls, 2);
+  assert.equal(done.integrationGaps?.length, 1);
+  assert.equal(done.integrationReviews?.length, 1);
+  const focused = actors.calls.filter((call) => call.kind === 'reviewer-a' && call.featureId === 'F1');
+  assert.equal(focused.length, 1);
+  assert.ok(focused[0]?.input.integrationGap);
+  assert.equal(actors.calls.filter((call) => call.kind === 'reviewer-b').length, 2);
+  await controller.dispose();
+});
+
+test('SPLIT_REMAINING requires two real descendants and inherits one exhausted parent lineage without resetting counts', async () => {
+  const { controller, actors } = rig();
+  let planningCalls = 0, repairCalls = 0;
+  const replacement = structuredClone(plan);
+  replacement.features[0]!.sectionIds = ['S1a','S1b'];
+  const first = replacement.sections[0]!;
+  replacement.sections = [
+    { ...structuredClone(first), id: 'S1a', replacesSectionId: 'S1', title: 'Owner representation', dependencies: [], writeScope: ['src/export.ts'] },
+    { ...structuredClone(first), id: 'S1b', replacesSectionId: 'S1', title: 'Export integration', dependencies: ['S1a'], writeScope: ['src/export.ts'] },
+  ];
+  actors.responder = (task) => {
+    if (task.kind === 'planner') return {
+      plan: ++planningCalls === 1 ? plan : replacement,
+      explanation: 'Only the same original export requirement; split remaining owner and consumer into real peer contracts.',
+    };
+    if (task.kind === 'reviewer-b' && task.sectionId === 'S1') return { ...clean, verdict: 'findings',
+      findings: [{ id: 'BLOCKER', title: 'Faulty export', body: 'The export remains incorrect.',
+        severity: 'major', invariant: 'Only owner records can be exported' }] };
+    if (task.kind === 'adjudicator' && task.sectionId === 'S1' && task.input.purpose === 'b-admission') {
+      repairCalls++;
+      const findings = task.input.findings as { id: string }[];
+      return accept({ resolution: 'repair', material: true,
+        repairInstructions: 'Fix the original export without adding any scope.',
+        dispositions: findings.map(({ id }) => ({ findingId: id, decision: 'fix', reason: 'Confirmed same root.' })) });
+    }
+    if (task.kind === 'diagnostician' && String(task.input.reason).startsWith('HARD_CAP_RECOVERY:'))
+      return { summary: 'Two bounded owner and consumer obligations must be split.',
+        recommendation: 'revise-plan', recoveryClass: 'SPLIT_REMAINING',
+        instructions: 'Split only the remaining behavior into S1a and S1b with shared original lineage.' };
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed','blocked','waiting-user'].includes(run.status), 20000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.ok(planningCalls >= 2);
+  assert.equal(repairCalls, 6, '5 original corrective waves and a sixth request blocked for structural recovery');
+  assert.equal(done.retiredSections?.S1?.state.materialRepairWaves, 5);
+  assert.equal(done.sections.S1a.lineageId, done.sections.S1b.lineageId);
+  assert.equal(done.sections.S1a.lineageId, done.retiredSections?.S1?.state.lineageId);
+  assert.equal(done.sections.S1a.materialRepairWaves, 5);
+  assert.equal(done.sections.S1b.materialRepairWaves, 5);
+  assert.equal(done.sections.S1a.recovery?.classification, 'SPLIT_REMAINING');
+  assert.equal(done.sections.S1b.recovery?.extraWaveLimit, 10);
   await controller.dispose();
 });

@@ -35,26 +35,37 @@ export declare const planSchema: z.ZodObject<{
             timeoutMs: z.ZodOptional<z.ZodNumber>;
             required: z.ZodBoolean;
         }, z.core.$strict>>;
+        replacesSectionId: z.ZodOptional<z.ZodString>;
         subsections: z.ZodArray<z.ZodObject<{
             id: z.ZodString;
             objective: z.ZodString;
             acceptanceCriteria: z.ZodArray<z.ZodString>;
+            writeScope: z.ZodArray<z.ZodString>;
+            safeIntermediateState: z.ZodString;
+            consumer: z.ZodString;
+            checks: z.ZodArray<z.ZodObject<{
+                id: z.ZodString;
+                command: z.ZodArray<z.ZodString>;
+                cwd: z.ZodOptional<z.ZodString>;
+                timeoutMs: z.ZodOptional<z.ZodNumber>;
+                required: z.ZodBoolean;
+            }, z.core.$strict>>;
+            implementation: z.ZodOptional<z.ZodEnum<{
+                standard: "standard";
+                large: "large";
+            }>>;
         }, z.core.$strict>>;
     }, z.core.$strict>>;
     assumptions: z.ZodArray<z.ZodString>;
 }, z.core.$strict>;
-export declare const findingSchema: z.ZodObject<{
-    id: z.ZodString;
-    title: z.ZodString;
-    body: z.ZodString;
-    severity: z.ZodEnum<{
-        critical: "critical";
-        major: "major";
-        minor: "minor";
-    }>;
-    invariant: z.ZodString;
-    location: z.ZodOptional<z.ZodString>;
-}, z.core.$strict>;
+export declare const advisorTrigger: z.ZodEnum<{
+    "ADV-01": "ADV-01";
+    "ADV-02": "ADV-02";
+    "ADV-03": "ADV-03";
+    "ADV-04": "ADV-04";
+    "ADV-05": "ADV-05";
+    "ADV-06": "ADV-06";
+}>;
 export declare const reviewSchema: z.ZodObject<{
     verdict: z.ZodEnum<{
         clean: "clean";
@@ -75,6 +86,12 @@ export declare const reviewSchema: z.ZodObject<{
         }>;
         invariant: z.ZodString;
         location: z.ZodOptional<z.ZodString>;
+        classification: z.ZodOptional<z.ZodEnum<{
+            PLAN_BLOCKER: "PLAN_BLOCKER";
+            PLAN_SCOPE_EXPANSION: "PLAN_SCOPE_EXPANSION";
+            OWNER_DECISION: "OWNER_DECISION";
+            PLAN_NIT: "PLAN_NIT";
+        }>>;
     }, z.core.$strict>>;
     closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
         findingId: z.ZodString;
@@ -83,6 +100,34 @@ export declare const reviewSchema: z.ZodObject<{
             "still-open": "still-open";
             regression: "regression";
             "insufficient-evidence": "insufficient-evidence";
+        }>;
+        evidence: z.ZodString;
+    }, z.core.$strict>>>;
+    simplifications: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        mechanism: z.ZodString;
+        simplerPath: z.ZodString;
+        preservedInvariants: z.ZodArray<z.ZodString>;
+        preservationOracle: z.ZodString;
+        affectedConsumers: z.ZodArray<z.ZodString>;
+    }, z.core.$strict>>>;
+    advisorTrigger: z.ZodOptional<z.ZodEnum<{
+        "ADV-01": "ADV-01";
+        "ADV-02": "ADV-02";
+        "ADV-03": "ADV-03";
+        "ADV-04": "ADV-04";
+        "ADV-05": "ADV-05";
+        "ADV-06": "ADV-06";
+    }>>;
+    planEvidenceReuse: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        attemptId: z.ZodString;
+        reason: z.ZodString;
+    }, z.core.$strict>>>;
+    simplificationClosures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        actionId: z.ZodString;
+        status: z.ZodEnum<{
+            preserved: "preserved";
+            "insufficient-evidence": "insufficient-evidence";
+            regressed: "regressed";
         }>;
         evidence: z.ZodString;
     }, z.core.$strict>>>;
@@ -129,6 +174,23 @@ export declare const adjudicationSchema: z.ZodObject<{
         evidenceId: z.ZodString;
         reason: z.ZodString;
     }, z.core.$strict>>;
+    simplificationDispositions: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        actionId: z.ZodString;
+        decision: z.ZodEnum<{
+            reject: "reject";
+            batch: "batch";
+            defer: "defer";
+        }>;
+        reason: z.ZodString;
+    }, z.core.$strict>>>;
+    advisorTrigger: z.ZodOptional<z.ZodEnum<{
+        "ADV-01": "ADV-01";
+        "ADV-02": "ADV-02";
+        "ADV-03": "ADV-03";
+        "ADV-04": "ADV-04";
+        "ADV-05": "ADV-05";
+        "ADV-06": "ADV-06";
+    }>>;
     question: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>;
 export declare const featureVerificationSchema: z.ZodObject<{
@@ -136,6 +198,7 @@ export declare const featureVerificationSchema: z.ZodObject<{
         accepted: "accepted";
         "needs-user": "needs-user";
         repair: "repair";
+        "integration-review": "integration-review";
     }>;
     summary: z.ZodString;
     criteria: z.ZodArray<z.ZodObject<{
@@ -144,9 +207,31 @@ export declare const featureVerificationSchema: z.ZodObject<{
         evidenceIds: z.ZodArray<z.ZodString>;
         satisfied: z.ZodBoolean;
     }, z.core.$strict>>;
+    unprovenComposition: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        featureId: z.ZodString;
+        lens: z.ZodString;
+        boundary: z.ZodString;
+    }, z.core.$strict>>>;
+    integrationDispositions: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        findingId: z.ZodString;
+        decision: z.ZodEnum<{
+            fix: "fix";
+            reject: "reject";
+        }>;
+        reason: z.ZodString;
+    }, z.core.$strict>>>;
     repairSectionIds: z.ZodArray<z.ZodString>;
     repairInstructions: z.ZodString;
     question: z.ZodOptional<z.ZodString>;
+    advisorTrigger: z.ZodOptional<z.ZodEnum<{
+        "ADV-01": "ADV-01";
+        "ADV-02": "ADV-02";
+        "ADV-03": "ADV-03";
+        "ADV-04": "ADV-04";
+        "ADV-05": "ADV-05";
+        "ADV-06": "ADV-06";
+    }>>;
 }, z.core.$strict>;
 export declare const diagnosticSchema: z.ZodObject<{
     summary: z.ZodString;
@@ -157,6 +242,22 @@ export declare const diagnosticSchema: z.ZodObject<{
     }>;
     instructions: z.ZodString;
     question: z.ZodOptional<z.ZodString>;
+    recoveryClass: z.ZodOptional<z.ZodEnum<{
+        CONTINUE_CURRENT: "CONTINUE_CURRENT";
+        SIMPLIFY_CURRENT: "SIMPLIFY_CURRENT";
+        REPAIR_EVIDENCE: "REPAIR_EVIDENCE";
+        SPLIT_REMAINING: "SPLIT_REMAINING";
+        REBOUND_OWNER: "REBOUND_OWNER";
+        RESTART_FROM_BASE: "RESTART_FROM_BASE";
+    }>>;
+    advisorTrigger: z.ZodOptional<z.ZodEnum<{
+        "ADV-01": "ADV-01";
+        "ADV-02": "ADV-02";
+        "ADV-03": "ADV-03";
+        "ADV-04": "ADV-04";
+        "ADV-05": "ADV-05";
+        "ADV-06": "ADV-06";
+    }>>;
 }, z.core.$strict>;
 export declare const actorOutputSchemas: {
     planner: z.ZodObject<{
@@ -195,15 +296,38 @@ export declare const actorOutputSchemas: {
                     timeoutMs: z.ZodOptional<z.ZodNumber>;
                     required: z.ZodBoolean;
                 }, z.core.$strict>>;
+                replacesSectionId: z.ZodOptional<z.ZodString>;
                 subsections: z.ZodArray<z.ZodObject<{
                     id: z.ZodString;
                     objective: z.ZodString;
                     acceptanceCriteria: z.ZodArray<z.ZodString>;
+                    writeScope: z.ZodArray<z.ZodString>;
+                    safeIntermediateState: z.ZodString;
+                    consumer: z.ZodString;
+                    checks: z.ZodArray<z.ZodObject<{
+                        id: z.ZodString;
+                        command: z.ZodArray<z.ZodString>;
+                        cwd: z.ZodOptional<z.ZodString>;
+                        timeoutMs: z.ZodOptional<z.ZodNumber>;
+                        required: z.ZodBoolean;
+                    }, z.core.$strict>>;
+                    implementation: z.ZodOptional<z.ZodEnum<{
+                        standard: "standard";
+                        large: "large";
+                    }>>;
                 }, z.core.$strict>>;
             }, z.core.$strict>>;
             assumptions: z.ZodArray<z.ZodString>;
         }, z.core.$strict>;
         explanation: z.ZodString;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
     }, z.core.$strict>;
     'plan-review-a': z.ZodObject<{
         verdict: z.ZodEnum<{
@@ -225,6 +349,12 @@ export declare const actorOutputSchemas: {
             }>;
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
+            classification: z.ZodOptional<z.ZodEnum<{
+                PLAN_BLOCKER: "PLAN_BLOCKER";
+                PLAN_SCOPE_EXPANSION: "PLAN_SCOPE_EXPANSION";
+                OWNER_DECISION: "OWNER_DECISION";
+                PLAN_NIT: "PLAN_NIT";
+            }>>;
         }, z.core.$strict>>;
         closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
             findingId: z.ZodString;
@@ -233,6 +363,34 @@ export declare const actorOutputSchemas: {
                 "still-open": "still-open";
                 regression: "regression";
                 "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
+        simplifications: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            mechanism: z.ZodString;
+            simplerPath: z.ZodString;
+            preservedInvariants: z.ZodArray<z.ZodString>;
+            preservationOracle: z.ZodString;
+            affectedConsumers: z.ZodArray<z.ZodString>;
+        }, z.core.$strict>>>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
+        planEvidenceReuse: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            attemptId: z.ZodString;
+            reason: z.ZodString;
+        }, z.core.$strict>>>;
+        simplificationClosures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            actionId: z.ZodString;
+            status: z.ZodEnum<{
+                preserved: "preserved";
+                "insufficient-evidence": "insufficient-evidence";
+                regressed: "regressed";
             }>;
             evidence: z.ZodString;
         }, z.core.$strict>>>;
@@ -257,6 +415,12 @@ export declare const actorOutputSchemas: {
             }>;
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
+            classification: z.ZodOptional<z.ZodEnum<{
+                PLAN_BLOCKER: "PLAN_BLOCKER";
+                PLAN_SCOPE_EXPANSION: "PLAN_SCOPE_EXPANSION";
+                OWNER_DECISION: "OWNER_DECISION";
+                PLAN_NIT: "PLAN_NIT";
+            }>>;
         }, z.core.$strict>>;
         closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
             findingId: z.ZodString;
@@ -265,6 +429,34 @@ export declare const actorOutputSchemas: {
                 "still-open": "still-open";
                 regression: "regression";
                 "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
+        simplifications: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            mechanism: z.ZodString;
+            simplerPath: z.ZodString;
+            preservedInvariants: z.ZodArray<z.ZodString>;
+            preservationOracle: z.ZodString;
+            affectedConsumers: z.ZodArray<z.ZodString>;
+        }, z.core.$strict>>>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
+        planEvidenceReuse: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            attemptId: z.ZodString;
+            reason: z.ZodString;
+        }, z.core.$strict>>>;
+        simplificationClosures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            actionId: z.ZodString;
+            status: z.ZodEnum<{
+                preserved: "preserved";
+                "insufficient-evidence": "insufficient-evidence";
+                regressed: "regressed";
             }>;
             evidence: z.ZodString;
         }, z.core.$strict>>>;
@@ -305,6 +497,12 @@ export declare const actorOutputSchemas: {
             }>;
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
+            classification: z.ZodOptional<z.ZodEnum<{
+                PLAN_BLOCKER: "PLAN_BLOCKER";
+                PLAN_SCOPE_EXPANSION: "PLAN_SCOPE_EXPANSION";
+                OWNER_DECISION: "OWNER_DECISION";
+                PLAN_NIT: "PLAN_NIT";
+            }>>;
         }, z.core.$strict>>;
         closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
             findingId: z.ZodString;
@@ -313,6 +511,34 @@ export declare const actorOutputSchemas: {
                 "still-open": "still-open";
                 regression: "regression";
                 "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
+        simplifications: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            mechanism: z.ZodString;
+            simplerPath: z.ZodString;
+            preservedInvariants: z.ZodArray<z.ZodString>;
+            preservationOracle: z.ZodString;
+            affectedConsumers: z.ZodArray<z.ZodString>;
+        }, z.core.$strict>>>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
+        planEvidenceReuse: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            attemptId: z.ZodString;
+            reason: z.ZodString;
+        }, z.core.$strict>>>;
+        simplificationClosures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            actionId: z.ZodString;
+            status: z.ZodEnum<{
+                preserved: "preserved";
+                "insufficient-evidence": "insufficient-evidence";
+                regressed: "regressed";
             }>;
             evidence: z.ZodString;
         }, z.core.$strict>>>;
@@ -337,6 +563,12 @@ export declare const actorOutputSchemas: {
             }>;
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
+            classification: z.ZodOptional<z.ZodEnum<{
+                PLAN_BLOCKER: "PLAN_BLOCKER";
+                PLAN_SCOPE_EXPANSION: "PLAN_SCOPE_EXPANSION";
+                OWNER_DECISION: "OWNER_DECISION";
+                PLAN_NIT: "PLAN_NIT";
+            }>>;
         }, z.core.$strict>>;
         closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
             findingId: z.ZodString;
@@ -345,6 +577,34 @@ export declare const actorOutputSchemas: {
                 "still-open": "still-open";
                 regression: "regression";
                 "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
+        simplifications: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            mechanism: z.ZodString;
+            simplerPath: z.ZodString;
+            preservedInvariants: z.ZodArray<z.ZodString>;
+            preservationOracle: z.ZodString;
+            affectedConsumers: z.ZodArray<z.ZodString>;
+        }, z.core.$strict>>>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
+        planEvidenceReuse: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            attemptId: z.ZodString;
+            reason: z.ZodString;
+        }, z.core.$strict>>>;
+        simplificationClosures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            actionId: z.ZodString;
+            status: z.ZodEnum<{
+                preserved: "preserved";
+                "insufficient-evidence": "insufficient-evidence";
+                regressed: "regressed";
             }>;
             evidence: z.ZodString;
         }, z.core.$strict>>>;
@@ -375,6 +635,23 @@ export declare const actorOutputSchemas: {
             evidenceId: z.ZodString;
             reason: z.ZodString;
         }, z.core.$strict>>;
+        simplificationDispositions: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            actionId: z.ZodString;
+            decision: z.ZodEnum<{
+                reject: "reject";
+                batch: "batch";
+                defer: "defer";
+            }>;
+            reason: z.ZodString;
+        }, z.core.$strict>>>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
         question: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>;
     'closure-reviewer': z.ZodObject<{
@@ -397,7 +674,41 @@ export declare const actorOutputSchemas: {
             }>;
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
+            classification: z.ZodOptional<z.ZodEnum<{
+                PLAN_BLOCKER: "PLAN_BLOCKER";
+                PLAN_SCOPE_EXPANSION: "PLAN_SCOPE_EXPANSION";
+                OWNER_DECISION: "OWNER_DECISION";
+                PLAN_NIT: "PLAN_NIT";
+            }>>;
         }, z.core.$strict>>;
+        simplifications: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            mechanism: z.ZodString;
+            simplerPath: z.ZodString;
+            preservedInvariants: z.ZodArray<z.ZodString>;
+            preservationOracle: z.ZodString;
+            affectedConsumers: z.ZodArray<z.ZodString>;
+        }, z.core.$strict>>>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
+        planEvidenceReuse: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            attemptId: z.ZodString;
+            reason: z.ZodString;
+        }, z.core.$strict>>>;
+        simplificationClosures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            actionId: z.ZodString;
+            status: z.ZodEnum<{
+                preserved: "preserved";
+                "insufficient-evidence": "insufficient-evidence";
+                regressed: "regressed";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
         closures: z.ZodArray<z.ZodObject<{
             findingId: z.ZodString;
             status: z.ZodEnum<{
@@ -414,6 +725,7 @@ export declare const actorOutputSchemas: {
             accepted: "accepted";
             "needs-user": "needs-user";
             repair: "repair";
+            "integration-review": "integration-review";
         }>;
         summary: z.ZodString;
         criteria: z.ZodArray<z.ZodObject<{
@@ -422,9 +734,31 @@ export declare const actorOutputSchemas: {
             evidenceIds: z.ZodArray<z.ZodString>;
             satisfied: z.ZodBoolean;
         }, z.core.$strict>>;
+        unprovenComposition: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            id: z.ZodString;
+            featureId: z.ZodString;
+            lens: z.ZodString;
+            boundary: z.ZodString;
+        }, z.core.$strict>>>;
+        integrationDispositions: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            findingId: z.ZodString;
+            decision: z.ZodEnum<{
+                fix: "fix";
+                reject: "reject";
+            }>;
+            reason: z.ZodString;
+        }, z.core.$strict>>>;
         repairSectionIds: z.ZodArray<z.ZodString>;
         repairInstructions: z.ZodString;
         question: z.ZodOptional<z.ZodString>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
     }, z.core.$strict>;
     diagnostician: z.ZodObject<{
         summary: z.ZodString;
@@ -435,6 +769,22 @@ export declare const actorOutputSchemas: {
         }>;
         instructions: z.ZodString;
         question: z.ZodOptional<z.ZodString>;
+        recoveryClass: z.ZodOptional<z.ZodEnum<{
+            CONTINUE_CURRENT: "CONTINUE_CURRENT";
+            SIMPLIFY_CURRENT: "SIMPLIFY_CURRENT";
+            REPAIR_EVIDENCE: "REPAIR_EVIDENCE";
+            SPLIT_REMAINING: "SPLIT_REMAINING";
+            REBOUND_OWNER: "REBOUND_OWNER";
+            RESTART_FROM_BASE: "RESTART_FROM_BASE";
+        }>>;
+        advisorTrigger: z.ZodOptional<z.ZodEnum<{
+            "ADV-01": "ADV-01";
+            "ADV-02": "ADV-02";
+            "ADV-03": "ADV-03";
+            "ADV-04": "ADV-04";
+            "ADV-05": "ADV-05";
+            "ADV-06": "ADV-06";
+        }>>;
     }, z.core.$strict>;
 };
 export declare function outputSchemaFor(kind: ActorKind): Record<string, unknown>;

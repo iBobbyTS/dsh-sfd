@@ -1,6 +1,6 @@
 import type { ActorKind } from '../core/types.js';
 /** Knowledge is shipped with the plugin, independent of an installed Skill. */
-export declare const ROLE_PROTOCOL_VERSION: "sfd-native-roles-1";
+export declare const ROLE_PROTOCOL_VERSION: "sfd-native-roles-2";
 export interface RoleSpec {
     readonly presetId: string;
     readonly title: string;

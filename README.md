@@ -4,7 +4,7 @@
 
 任务目标、Section 依赖、审查证据、修复预算和恢复状态由 Host 服务持久保存。模型以有边界的 planner、implementer、reviewer、adjudicator 等角色参与；聊天结束或页面关闭不会代表开发任务完成。
 
-当前版本 **0.1.0**，针对 **DSH 0.2.1-rc.2** 构建和验证。方法来自 [sectioned-feature-development](https://github.com/iBobbyTS/sectioned-feature-development)，角色协议已内置于本仓库，不依赖安装或继续维护原 Skill。原 Skill 的规划、代码审查和工作流参考文件作为插件的只读知识资源，供原生角色通过 `sfd_knowledge` 按需读取；旧的 Codex/ZCode 路由表不参与 DSH 调度。
+当前版本 **0.2.0**，针对 **DSH 0.2.1-rc.2** 构建和验证。方法来自 [sectioned-feature-development](https://github.com/iBobbyTS/sectioned-feature-development)，角色协议已内置于本仓库，不依赖安装或继续维护原 Skill。原 Skill 的规划、代码审查和工作流参考文件作为插件的只读知识资源，供原生角色通过 `sfd_knowledge` 按需读取；旧的 Codex/ZCode 路由表不参与 DSH 调度。
 
 ## 安装
 
@@ -66,19 +66,27 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 
 命令支持 `continue`、`retry`、`replan`、`cancel`。这些动作不等于审查通过，也不会重置原始修复预算。普通聊天 Agent 可使用 `sfd_run` 工具创建、启动和观察任务；需求修订和问题裁决通过用户界面或命令提交。
 
+原 SFD 的 ADV-01—ADV-06 外部人工 Advisor 条件会冻结原 Run 和来源证据。查看 Development 面板中的当前 Advisor request（包含原目标、当前计划、lineage、候选身份、finding、检查及模型失败事实），人工取得实际建议后填写原文和独立采纳决定，或使用：
+
+```text
+/sfd advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>
+```
+
+不会自动联系外部 Advisor，也不会把项目源码或对话上传给第三方。当前提供的是持久化的证据索引和人工接管 UI，**不自动生成原 Skill 的脱敏 Advisor ZIP，也不自动通过飞书发送通知**；需要用户自行检查候选代码和敏感内容后交接。未人工裁决的 Advisor hold 不允许通过 `revise` 或 `resume` 绕过。
+
 ## 执行过程
 
 | 阶段 | Host 控制的行为 |
 | --- | --- |
-| 规划 | Planner 提出 Feature/Section DAG；PLAN A、PLAN B 使用独立上下文，串行审查当前计划 |
-| 实施 | 一个任务工作区同时只有一个实施者；依赖 Section 已验收并集成后才释放后继 |
+| 规划 | Planner 提出 Feature/Section DAG；PLAN A、PLAN B 串行独立；修订用有界的原审核槽 PLAN_DELTA，只有原规范的条件满足时才退役静默 PLAN A |
+| 实施 | 一个任务工作区同时只有一个实施者；非空 Subsection 列表按顺序执行、检查和独立 R01 checkpoint；只有 Parent Section 正式验收才释放外部依赖 |
 | 候选 | 捕获包含源码、测试、配置、暂存/未暂存修改和非忽略未跟踪文件的完整 Git tree |
 | Code A | 始终包含 R01 完整行为基线，并按实际风险选择独立审查视角；有界并行 |
-| 裁决与修复 | 逐条裁决 finding；真实检查结果、覆盖范围和适用性共同决定能否继续 |
+| 裁决与修复 | 逐条裁决 finding；R02 可提出有独立 SIMP-### ID 的非阻断简化动作，只有与已确认材料缺陷成批修复时才执行并验证保存性；真实检查、覆盖与适用性决定门禁 |
 | Code B | B1 完整盲审当前候选；B2 在同一候选上协调 B1 与 A/closure 证据 |
 | 修复闭环 | 材料修复后有针对性的 closure、明确的有效 A 证据复用和新的完整 B1 |
-| Feature 验收 | 在共同交付候选上检查组合业务路径、Section 接口和共享约束；可复用适用证据 |
-| 交付 | 确认实际源码仍匹配验收候选，然后交付工作区或生成明确授权的提交 |
+| Feature 验收 | 在同一候选上检查组合路径和共享约束；只有实际未证明的重要跨 Section/Feature 风险才派一次有界独立 integration review，不制造第三轮全量 Section A/B |
+| 交付 | 核对实际源码匹配验收候选，在已授权非 main 的 Run 分支提交精确 Git tree；不自动推送或合并 |
 
 只有 Host 的证据准入与阶段条件满足后，Run 才会 `completed`。结束对话、返回结构化 JSON、若干个 `clean` 标签或单独一次测试通过都不能跳过这些条件。
 
@@ -89,7 +97,7 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 - **模型按需工作。** Host 持有真实、通常空闲的 anchor Agent；使用原生 `spawn` 和 `delivery: caller` 收集角色结果，不靠反复唤醒主聊天维持调度。
 - **版本区分用途。** 聚合 revision、任务输入版本、控制 epoch 分开。一个 A 报告写入不会让同批其他报告过期；暂停或修订后的旧结果不能自动推进新阶段。
 - **输入有边界。** 长历史和大 diff 转为只读证据文件与索引，角色可以精确读取；盲审输入在写入文件前就完成过滤。原始目标不会被静默截断，目标本身过大时会明确停止并要求拆分。
-- **预算归属于原始 Section。** 最多五轮材料修复；改名、重新规划或拆成 Subsection 不能获得新的修复额度。基础设施失败使用独立的有限重试规则。
+- **预算归属于原始 Section。** 五轮常规材料修复；达到硬上限后只允许一次有据可查的恢复分类（非结构性至多再一轮；真实结构性替换共享原 lineage、继承恢复已使用状态）。第二次收敛失败进入 ADV-01 的外部人工裁决，绝不重新命名清零。基础设施失败有独立的有限重试规则。
 - **暂停等待真实停止。** 若执行器不能及时确认退出，任务保持暂停中/待核对并保留工作区占用，不会宣称写入已停止后继续派发新写者。
 
 ## 工作区、检查与恢复
@@ -153,12 +161,14 @@ npm pack --ignore-scripts
 node scripts/verify-package.mjs
 ```
 
-测试包括纯状态机回归、逐 finding 修复关闭、修复增量风险路由、Section 变更范围、standard/large Host 模型路由、真实临时 Git 仓库与检查进程、组合工作流、真实 Cordis/DSH 服务与原生 spawn/结构化输出、插件知识资源只读访问、UI 控制器与服务端渲染。模型判断使用确定性的测试提供方；这些测试不代表已对真实付费模型的规划与审查质量做基准测评。CI 使用 Node 24，并验证提交的 `lib/` 与源码一致。
+测试包括纯状态机回归、Subsection 真实 R01 checkpoint 与子级修复风险路由、PLAN_DELTA / PLAN_NIT / owner-decision 和静默槽退休、逐 finding 修复关闭与 SIMP 保存性、hard-cap 非结构/结构性 lineage 继承、ADV 人工 hold、按需独立 integration review、Section 变更范围、standard/large Host 模型路由、真实临时 Git 仓库与检查进程、真实 Cordis/DSH 原生 spawn/结构化输出、只读知识资源及 UI 控制。模型判断使用确定性的测试提供方；这些测试不代表已对真实付费模型的规划与审查质量做基准测评。CI 使用 Node 24，并验证提交的 `lib/` 与源码一致。
 
 参见 [实施计划](docs/IMPLEMENTATION-PLAN.md)、[架构与不变量](docs/ARCHITECTURE.md)、[原 Skill 迁移映射](docs/SKILL-NATIVE-PARITY.md)、[验证记录](docs/VALIDATION.md)。
 
 ## 当前支持边界
 
-针对 DSH `0.2.1-rc.2`、已有初始提交的普通 Git 仓库和 Bash 兼容的受沙箱约束的检查环境实现。Submodule 的独立工作树、会改变源码内容的 checkout filter、跨多个 Host 自动接管，以及旧 SFD Markdown 状态的自动导入不在当前版本范围内。持久状态拒绝不匹配的 schema、workflow 和 policy 版本；角色协议或权限 preset 的定义变化尚无独立迁移机制，升级这些定义前应先处理活动 Run。
+针对 DSH `0.2.1-rc.2`、已有初始提交的普通 Git 仓库和 Bash 兼容的受沙箱约束的检查环境实现。Submodule 的独立工作树、会改变源码内容的 checkout filter、跨多个 Host 自动接管，以及旧 SFD Markdown 状态的自动导入不在当前版本范围内。持久状态拒绝不匹配的 schema、workflow 和 policy 版本；此版升级了 Core/Policy/Role 协议（Core 1.1.0 / sfd-native-2 / roles-2），尚没有为旧的活动 Run 提供自动转换。**升级前应先结束或保存并另行处理 0.1.0 的 Run**，不要假定它们可以无损继续执行。
+
+对于依赖原生持久状态的旧 `0.1.0` Run，本版本不提供自动原地升级；升级 DSH Host 前先结束活动任务或单独保留旧状态供人工迁移。外部人工 Advisor 的材料必须由用户检查敏感信息后自行交接，插件不会自动生成脱敏 ZIP 或向第三方发送源代码。
 
 MIT，保留原仓库许可证。

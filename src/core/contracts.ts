@@ -15,18 +15,35 @@ export const planSchema = z.strictObject({
     id, title: text, featureIds: z.array(id).min(1), objective: text,
     dependencies: z.array(id), writeScope: texts.min(1), acceptanceCriteria: texts.min(1),
     implementation: z.enum(['standard', 'large']), checks: z.array(check),
-    subsections: z.array(z.strictObject({ id, objective: text, acceptanceCriteria: texts.min(1) })),
+    replacesSectionId: id.optional(),
+    subsections: z.array(z.strictObject({
+      id, objective: text, acceptanceCriteria: texts.min(1), writeScope: texts.min(1),
+      safeIntermediateState: text, consumer: text, checks: z.array(check).min(1),
+      implementation: z.enum(['standard', 'large']).optional(),
+    })),
   })).min(1).max(500),
   assumptions: texts,
 });
-export const findingSchema = z.strictObject({
+export const advisorTrigger = z.enum(['ADV-01','ADV-02','ADV-03','ADV-04','ADV-05','ADV-06']);
+const recoveryClass = z.enum(['CONTINUE_CURRENT','SIMPLIFY_CURRENT','REPAIR_EVIDENCE','SPLIT_REMAINING','REBOUND_OWNER','RESTART_FROM_BASE']);
+const findingSchema = z.strictObject({
   id, title: text, body: text, severity: z.enum(['critical', 'major', 'minor']),
   invariant: text, location: z.string().optional(),
+  classification: z.enum(['PLAN_BLOCKER', 'PLAN_SCOPE_EXPANSION', 'OWNER_DECISION', 'PLAN_NIT']).optional(),
 });
 export const reviewSchema = z.strictObject({
   verdict: z.enum(['clean', 'findings', 'incomplete']), summary: text,
   coverage: texts, limitations: texts, findings: z.array(findingSchema).max(200),
   closures: z.array(z.strictObject({ findingId: text, status: z.enum(['verified-closed', 'still-open', 'regression', 'insufficient-evidence']), evidence: text })).max(200).optional(),
+  simplifications: z.array(z.strictObject({
+    mechanism: text, simplerPath: text, preservedInvariants: texts.min(1),
+    preservationOracle: text, affectedConsumers: texts,
+  })).max(30).optional(),
+  advisorTrigger: advisorTrigger.optional(),
+  planEvidenceReuse: z.array(z.strictObject({ attemptId: text, reason: text })).optional(),
+  simplificationClosures: z.array(z.strictObject({
+    actionId: text, status: z.enum(['preserved', 'regressed', 'insufficient-evidence']), evidence: text,
+  })).max(30).optional(),
 });
 export const implementationSchema = z.strictObject({
   summary: text, completedCriteria: texts, remainingWork: texts, changedInterfaces: texts,
@@ -41,18 +58,24 @@ export const adjudicationSchema = z.strictObject({
   dispositions: z.array(z.strictObject({ findingId: text, decision: z.enum(['fix', 'reject', 'needs-user']), reason: text })),
   repairInstructions: z.string(), material: z.boolean(), invalidatedSectionIds: z.array(id), missingCoverage: texts,
   evidenceReuse: z.array(z.strictObject({ evidenceId: text, reason: text })),
+  simplificationDispositions: z.array(z.strictObject({ actionId: text, decision: z.enum(['batch', 'defer', 'reject']), reason: text })).optional(),
+  advisorTrigger: advisorTrigger.optional(),
   question: z.string().optional(),
 });
 export const featureVerificationSchema = z.strictObject({
-  verdict: z.enum(['accepted', 'repair', 'needs-user']), summary: text,
-  criteria: z.array(z.strictObject({ featureId: id, criterion: text, evidenceIds: z.array(text).min(1), satisfied: z.boolean() })).min(1),
+  verdict: z.enum(['accepted', 'repair', 'needs-user', 'integration-review']), summary: text,
+  criteria: z.array(z.strictObject({ featureId: id, criterion: text, evidenceIds: z.array(text).min(1), satisfied: z.boolean() })),
+  unprovenComposition: z.array(z.strictObject({ id, featureId: id, lens: text, boundary: text })).max(6).optional(),
+  integrationDispositions: z.array(z.strictObject({ findingId: text, decision: z.enum(['fix', 'reject']), reason: text })).optional(),
   repairSectionIds: z.array(id), repairInstructions: z.string(), question: z.string().optional(),
+  advisorTrigger: advisorTrigger.optional(),
 });
 export const diagnosticSchema = z.strictObject({
   summary: text, recommendation: z.enum(['retry', 'revise-plan', 'needs-user']), instructions: text, question: z.string().optional(),
+  recoveryClass: recoveryClass.optional(), advisorTrigger: advisorTrigger.optional(),
 });
 export const actorOutputSchemas = {
-  planner: z.strictObject({ plan: planSchema, explanation: text }),
+  planner: z.strictObject({ plan: planSchema, explanation: text, advisorTrigger: advisorTrigger.optional() }),
   'plan-review-a': reviewSchema,
   'plan-review-b': reviewSchema,
   implementer: implementationSchema,
@@ -92,6 +115,9 @@ export function parseActorOutput(kind: ActorKind, value: unknown): ActorOutput {
     if (result.verdict === 'findings' && !result.findings.length) throw new Error('A findings review must contain findings.');
     if (result.verdict === 'clean' && !result.coverage.length) throw new Error('A clean review must describe actual coverage.');
     assertUnique(result.findings.map((finding) => finding.id), 'finding');
+    if (kind === 'plan-review-a' || kind === 'plan-review-b') {
+      if (result.verdict === 'findings' && result.findings.some((finding) => !finding.classification)) throw new Error('PLAN findings require a definite admission class.');
+    }
   }
   if ('lenses' in result) {
     assertUnique(result.lenses.map((lens) => lens.id), 'lens');
@@ -125,6 +151,15 @@ export function validatePlan(plan: DevelopmentPlan): void {
       if (!features.get(featureId)?.sectionIds.includes(section.id)) throw new Error(`Feature/Section membership is inconsistent for ${section.id}/${featureId}.`);
     }
     assertUnique(section.checks.map((spec) => spec.id), `check in ${section.id}`);
+    for (const child of section.subsections) {
+      assertUnique(child.checks.map((spec) => spec.id), `check in Subsection ${child.id}`);
+      if (!child.checks.some((spec) => spec.required)) throw new Error(`Subsection ${child.id} needs an executable required scoped oracle.`);
+      const parentScopes = section.writeScope.map((scope) => scope.replace(/\/$/, ''));
+      for (const scope of child.writeScope) {
+        if (!parentScopes.some((parent) => scope === parent || scope.startsWith(`${parent}/`) || parent === '**/*' || (parent.endsWith('/**') && scope.startsWith(parent.slice(0, -2)))))
+          throw new Error(`Subsection ${child.id} writeScope is outside parent ${section.id}.`);
+      }
+    }
   }
   for (const feature of plan.features) {
     assertUnique(feature.acceptanceCriteria, `business criterion in ${feature.id}`);

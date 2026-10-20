@@ -3,7 +3,7 @@ import { outputSchemaFor, parseActorOutput, validatePlan } from './contracts.js'
 import { createPolicy } from './policy.js';
 import type { ActorHandle, ActorRunner, RunStore, WorkspacePort } from './ports.js';
 import {
-  CORE_VERSION, type ActorKind, type ActorOutcome, type ActorTask, type AdjudicationOutput,
+  CORE_VERSION, type ActorKind, type ActorOutcome, type ActorTask, type AdjudicationOutput, type AdvisorTrigger,
   type Attempt, type Candidate, type CheckEvidence, type CreateRunInput, type DecideInput,
   type DevelopmentPlan, type DevelopmentRun, type DiagnosticOutput, type FeatureVerificationOutput,
   type ImplementationOutput, type Lens, type Operation, type PlanOutput, type ReviewEvidence,
@@ -136,12 +136,15 @@ export class WorkflowController {
     if (!goal.trim()) throw new Error('Revised requirements must not be empty.');
     const current = await this.status(id);
     if (['completed', 'cancelled'].includes(current.status)) throw new Error('Create a new task for a completed or cancelled run.');
+    if (current.pendingDecision?.kind === 'advisor' && current.advisorCase?.status !== 'adopted') {
+      throw new Error('An external Advisor hold requires actual external advice and explicit human disposition; a direct goal revision cannot bypass it.');
+    }
     await this.pause(id);
     await this.change(id, (run) => {
       run.goal = goal.trim(); run.inputContractVersion++;
       run.requirementsHistory.push({ version: run.inputContractVersion, goal: run.goal, at: this.now() });
       run.stage = 'planning'; run.planFeedback.push('The user revised the requirements. Reassess obligations and reuse only still-applicable work; preserve Section identity and repair lineage.');
-      delete run.pendingDecision; delete run.diagnostic; delete run.activeSectionId;
+      delete run.pendingDecision; delete run.diagnostic; delete run.activeSectionId; delete run.planSilentRetirement;
       for (const section of Object.values(run.sections)) {
         section.stage = 'pending'; section.inputContractVersion++;
         delete section.acceptedCandidateId; delete section.integratedCandidateId; delete section.aAcceptedCandidateId;
@@ -157,6 +160,25 @@ export class WorkflowController {
     if (!decision || decision.id !== input.decisionId) throw new Error('The decision is missing or no longer current.');
     if (!input.answer.trim()) throw new Error('Record the user decision before continuing.');
     if (input.action === 'cancel') return this.cancel(id);
+    if (decision.kind === 'advisor') {
+      if (!input.advisorResult?.trim() || !input.advisorAdoption) {
+        throw new Error('External Advisor decisions require the actual advisor result and separate explicit human adoption.');
+      }
+      if (decision.advisorTrigger === 'ADV-01' && input.action !== 'replan') {
+        throw new Error('ADV-01 cannot restart an exhausted original repair lineage; revise the authorized contract or cancel.');
+      }
+      if (input.advisorAdoption === 'reject' && !['replan', 'cancel'].includes(input.action ?? '')) {
+        throw new Error('A rejected external Advisor result cannot silently resume the old approach.');
+      }
+      if (input.advisorAdoption === 'clarify') {
+        return this.change(id, (run) => {
+          run.decisionHistory.push({ ...decision, answer: input.answer.trim(),
+            advisorResult: input.advisorResult!.trim(), advisorAdoption: 'clarify' });
+          if (run.advisorCase) run.advisorCase.status = 'waiting-human-decision';
+          this.event(run, 'advisor-clarification', 'External advice recorded; owner requested clarification without releasing the hold.');
+        });
+      }
+    }
     if (decision.kind === 'budget' && input.action !== 'replan') {
       throw new Error('An exhausted repair budget cannot be reset by retry. Revise the plan or cancel; existing Section lineage is preserved.');
     }
@@ -175,7 +197,9 @@ export class WorkflowController {
     }
     const applied = await this.change(id, (run) => {
       if (run.pendingDecision?.id !== input.decisionId) throw new Error('The decision changed before it was applied.');
-      run.decisionHistory.push({ ...run.pendingDecision, answer: input.answer.trim() });
+      run.decisionHistory.push({ ...run.pendingDecision, answer: input.answer.trim(),
+        ...(decision.kind === 'advisor' ? { advisorResult: input.advisorResult!.trim(), advisorAdoption: input.advisorAdoption! } : {}) });
+      if (decision.kind === 'advisor' && run.advisorCase) run.advisorCase.status = 'adopted';
       delete run.pendingDecision; delete run.blockedReason;
       run.status = 'paused';
       if (decision.kind === 'recovery') {
@@ -226,6 +250,7 @@ export class WorkflowController {
       } else {
         run.inputContractVersion++;
         run.planFeedback.push(`User decision: ${input.answer.trim()}`);
+        if (['plan-review-a', 'plan-review-b'].includes(run.stage)) run.stage = 'planning';
       }
       this.event(run, 'decision-recorded', 'The current user decision was recorded.');
     });
@@ -328,14 +353,46 @@ export class WorkflowController {
     if (attempt.state !== 'admitted') return false;
     const output = attempt.admittedOutput as PlanOutput;
     validatePlan(output.plan);
+    if (output.advisorTrigger && !this.advisorAdopted(run, attempt.id, output.advisorTrigger)) {
+      await this.block(run.id, `Planner identified source-backed ${output.advisorTrigger} while planning.`, 'advisor', undefined, output.advisorTrigger, attempt.id);
+      return false;
+    }
     await this.change(run.id, (draft) => {
       const old = { ...Object.fromEntries(Object.entries(draft.retiredSections ?? {}).map(([id, entry]) => [id, entry.state])), ...draft.sections };
       const requirementsVersion = draft.requirementsHistory[draft.requirementsHistory.length - 1]!.version;
       const explicitRevision = requirementsVersion > (draft.planRequirementsVersion ?? draft.requirementsHistory[0]!.version);
+      // Structural recovery is an explicit exception to the no-rename rule, not
+      // permission to manufacture five new waves from an ordinary PLAN edit.
+      const structural = Object.values(draft.sections).filter((entry) => entry.recovery?.structuralPending);
+      for (const owner of structural) {
+        const original = draft.plan?.sections.find((entry) => entry.id === owner.id);
+        if (!original) throw new Error('Structural recovery cannot lose its original admitted contract.');
+        const replacements = output.plan.sections.filter((entry) => entry.replacesSectionId === owner.id);
+        if (owner.recovery?.classification === 'SPLIT_REMAINING') {
+          if (replacements.length !== 2 || output.plan.sections.some((entry) => entry.id === owner.id))
+            throw new Error('SPLIT_REMAINING requires exactly two declared remaining descendants and no shadow original.');
+          if (replacements.some((entry) => entry.featureIds.some((featureId) => !original.featureIds.includes(featureId))))
+            throw new Error('Structural descendants cannot add new Feature ownership.');
+        } else if (owner.recovery?.classification === 'REBOUND_OWNER') {
+          const next = output.plan.sections.find((entry) => entry.id === owner.id);
+          if (!next || replacements.length ||
+            (JSON.stringify(next.writeScope) === JSON.stringify(original.writeScope) &&
+             JSON.stringify(next.dependencies) === JSON.stringify(original.dependencies)))
+            throw new Error('REBOUND_OWNER must change the actual Section write-owner boundary or dependencies, not rename a label.');
+        }
+      }
+      for (const proposed of output.plan.sections.filter((entry) => entry.replacesSectionId)) {
+        const newlyAuthorized = structural.some((entry) => entry.id === proposed.replacesSectionId && entry.recovery?.classification === 'SPLIT_REMAINING');
+        const previouslyAuthorized = draft.plan?.sections.some((entry) => entry.id === proposed.id &&
+          entry.replacesSectionId === proposed.replacesSectionId && old[entry.id]?.lineageId === old[proposed.replacesSectionId!]?.lineageId);
+        if (!newlyAuthorized && !previouslyAuthorized)
+          throw new Error('Section replacements require an original diagnosed SPLIT_REMAINING lineage, not a speculative new identity.');
+      }
       // A replan must not silently discard an existing repair lineage by renaming a Section.
       for (const section of Object.values(draft.sections)) {
         if (section.materialRepairWaves && !output.plan.sections.some((entry) => entry.id === section.id)) {
-          if (!explicitRevision) throw new Error(`Replanning removed repair lineage ${section.lineageId}. Preserve its Section identity and budget.`);
+          const replacing = structural.some((owner) => owner.id === section.id && owner.recovery?.classification === 'SPLIT_REMAINING');
+          if (!explicitRevision && !replacing) throw new Error(`Replanning removed repair lineage ${section.lineageId}. Preserve its Section identity and budget.`);
         }
         if (!output.plan.sections.some((entry) => entry.id === section.id)) {
           const contract = draft.plan?.sections.find((entry) => entry.id === section.id);
@@ -345,17 +402,41 @@ export class WorkflowController {
           }
         }
       }
+      const previousPlan = draft.plan;
       draft.plan = output.plan; draft.planRevision++; draft.planRequirementsVersion = requirementsVersion;
-      draft.sections = Object.fromEntries(output.plan.sections.map((section) => [section.id, {
-        id: section.id, stage: 'pending', inputContractVersion: (old[section.id]?.inputContractVersion ?? 0) + 1,
-        lineageId: old[section.id]?.lineageId ?? `${draft.id}:${section.id}`,
-        materialRepairWaves: old[section.id]?.materialRepairWaves ?? 0,
-        diagnosticCount: old[section.id]?.diagnosticCount ?? 0,
-        lenses: [], checks: [], reviewIds: [], decisionIds: [], aCoverageEvidenceIds: [],
-      } satisfies SectionState]));
+      draft.sections = Object.fromEntries(output.plan.sections.map((section) => {
+        const inherited = old[section.id] ?? (section.replacesSectionId ? old[section.replacesSectionId] : undefined);
+        const previousContract = previousPlan?.sections.find((entry) => entry.id === section.id);
+        if (inherited?.stage === 'integrated' && previousContract &&
+          JSON.stringify(previousContract) === JSON.stringify(section) && !inherited.recovery?.structuralPending) {
+          // Unmodified, already accepted work is not reimplemented because another
+          // Section requires a bounded PLAN delta.
+          return [section.id, inherited];
+        }
+        return [section.id, {
+          id: section.id, stage: 'pending', inputContractVersion: (inherited?.inputContractVersion ?? 0) + 1,
+          lineageId: inherited?.lineageId ?? `${draft.id}:${section.id}`,
+          materialRepairWaves: inherited?.materialRepairWaves ?? 0,
+          diagnosticCount: inherited?.diagnosticCount ?? 0,
+          ...(inherited?.recovery ? { recovery: { ...inherited.recovery, structuralPending: false } } : {}),
+          lenses: [], checks: [], reviewIds: [], decisionIds: [], aCoverageEvidenceIds: [],
+        } satisfies SectionState];
+      }));
       for (const section of output.plan.sections) if (draft.retiredSections) delete draft.retiredSections[section.id];
-      draft.stage = 'plan-review-a';
-      this.event(draft, 'plan-proposed', 'A structured plan was proposed; independent plan review A starts next.');
+      // The old PLAN-only silent-slot exception saves unproductive full reruns:
+      // two consecutive clean A reports followed by material B failures.
+      const rounds = draft.attempts.filter((entry) => entry.task.kind === 'plan-review-b' && entry.state === 'admitted')
+        .filter((entry) => (entry.admittedOutput as ReviewOutput).findings.some((finding) => finding.classification !== 'PLAN_NIT'))
+        .filter((entry) => draft.attempts.some((a) => a.task.kind === 'plan-review-a' && a.task.input.planRevision === entry.task.input.planRevision &&
+          a.state === 'admitted' && (a.admittedOutput as ReviewOutput).verdict === 'clean')).slice(-2);
+      if (!explicitRevision && rounds.length === 2 && new Set(rounds.map((entry) => entry.task.input.planRevision)).size === 2) {
+        draft.planSilentRetirement = { slot: 'plan-review-a', reportIds: rounds.map((entry) => entry.id),
+          rationale: 'A returned independent CLEAN twice while B found material defects; retire only A for this PLAN.' };
+      }
+      draft.stage = draft.planSilentRetirement ? 'plan-review-b' : 'plan-review-a';
+      this.event(draft, 'plan-proposed', draft.planSilentRetirement
+        ? 'Current plan uses the recorded PLAN-only silent A retirement; independent B still reviews the full current plan.'
+        : 'A structured plan was proposed; independent plan review A starts next.');
     });
     return true;
   }
@@ -363,15 +444,49 @@ export class WorkflowController {
   private async drivePlanReview(run: DevelopmentRun): Promise<boolean> {
     const kind = run.stage === 'plan-review-a' ? 'plan-review-a' : 'plan-review-b';
     const attempt = this.latest(run, kind);
-    // Both reviewers receive the plan itself. B does not receive A's conclusions.
+    // Only own-slot authored coverage is visible on a corrected plan. PLAN B
+    // never sees A feedback; an owner-approved scope change starts new authority.
+    const previous = [...run.attempts].reverse().find((entry) => entry.task.kind === kind &&
+      entry.state === 'admitted' && entry.task.input.planRevision !== run.planRevision &&
+      entry.task.input.requirementsVersion === run.planRequirementsVersion);
+    const reviewMode = previous ? 'PLAN_DELTA' : 'FULL';
     if (!attempt) return this.queueActor(run, kind, {
       goal: run.goal, phase: run.stage, plan: run.plan, planRevision: run.planRevision,
+      requirementsVersion: run.planRequirementsVersion, reviewMode,
+      ...(previous ? {
+        previousSlot: { attemptId: previous.id, planRevision: previous.task.input.planRevision,
+          plan: previous.task.input.plan, authoredReview: previous.admittedOutput },
+        obligation: 'Review the current changed plan and every invalidated prior invariant. Reuse only provably applicable findings/coverage from your own slot, with attemptId and source-grounded reasons. This is one bounded PLAN_DELTA, not a new full committee.',
+      } : {}),
       userDecisions: run.decisionHistory.map((decision) => ({ answer: decision.answer, sectionId: decision.sectionId })),
       retiredObligations: Object.values(run.retiredSections ?? {}).filter((entry) => entry.requirementsVersion === run.planRequirementsVersion).map((entry) => ({ contract: entry.contract, lineageId: entry.state.lineageId, reason: 'Proposed retirement under the explicit revised user requirements. Verify that no still-authorized obligation was dropped.' })),
     });
     if (attempt.state !== 'admitted') return false;
     const output = attempt.admittedOutput as ReviewOutput;
-    if (output.verdict === 'clean' && !output.limitations.length) {
+    if (output.advisorTrigger && !this.advisorAdopted(run, attempt.id, output.advisorTrigger)) {
+      await this.block(run.id, `${kind} identified an external Advisor condition: ${output.summary}`, 'advisor', undefined, output.advisorTrigger, attempt.id);
+      return false;
+    }
+    if (output.verdict === 'incomplete') {
+      await this.block(run.id, `${kind} cannot verify the executable plan: ${output.summary}; ${output.limitations.join('; ')}`, 'semantic');
+      return false;
+    }
+    const decision = output.findings.find((finding) => finding.classification === 'OWNER_DECISION');
+    if (decision) {
+      await this.block(run.id, `PLAN owner decision required: ${decision.title}; ${decision.body}`, 'semantic');
+      return false;
+    }
+    if (reviewMode === 'PLAN_DELTA' && (output.verdict === 'clean' ||
+      (output.verdict === 'findings' && output.findings.every((finding) => finding.classification === 'PLAN_NIT')))) {
+      const reuse = output.planEvidenceReuse ?? [];
+      if (reuse.length !== 1 || reuse[0]?.attemptId !== previous?.id || !reuse[0]?.reason.trim()) {
+        await this.block(run.id, 'PLAN_DELTA must explicitly reconcile its own preceding authored coverage and current invalidation cone, not silently claim a new full review.', 'semantic');
+        return false;
+      }
+    }
+    const onlyNits = output.verdict === 'findings' && output.findings.length > 0 &&
+      output.findings.every((finding) => finding.classification === 'PLAN_NIT');
+    if ((output.verdict === 'clean' || onlyNits) && !output.limitations.length && output.coverage.length) {
       await this.change(run.id, (draft) => {
         draft.stage = kind === 'plan-review-a' ? 'plan-review-b' : 'sections';
         this.event(draft, 'plan-review-accepted', `${kind} completed valid independent coverage.`);
@@ -400,14 +515,25 @@ export class WorkflowController {
         await this.change(run.id, (draft) => { draft.stage = 'feature-verification'; delete draft.activeSectionId; });
       } else {
         const state = run.sections[next.id]!;
-        if (state.stage === 'pending' && state.materialRepairWaves >= run.policy.maxRepairWaves) {
-          await this.block(run.id, `Section ${next.id} retains exhausted original repair lineage ${state.lineageId}. Replanning cannot authorize a sixth implementation wave.`, 'budget', next.id);
-          return false;
+        if (state.stage === 'pending' && state.materialRepairWaves >= (state.recovery?.extraWaveLimit ?? run.policy.maxRepairWaves)) {
+          if (state.recovery) await this.block(run.id, `ADV-01: Original lineage ${state.lineageId} exhausted its one automatic recovery; plan changes cannot reset it.`, 'advisor', next.id, 'ADV-01');
+          else await this.change(run.id, (draft) => {
+            draft.diagnostic = { reason: 'HARD_CAP_RECOVERY: retained exhausted original Section requires bounded classification before a sixth wave.',
+              sectionId: next.id, requestedAt: this.now() };
+          });
+          return true;
         }
         await this.change(run.id, (draft) => {
           draft.activeSectionId = next.id;
           const section = draft.sections[next.id]!;
-          if (section.stage === 'pending') { section.stage = 'implementing'; section.inputContractVersion++; }
+          if (section.stage === 'pending') {
+            const contract = draft.plan!.sections.find((entry) => entry.id === section.id)!;
+            if (contract.subsections.length) {
+              section.subsectionIndex = 0; section.subsectionCheckpoints = [];
+              section.stage = 'subsection-implementing';
+            } else section.stage = 'implementing';
+            section.inputContractVersion++;
+          }
           if (section.stage === 'repairing' && section.materialRepairWaves === 3 && section.diagnosticCount < draft.policy.maxDiagnostics) {
             draft.diagnostic = { reason: 'Third material repair wave: diagnose recurring root cause before further implementation.', sectionId: section.id, requestedAt: this.now() };
           }
@@ -416,6 +542,9 @@ export class WorkflowController {
       }
       return true;
     }
+    if (active.stage === 'subsection-implementing') return this.driveSubsectionImplementation(run, active);
+    if (active.stage === 'subsection-review') return this.driveSubsectionReview(run, active);
+    if (active.stage === 'subsection-adjudicating') return this.driveSubsectionAdjudication(run, active);
     if (active.stage === 'implementing' || active.stage === 'repairing') return this.driveImplementation(run, active);
     if (active.stage === 'review-selection') return this.driveSelection(run, active);
     if (active.stage === 'reroute') return this.driveReroute(run, active);
@@ -437,6 +566,210 @@ export class WorkflowController {
         });
     }
     return false;
+  }
+
+  /** A Subsection is an actual gated increment inside one parent lineage, never a child Feature. */
+  private subsection(run: DevelopmentRun, section: SectionState) {
+    const child = this.sectionPlan(run, section).subsections[section.subsectionIndex ?? 0];
+    if (!child) throw new Error(`No remaining Subsection contract for parent ${section.id}.`);
+    return child;
+  }
+
+  private async driveSubsectionImplementation(run: DevelopmentRun, section: SectionState): Promise<boolean> {
+    const child = this.subsection(run, section);
+    const attempt = this.latest(run, 'implementer', section);
+    if (!attempt) return this.queueActor(run, 'implementer', {
+      ...this.contractInput(run, section), subsection: child,
+      checkpointMode: section.subsectionFindingIds?.length ? 'REPAIR_DELTA' : 'SUBSECTION_DELTA',
+      previousCheckpoints: section.subsectionCheckpoints ?? [],
+      instructions: section.repairInstructions ?? child.objective,
+      implementation: child.implementation ?? this.sectionPlan(run, section).implementation,
+      obligation: 'Implement the exact current Subsection. Do not start its consumer or complete the parent; preserve the safe intermediate state and scoped oracle.',
+    }, section);
+    if (attempt.state !== 'admitted') return false;
+    const result = attempt.admittedOutput as ImplementationOutput;
+    if (result.remainingWork.length) {
+      const captureKey = `subsection-unfinished:${attempt.id}`;
+      if (!this.completedOperation(run, captureKey)) return this.operation(run, 'capture', captureKey, section.id,
+        (snapshot) => this.workspace.capture(snapshot, section.id), (draft, candidate) => {
+          const value = candidate as Candidate;
+          draft.candidates[value.id] = value; draft.currentCandidateId = value.id;
+          draft.sections[section.id]!.candidateId = value.id;
+        });
+      const repeats = run.attempts.filter((item) => item.task.sectionId === section.id &&
+        item.task.input.phase === 'subsection-implementing' && item.task.input.subsection &&
+        (item.task.input.subsection as { id: string }).id === child.id && item.state === 'admitted' &&
+        (item.admittedOutput as ImplementationOutput).remainingWork.length).length;
+      if (repeats > 3) {
+        await this.block(run.id, `Subsection ${child.id} remains unfinished after bounded continuation.`, 'semantic', section.id);
+        return false;
+      }
+      await this.change(run.id, (draft) => {
+        const state = draft.sections[section.id]!;
+        state.inputContractVersion++;
+        state.repairInstructions = `Continue the same Subsection ${child.id} from actual changes: ${result.remainingWork.join('; ')}`;
+      });
+      return true;
+    }
+    const captureKey = `subsection-capture:${attempt.id}`;
+    if (!this.completedOperation(run, captureKey)) return this.operation(run, 'capture', captureKey, section.id,
+      (snapshot) => this.workspace.capture(snapshot, section.id), (draft, candidate) => {
+        const value = candidate as Candidate;
+        draft.candidates[value.id] = value; draft.currentCandidateId = value.id;
+        draft.sections[section.id]!.candidateId = value.id;
+      });
+    const candidate = this.candidate(run, section);
+    const checksKey = `subsection-checks:${attempt.id}`;
+    if (!this.completedOperation(run, checksKey)) return this.operation(run, 'checks', checksKey, section.id,
+      (snapshot, signal) => this.workspace.check(snapshot, candidate, child.checks, signal),
+      (draft, value) => { draft.sections[section.id]!.subsectionCurrentChecks = value as CheckEvidence[]; }, candidate.id);
+    await this.change(run.id, (draft) => {
+      draft.sections[section.id]!.stage = 'subsection-review';
+      this.event(draft, 'subsection-captured', `Subsection ${child.id} captured and scoped checks executed.`, { sectionId: section.id });
+    });
+    return true;
+  }
+
+  private async advanceSubsection(run: DevelopmentRun, section: SectionState, reviewId: string): Promise<void> {
+    const child = this.subsection(run, section);
+    const candidate = this.candidate(run, section);
+    const required = child.checks.filter((spec) => spec.required);
+    if (required.some((spec) => !section.subsectionCurrentChecks?.some((check) => check.specId === spec.id &&
+      check.candidateId === candidate.id && check.status === 'passed'))) throw new Error(`Required Subsection ${child.id} scoped checks have not passed.`);
+    const review = run.reviews.find((entry) => entry.id === reviewId);
+    if (!review || review.candidateId !== candidate.id || review.lensId !== 'R01' ||
+      review.output.verdict === 'incomplete' || review.output.limitations.length) throw new Error('Subsection requires current complete R01 checkpoint evidence.');
+    const targets = section.subsectionFindingIds ?? [];
+    if (targets.length) {
+      const closure = review.output.closures ?? [];
+      if (closure.length !== targets.length || new Set(closure.map((item) => item.findingId)).size !== closure.length ||
+        targets.some((id) => !closure.some((item) => item.findingId === id && item.status === 'verified-closed' && item.evidence.trim())))
+        throw new Error('A repaired Subsection cannot proceed without per-finding verified closure.');
+    }
+    await this.change(run.id, (draft) => {
+      const state = draft.sections[section.id]!;
+      const prior = state.subsectionCheckpoints?.at(-1)?.candidateId;
+      state.subsectionCheckpoints ??= [];
+      state.subsectionChecks ??= [];
+      state.subsectionChecks.push(...(state.subsectionCurrentChecks ?? []));
+      state.subsectionCheckpoints.push({
+        subsectionId: child.id, candidateId: candidate.id, reviewId,
+        checkIds: (state.subsectionCurrentChecks ?? []).map((check) => check.id),
+        ...(prior ? { priorCandidateId: prior } : {}),
+      });
+      state.subsectionIndex = (state.subsectionIndex ?? 0) + 1;
+      state.inputContractVersion++;
+      state.stage = state.subsectionIndex < this.sectionPlan(draft, state).subsections.length ? 'subsection-implementing' : 'review-selection';
+      delete state.subsectionFindingIds; delete state.subsectionCurrentChecks; delete state.subsectionRiskLenses; delete state.repairInstructions;
+      delete state.repairOrigin; delete state.closureFindingIds; delete state.freshRepairLensIds;
+      this.event(draft, 'subsection-checkpoint-verified', `Subsection ${child.id}: CHECKPOINT_VERIFIED, not parent ACCEPTED.`, { sectionId: state.id });
+    });
+  }
+
+  private async driveSubsectionReview(run: DevelopmentRun, section: SectionState): Promise<boolean> {
+    const child = this.subsection(run, section);
+    // Original SFD: every admitted child repair must re-route its delta.
+    if (section.subsectionFindingIds?.length && !section.subsectionRiskLenses) {
+      const selector = this.latest(run, 'review-selector', section);
+      if (!selector) return this.queueActor(run, 'review-selector', {
+        ...this.contractInput(run, section), subsection: child,
+        repairDelta: section.repairInstructions, previousCheckpoints: section.subsectionCheckpoints ?? [],
+        requiredBaseline: 'R01',
+        obligation: 'Re-route new or invalidated risks of the child repair against R01-R12. Return only genuinely new focused risks in addition to R01; no new Section A/B pair.',
+      }, section);
+      if (selector.state !== 'admitted') return false;
+      const selected = (selector.admittedOutput as ReviewSelectionOutput).lenses.filter((lens) => lens.id !== 'R01');
+      await this.change(run.id, (draft) => { draft.sections[section.id]!.subsectionRiskLenses = selected; });
+      return true;
+    }
+    const extra = (section.subsectionRiskLenses ?? []).map((lens) => ({ lens,
+      attempt: this.latest(run, 'reviewer-a', section, lens.id) }));
+    let capacity = run.policy.maxParallelReviews - extra.filter((item) => item.attempt && item.attempt.state !== 'admitted').length;
+    for (const item of extra) if (!item.attempt && capacity > 0) {
+      await this.queueActor(await this.status(run.id), 'reviewer-a', {
+        ...this.contractInput(run, section), subsection: child, lens: item.lens,
+        checkpointMode: 'FOCUSED_FIND', checks: section.subsectionCurrentChecks ?? [],
+        obligation: 'Only newly triggered material repair-delta risk; preserve parent lineage. This is a child focused pass, not another parent closing pair.',
+      }, section, item.lens);
+      capacity--;
+    }
+    if (!extra.every((item) => item.attempt?.state === 'admitted')) return false;
+    const lens: Lens = { id: 'R01', name: 'Parent R01 checkpoint', focus: `SUBSECTION_DELTA: ${child.id} and its safe intermediate state` };
+    const attempt = this.latest(run, 'reviewer-a', section, 'R01');
+    if (!attempt) return this.queueActor(run, 'reviewer-a', {
+      ...this.contractInput(run, section), subsection: child,
+      checkpointMode: section.subsectionFindingIds?.length ? 'REPAIR_DELTA' : 'SUBSECTION_DELTA',
+      targetFindingIds: section.subsectionFindingIds ?? [],
+      previousCheckpoints: section.subsectionCheckpoints ?? [],
+      checks: section.subsectionCurrentChecks ?? [],
+      obligation: 'Independently inspect actual new child code, parent invariant, safe intermediate state, scoped oracle and current check results. Report per-ID closure on repair and do not infer parent acceptance.',
+    }, section, lens);
+    if (attempt.state !== 'admitted') return false;
+    const review = run.reviews.find((entry) => entry.attemptId === attempt.id);
+    if (!review) throw new Error('Subsection R01 result lacks its persisted authored report.');
+    const specialistReports = (section.subsectionRiskLenses ?? []).map((lens) =>
+      this.currentReviews(run.reviews.filter((entry) => entry.sectionId === section.id), this.candidate(run, section).id)
+        .find((entry) => entry.stage === 'a' && entry.lensId === lens.id));
+    if (specialistReports.some((entry) => !entry)) throw new Error('Child repair risk lens lacks a current independent report.');
+    const clean = review.output.verdict === 'clean' && !review.output.limitations.length && !review.output.findings.length &&
+      specialistReports.every((entry) => entry?.output.verdict === 'clean' &&
+        !entry.output.limitations.length && !entry.output.findings.length);
+    const required = child.checks.filter((spec) => spec.required);
+    const checked = required.every((spec) => section.subsectionCurrentChecks?.some((entry) => entry.specId === spec.id &&
+      entry.candidateId === section.candidateId && entry.status === 'passed'));
+    if (clean && checked) { await this.advanceSubsection(run, section, review.id); return true; }
+    await this.change(run.id, (draft) => { draft.sections[section.id]!.stage = 'subsection-adjudicating'; });
+    return true;
+  }
+
+  private async driveSubsectionAdjudication(run: DevelopmentRun, section: SectionState): Promise<boolean> {
+    const child = this.subsection(run, section);
+    const report = [...run.reviews].reverse().find((entry) => entry.sectionId === section.id &&
+      entry.candidateId === section.candidateId && entry.stage === 'a' && entry.lensId === 'R01');
+    if (!report) throw new Error('Subsection adjudication requires its current R01 evidence.');
+    const applicable = [report, ...run.reviews.filter((entry) => entry.sectionId === section.id &&
+      entry.candidateId === section.candidateId && entry.stage === 'a' &&
+      (section.subsectionRiskLenses ?? []).some((lens) => lens.id === entry.lensId))];
+    const findings = applicable.flatMap((evidence) => evidence.output.findings.map((finding) => ({
+      ...finding, id: `${evidence.id}:${finding.id}`,
+    })));
+    const attempt = this.latest(run, 'adjudicator', section);
+    if (!attempt) return this.queueActor(run, 'adjudicator', {
+      ...this.contractInput(run, section), purpose: 'subsection-checkpoint',
+      subsection: child, findings, reviews: applicable, checks: section.subsectionCurrentChecks ?? [],
+      previousCheckpoints: section.subsectionCheckpoints ?? [],
+      obligation: 'Admit or refute actual R01 checkpoint findings. No next child if scoped checks failed or admitted findings remain open. Any repair shares the original parent five-wave budget.',
+    }, section);
+    if (attempt.state !== 'admitted') return false;
+    const output = attempt.admittedOutput as AdjudicationOutput;
+    if (output.advisorTrigger && !this.advisorAdopted(run, attempt.id, output.advisorTrigger)) {
+      await this.block(run.id, `Subsection adjudication requires external Advisor: ${output.summary}`, 'advisor', section.id, output.advisorTrigger, attempt.id);
+      return false;
+    }
+    const decisions = new Map(output.dispositions.map((item) => [item.findingId, item]));
+    if (decisions.size !== output.dispositions.length || findings.some((entry) => !decisions.has(entry.id)) ||
+        output.dispositions.some((item) => !findings.some((entry) => entry.id === item.findingId)))
+      throw new Error('Subsection checkpoint must adjudicate each actual finding.');
+    if (output.resolution === 'needs-user' || output.resolution === 'more-review') {
+      await this.block(run.id, output.question ?? output.summary, 'semantic', section.id);
+      return false;
+    }
+    if (output.resolution === 'repair') {
+      const repairedIds = output.dispositions.filter((item) => item.decision === 'fix').map((item) => item.findingId);
+      const dispatched = await this.requestRepair(run, section, output.repairInstructions, output.material, 'a', [], repairedIds);
+      if (!dispatched) return false;
+      await this.change(run.id, (draft) => {
+        const state = draft.sections[section.id]!;
+        state.subsectionFindingIds = repairedIds;
+        state.stage = 'subsection-implementing'; state.inputContractVersion++;
+        this.event(draft, 'subsection-repair', `Subsection ${child.id} repair charged to original parent lineage.`, { sectionId: section.id });
+      });
+      return true;
+    }
+    if (!output.coverageSufficient || output.missingCoverage.length || output.dispositions.some((item) => item.decision !== 'reject'))
+      throw new Error('A Subsection checkpoint cannot accept missing or unresolved R01 coverage.');
+    await this.advanceSubsection(run, section, report.id);
+    return true;
   }
 
   private async driveImplementation(run: DevelopmentRun, section: SectionState): Promise<boolean> {
@@ -548,7 +881,19 @@ export class WorkflowController {
     let capacity = run.policy.maxParallelReviews - inflight;
     for (let i = 0; i < section.lenses.length && capacity > 0; i++) {
       if (!attempts[i]) {
-        await this.queueActor(await this.status(run.id), 'reviewer-a', { ...this.contractInput(run, section), lens: section.lenses[i] }, section, section.lenses[i]);
+        const checkpointEvidence = (section.subsectionCheckpoints ?? []).map((checkpoint) => ({
+          ...checkpoint,
+          review: run.reviews.find((review) => review.id === checkpoint.reviewId),
+          checks: (section.subsectionChecks ?? []).filter((check) => checkpoint.checkIds.includes(check.id)),
+        }));
+        await this.queueActor(await this.status(run.id), 'reviewer-a', {
+          ...this.contractInput(run, section), lens: section.lenses[i],
+          ...(section.lenses[i]?.id === 'R01' && checkpointEvidence.length ? {
+            checkpointMode: 'PARENT_RECONCILIATION', previousCheckpoints: checkpointEvidence,
+            jointCriteria: this.sectionPlan(run, section).acceptanceCriteria,
+            obligation: 'Reconcile complete parent R01 behavior against every verified real child delta, all changed interfaces, direct consumers, joint checks and final candidate. Earlier checkpoint clean is not parent acceptance.',
+          } : {}),
+        }, section, section.lenses[i]);
         capacity--;
       }
     }
@@ -578,6 +923,7 @@ export class WorkflowController {
     if (!attempt) return this.queueActor(run, 'closure-reviewer', {
       ...this.contractInput(run, section), instructions: section.repairInstructions,
       targetFindingIds: section.closureFindingIds ?? [],
+      simplificationActions: (section.simplifications ?? []).filter((action) => section.activeSimplificationIds?.includes(action.id)),
       previousReviews: run.reviews.filter((review) => review.sectionId === section.id),
       previousDecisions: run.decisions.filter((decision) => decision.sectionId === section.id),
       obligation: 'Report exactly one per-finding status for every targetFindingId, with actual current-candidate evidence. No generic CLEAN may replace closure; examine direct regressions. Do not repeat the full A group.',
@@ -613,12 +959,17 @@ export class WorkflowController {
       reviews: allReviews,
       findings: allReviews.flatMap((review) => review.output.findings.map((finding) => ({ ...finding, id: `${review.id}:${finding.id}`, evidenceId: review.id, candidateId: review.candidateId }))),
       previousDecisions: run.decisions.filter((decision) => decision.sectionId === section.id),
+      simplificationActions: (section.simplifications ?? []).filter((action) => action.status === 'proposed' && action.proposedCandidateId === candidate.id),
       repairBudget: { used: section.materialRepairWaves, maximum: run.policy.maxRepairWaves, lineageId: section.lineageId },
       selectedLenses: section.lenses,
       obligation: 'Admit or reject findings on semantic evidence. Reuse old coverage only through explicit evidenceReuse with reasons. Current checks and logical A plus independent final B are required; a report count never proves acceptance.',
     }, section);
     if (attempt.state !== 'admitted') return false;
     const output = attempt.admittedOutput as AdjudicationOutput;
+    if (output.advisorTrigger && !this.advisorAdopted(run, attempt.id, output.advisorTrigger)) {
+      await this.block(run.id, `Section adjudication requires external Advisor: ${output.summary}`, 'advisor', section.id, output.advisorTrigger, attempt.id);
+      return false;
+    }
     this.validateAdjudication(run, section, output, attempt.id);
     if (output.resolution === 'needs-user') {
       await this.block(run.id, output.question ?? output.summary, 'semantic', section.id); return false;
@@ -630,9 +981,20 @@ export class WorkflowController {
       });
       return true;
     }
-    if (output.resolution === 'repair') return this.requestRepair(run, section, output.repairInstructions, output.material, isB ? 'b' : 'a', output.invalidatedSectionIds, output.dispositions.filter((item) => item.decision === 'fix').map((item) => item.findingId));
+    if (output.resolution === 'repair') return this.requestRepair(run, section, output.repairInstructions, output.material,
+      isB ? 'b' : 'a', output.invalidatedSectionIds,
+      output.dispositions.filter((item) => item.decision === 'fix').map((item) => item.findingId),
+      output.simplificationDispositions ?? []);
     await this.change(run.id, (draft) => {
       const state = draft.sections[section.id]!;
+      for (const disposition of output.simplificationDispositions ?? []) {
+        const action = state.simplifications?.find((entry) => entry.id === disposition.actionId)!;
+        action.status = disposition.decision === 'reject' ? 'rejected' : 'deferred';
+      }
+      for (const id of state.activeSimplificationIds ?? []) {
+        const action = state.simplifications?.find((entry) => entry.id === id)!;
+        action.status = 'preserved'; action.closureCandidateId = candidate.id;
+      }
       if (isB) {
         state.stage = 'accepted'; state.acceptedCandidateId = candidate.id;
         this.event(draft, 'section-accepted', 'A and independent full B logical coverage apply to this final candidate.', { sectionId: section.id });
@@ -664,6 +1026,18 @@ export class WorkflowController {
       if (section.freshRepairLensIds?.includes(review.lensId) && review.candidateId !== candidate.id) throw new Error('Invalidated A lens cannot reuse stale source evidence.');
     }
     if (output.resolution === 'repair' && !output.repairInstructions.trim()) throw new Error('A repair decision requires concrete repair instructions.');
+    const proposals = (section.simplifications ?? []).filter((entry) =>
+      entry.status === 'proposed' && entry.proposedCandidateId === candidate.id);
+    const dispositionsForSimp = output.simplificationDispositions ?? [];
+    if (dispositionsForSimp.length !== proposals.length ||
+      new Set(dispositionsForSimp.map((entry) => entry.actionId)).size !== dispositionsForSimp.length ||
+      dispositionsForSimp.some((entry) => !proposals.some((action) => action.id === entry.actionId) || !entry.reason.trim())) {
+      throw new Error('Every proposed SAFE_SIMPLIFICATION action must be explicitly batched, deferred or rejected.');
+    }
+    if (dispositionsForSimp.some((entry) => entry.decision === 'batch') &&
+      (output.resolution !== 'repair' || !output.material || !output.dispositions.some((entry) => entry.decision === 'fix'))) {
+      throw new Error('Optional SAFE_SIMPLIFICATION cannot start a mandatory repair wave alone.');
+    }
     if (output.resolution !== 'accept') return;
     if (!output.coverageSufficient || output.missingCoverage.length || output.dispositions.some((item) => item.decision !== 'reject')) throw new Error('Acceptance cannot retain missing coverage or unresolved admitted findings.');
     const checks = this.sectionPlan(run, section).checks.filter((spec) => spec.required);
@@ -679,6 +1053,13 @@ export class WorkflowController {
           outcomes.length !== targets.length ||
           targets.some((id) => !outcomes.some((entry) => entry.findingId === id && entry.status === 'verified-closed' && entry.evidence.trim()))) {
         throw new Error('Every admitted finding must have itemized VERIFIED_CLOSED evidence on the current candidate.');
+      }
+      const actions = section.activeSimplificationIds ?? [];
+      const simpClosures = closure.output.simplificationClosures ?? [];
+      if (simpClosures.length !== actions.length ||
+        new Set(simpClosures.map((entry) => entry.actionId)).size !== simpClosures.length ||
+        actions.some((id) => !simpClosures.some((entry) => entry.actionId === id && entry.status === 'preserved' && entry.evidence.trim()))) {
+        throw new Error('Every batched SIMP action requires a passing preservation-oracle closure on the current candidate.');
       }
       for (const lensId of section.freshRepairLensIds ?? []) {
         if (!current.some((review) => review.stage === 'a' && review.lensId === lensId && review.output.verdict !== 'incomplete')) {
@@ -698,19 +1079,43 @@ export class WorkflowController {
     }
   }
 
-  private async requestRepair(run: DevelopmentRun, section: SectionState, instructions: string, material: boolean, origin: 'a' | 'b' | 'feature', invalidated: string[] = [], findingIds: string[] = []): Promise<boolean> {
+  private async requestRepair(run: DevelopmentRun, section: SectionState, instructions: string, material: boolean,
+    origin: 'a' | 'b' | 'feature', invalidated: string[] = [], findingIds: string[] = [],
+    simpDispositions: NonNullable<AdjudicationOutput['simplificationDispositions']> = []): Promise<boolean> {
     const correctiveDecisions = run.events.filter((event) => event.type === 'repair-admitted' && event.sectionId === section.id).length;
     if (correctiveDecisions >= run.policy.maxRepairWaves + 2) {
       await this.block(run.id, `Section ${section.id} exhausted the bounded corrective workflow attempts, including non-material repairs. Diagnose or revise the contract without resetting its original lineage.`, 'budget', section.id); return false;
     }
-    if (material && section.materialRepairWaves >= run.policy.maxRepairWaves) {
-      await this.block(run.id, `Section ${section.id} exhausted its original ${run.policy.maxRepairWaves}-wave material repair budget. ${instructions}`, 'budget', section.id); return false;
+    if (material && section.materialRepairWaves >= (section.recovery?.extraWaveLimit ?? run.policy.maxRepairWaves)) {
+      if (section.recovery) {
+        await this.block(run.id, `ADV-01 SECOND_CONVERGENCE_FAILURE: original lineage ${section.lineageId} used its one automatic recovery and needs another material repair. ${instructions}`,
+          'advisor', section.id, 'ADV-01');
+      } else {
+        await this.change(run.id, (draft) => {
+          draft.diagnostic = { reason: `HARD_CAP_RECOVERY: Five material waves exhausted for ${section.lineageId}. Classify one automatic recovery using actual finding IDs, coverage, source and scope.`,
+            sectionId: section.id, requestedAt: this.now() };
+          this.event(draft, 'hardcap-diagnosis', 'Hard-cap evidence collected; only one bounded automatic recovery is allowed.', { sectionId: section.id });
+        });
+      }
+      return !section.recovery;
     }
     await this.change(run.id, (draft) => {
       const state = draft.sections[section.id]!;
-      if (material) state.materialRepairWaves++;
+      if (material) {
+        for (const entry of Object.values(draft.sections)) if (entry.lineageId === state.lineageId) entry.materialRepairWaves++;
+        for (const entry of Object.values(draft.retiredSections ?? {})) if (entry.state.lineageId === state.lineageId) entry.state.materialRepairWaves++;
+      }
       state.inputContractVersion++; state.stage = 'repairing'; state.repairInstructions = instructions; state.repairOrigin = origin;
       state.closureFindingIds = [...new Set(findingIds)]; delete state.freshRepairLensIds;
+      state.activeSimplificationIds = simpDispositions.filter((entry) => entry.decision === 'batch').map((entry) => entry.actionId);
+      for (const item of simpDispositions) {
+        const action = state.simplifications?.find((entry) => entry.id === item.actionId);
+        if (action) action.status = item.decision === 'batch' ? 'batched' : item.decision === 'reject' ? 'rejected' : 'deferred';
+      }
+      if (state.activeSimplificationIds.length) state.repairInstructions = [instructions, ...state.activeSimplificationIds.map((id) => {
+        const action = state.simplifications!.find((item) => item.id === id)!;
+        return `${id}: remove ${action.mechanism} using ${action.simplerPath}; preserve ${action.preservedInvariants.join('; ')}; oracle: ${action.preservationOracle}`;
+      })].join('\n');
       delete state.acceptedCandidateId; delete state.integratedCandidateId; delete state.aAcceptedCandidateId;
       draft.stage = 'sections'; draft.activeSectionId = section.id;
       delete draft.featureVerificationAttemptId;
@@ -733,8 +1138,9 @@ export class WorkflowController {
   private async driveDiagnostic(run: DevelopmentRun): Promise<boolean> {
     const diagnostic = run.diagnostic!;
     const section = diagnostic.sectionId ? run.sections[diagnostic.sectionId] : undefined;
+    const hardCap = diagnostic.reason.startsWith('HARD_CAP_RECOVERY:');
     const count = section?.diagnosticCount ?? run.attempts.filter((attempt) => attempt.task.kind === 'diagnostician' && !attempt.task.sectionId && attempt.state === 'admitted' && attempt.task.input.diagnosticKey !== diagnostic.requestedAt).length;
-    if (count >= run.policy.maxDiagnostics) {
+    if (!hardCap && count >= run.policy.maxDiagnostics) {
       await this.change(run.id, (draft) => { delete draft.diagnostic; });
       await this.block(run.id, diagnostic.reason, 'budget', section?.id); return false;
     }
@@ -746,6 +1152,47 @@ export class WorkflowController {
     }, section);
     if (attempt.state !== 'admitted') return false;
     const result = attempt.admittedOutput as DiagnosticOutput;
+    if (result.advisorTrigger && !this.advisorAdopted(run, attempt.id, result.advisorTrigger)) {
+      await this.block(run.id, `Diagnosis confirmed ${result.advisorTrigger}: ${result.summary}`, 'advisor', section?.id, result.advisorTrigger, attempt.id);
+      return false;
+    }
+    if (hardCap) {
+      if (!section || section.recovery) throw new Error('Hard-cap diagnosis requires a single unrecovered original Section lineage.');
+      if (result.recommendation === 'retry' && ['CONTINUE_CURRENT', 'SIMPLIFY_CURRENT', 'REPAIR_EVIDENCE'].includes(result.recoveryClass ?? '')) {
+        await this.change(run.id, (draft) => {
+          const state = draft.sections[section.id]!;
+          state.recovery = { classification: result.recoveryClass!, atMaterialWaves: state.materialRepairWaves,
+            extraWaveLimit: state.materialRepairWaves + 1, diagnosisAttemptId: attempt.id };
+          state.repairInstructions = [state.repairInstructions, result.instructions].filter(Boolean).join('\n');
+          delete draft.diagnostic;
+          this.event(draft, 'hardcap-recovery-authorized', `Original ${state.lineageId}: exactly one ${result.recoveryClass} recovery wave permitted.`, { sectionId: state.id });
+        });
+        return true;
+      }
+      if (result.recommendation === 'revise-plan' &&
+        (result.recoveryClass === 'SPLIT_REMAINING' || result.recoveryClass === 'REBOUND_OWNER')) {
+        await this.change(run.id, (draft) => {
+          const state = draft.sections[section.id]!;
+          state.recovery = { classification: result.recoveryClass!, atMaterialWaves: state.materialRepairWaves,
+            extraWaveLimit: state.materialRepairWaves + draft.policy.maxRepairWaves,
+            diagnosisAttemptId: attempt.id, structuralPending: true };
+          draft.planFeedback.push(`One automatic ${result.recoveryClass} structural recovery of original lineage ${state.lineageId}: ${result.instructions}. Preserve previous accepted work and source; replacements must explicitly identify replacesSectionId and cannot create more than two active descendants.`);
+          draft.stage = 'planning'; draft.inputContractVersion++;
+          delete draft.planSilentRetirement; delete draft.activeSectionId; delete draft.diagnostic;
+          this.event(draft, 'structural-recovery-replan', `One bounded ${result.recoveryClass} structural replan requested for original ${state.lineageId}.`, { sectionId: state.id });
+        });
+        return true;
+      }
+      await this.change(run.id, (draft) => { delete draft.diagnostic; });
+      if (result.recoveryClass === 'RESTART_FROM_BASE') {
+        await this.block(run.id, `ADV-03: Restart-from-base requires a frozen backup, identification of validated work to preserve and independent authority for discarded implementation: ${result.summary}`,
+          'advisor', section.id, 'ADV-03');
+      } else {
+        await this.block(run.id, result.question ?? `Hard-cap diagnosis ${result.recoveryClass ?? 'unclassified'} requires a concrete owner decision: ${result.summary}`,
+          'semantic', section.id);
+      }
+      return false;
+    }
     await this.change(run.id, (draft) => {
       delete draft.diagnostic;
       if (section) {
@@ -779,26 +1226,94 @@ export class WorkflowController {
       const candidate = value as Candidate; draft.candidates[candidate.id] = candidate; draft.currentCandidateId = candidate.id;
     });
     const candidate = run.candidates[run.currentCandidateId!]!;
+    if (run.integrationGaps?.some((gap) => gap.candidateId !== candidate.id)) {
+      await this.change(run.id, (draft) => {
+        delete draft.integrationGaps; delete draft.integrationReviews; draft.inputContractVersion++;
+        this.event(draft, 'integration-evidence-invalidated', 'Composed candidate changed; focused integration evidence must be recollected.');
+      });
+      return true;
+    }
     const specs = plan.features.flatMap((feature) => feature.checks.map((spec) => ({ ...spec, id: `${feature.id}:${spec.id}` })));
     const checksKey = `feature-checks:${candidate.id}:${run.planRevision}`;
     if (!this.completedOperation(run, checksKey)) return this.operation(run, 'checks', checksKey, undefined, (snapshot, signal) => this.workspace.check(snapshot, candidate, specs, signal), (draft, value) => { draft.featureChecks = value as CheckEvidence[]; }, candidate.id);
+    const pendingGaps = (run.integrationGaps ?? []).filter((gap) => !gap.reviewed);
+    if (pendingGaps.length) {
+      const activities = pendingGaps.map((gap) => ({
+        gap, lens: { id: `INTEGRATION-${gap.id}`, name: 'Focused integration',
+          focus: `${gap.lens}: ${gap.boundary}` },
+      }));
+      const attempts = activities.map((entry) => this.latest(run, 'reviewer-a', undefined, entry.lens.id));
+      let capacity = run.policy.maxParallelReviews - attempts.filter((entry) => entry && entry.state !== 'admitted').length;
+      for (let index = 0; index < activities.length && capacity > 0; index++) if (!attempts[index]) {
+        const entry = activities[index]!;
+        await this.queueActor(await this.status(run.id), 'reviewer-a', {
+          goal: run.goal, phase: run.stage, plan, candidate,
+          feature: plan.features.find((feature) => feature.id === entry.gap.featureId),
+          integrationGap: entry.gap, lens: entry.lens, checks: run.featureChecks,
+          obligation: 'Independent focused risk review of only this real unproven Feature composition boundary; not a third full parent A/B.',
+        }, undefined, entry.lens, entry.gap.featureId);
+        capacity--;
+      }
+      if (attempts.every((entry) => entry?.state === 'admitted')) {
+        await this.change(run.id, (draft) => {
+          for (const gap of draft.integrationGaps ?? []) gap.reviewed = true;
+          draft.inputContractVersion++;
+          this.event(draft, 'integration-review-collected', 'Independent bounded composition risk evidence collected; Feature acceptance must judge it.');
+        });
+        return true;
+      }
+      return false;
+    }
     const attempt = this.latest(run, 'feature-verifier');
     if (!attempt) return this.queueActor(run, 'feature-verifier', {
       goal: run.goal, phase: run.stage, plan, candidate,
       sectionAcceptances: Object.values(run.sections).map((section) => ({ ...section, evidence: run.reviews.filter((review) => section.reviewIds.includes(review.id)) })),
-      evidence: [...run.reviews, ...run.decisions], checks: run.featureChecks,
+      evidence: [...run.reviews, ...run.decisions, ...(run.integrationReviews ?? [])],
+      integrationGaps: run.integrationGaps ?? [], checks: run.featureChecks,
       obligation: 'Verify every actual composed business criterion on the common delivered candidate. Reuse applicable Section evidence with concrete IDs; one-Section Features do not need a second A/B. Identify unproven composition and real shared identity/state/security assumptions.',
       userDecisions: run.decisionHistory.map((decision) => ({ question: decision.question, answer: decision.answer, sectionId: decision.sectionId })),
     });
     if (attempt.state !== 'admitted') return false;
     const output = attempt.admittedOutput as FeatureVerificationOutput;
+    if (output.advisorTrigger && !this.advisorAdopted(run, attempt.id, output.advisorTrigger)) {
+      await this.block(run.id, `Feature acceptance requires external Advisor: ${output.summary}`, 'advisor', undefined, output.advisorTrigger, attempt.id);
+      return false;
+    }
     if (output.verdict === 'needs-user') { await this.block(run.id, output.question ?? output.summary, 'semantic'); return false; }
+    if (output.verdict === 'integration-review') {
+      const gaps = output.unprovenComposition ?? [];
+      if (!gaps.length || gaps.length > 6 || new Set(gaps.map((gap) => gap.id)).size !== gaps.length ||
+        gaps.some((gap) => !plan.features.some((feature) => feature.id === gap.featureId))) {
+        throw new Error('Focused integration review requires bounded, unique, known Feature gaps.');
+      }
+      if ((run.integrationGaps ?? []).some((gap) => gap.candidateId === candidate.id)) {
+        await this.block(run.id, 'Unproven composed behavior remains after the admitted independent focused integration review; owner must resolve the real missing oracle or contract.', 'semantic');
+        return false;
+      }
+      await this.change(run.id, (draft) => {
+        draft.integrationGaps = gaps.map((gap) => ({ ...gap, candidateId: candidate.id, reviewed: false }));
+        draft.integrationReviews = [];
+        this.event(draft, 'integration-review-required', `${gaps.length} real composition gaps require bounded independent focused review.`);
+      });
+      return true;
+    }
     if (output.verdict === 'repair') {
       if (!output.repairSectionIds.length || !output.repairInstructions.trim()) throw new Error('Feature repair requires an owned parent Section and concrete instructions.');
       if (output.repairSectionIds.some((id) => !run.sections[id])) throw new Error('Feature repair references an unknown Section.');
       if (new Set(output.repairSectionIds).size !== output.repairSectionIds.length) throw new Error('A Feature repair must identify each owning Section once.');
-      const exhausted = output.repairSectionIds.find((id) => run.sections[id]!.materialRepairWaves >= run.policy.maxRepairWaves);
-      if (exhausted) { await this.block(run.id, `Section ${exhausted} exhausted its original material repair budget.`, 'budget', exhausted); return false; }
+      if (new Set(output.repairSectionIds.map((id) => run.sections[id]?.lineageId)).size !== output.repairSectionIds.length)
+        throw new Error('One original repaired lineage must have one causal Feature repair owner, not duplicated repair budgets.');
+      const exhausted = output.repairSectionIds.find((id) =>
+        run.sections[id]!.materialRepairWaves >= (run.sections[id]!.recovery?.extraWaveLimit ?? run.policy.maxRepairWaves));
+      if (exhausted) {
+        const state = run.sections[exhausted]!;
+        if (state.recovery) await this.block(run.id, `ADV-01: Feature correction would exceed the original lineage ${state.lineageId} recovery allowance.`, 'advisor', exhausted, 'ADV-01');
+        else await this.change(run.id, (draft) => {
+          draft.diagnostic = { reason: `HARD_CAP_RECOVERY: Feature needs another repair in original lineage ${state.lineageId}.`,
+            sectionId: exhausted, requestedAt: this.now() };
+        });
+        return !state.recovery;
+      }
       const first = output.repairSectionIds[0]!;
       await this.requestRepair(run, run.sections[first]!, output.repairInstructions, true, 'feature');
       await this.change(run.id, (draft) => {
@@ -827,7 +1342,24 @@ export class WorkflowController {
     const candidateId = run.currentCandidateId;
     if (requiredChecks.some((id) => !run.featureChecks.some((check) => check.specId === id && check.candidateId === candidateId && check.status === 'passed'))) throw new Error('Required real business path checks did not pass on the delivered candidate.');
     // Evidence must still apply to the accepted Section or the final composed candidate.
+    const integrationReviews = run.integrationReviews ?? [];
+    for (const gap of run.integrationGaps ?? []) {
+      const review = integrationReviews.find((entry) => entry.gapId === gap.id && entry.candidateId === candidateId);
+      if (!gap.reviewed || !review || review.output.verdict === 'incomplete' || review.output.limitations.length) {
+        throw new Error(`Feature integration gap ${gap.id} has no valid independent same-candidate coverage.`);
+      }
+    }
+    const pendingIntegrationFindings = integrationReviews.flatMap((review) => review.output.findings.map((finding) =>
+      `${review.id}:${finding.id}`));
+    const dispositions = output.integrationDispositions ?? [];
+    if (dispositions.length !== pendingIntegrationFindings.length ||
+      new Set(dispositions.map((entry) => entry.findingId)).size !== dispositions.length ||
+      dispositions.some((entry) => !pendingIntegrationFindings.includes(entry.findingId) ||
+        entry.decision !== 'reject' || !entry.reason.trim())) {
+      throw new Error('Accepted Feature must explicitly refute or repair every material focused integration finding.');
+    }
     const evidenceIds = new Set(run.featureChecks.filter((check) => check.candidateId === candidateId && check.status === 'passed').map((check) => check.id));
+    for (const review of integrationReviews) if (review.candidateId === candidateId && review.output.verdict !== 'incomplete') evidenceIds.add(review.id);
     for (const section of Object.values(run.sections)) {
       if (section.stage !== 'integrated' || !section.acceptedCandidateId) continue;
       for (const check of section.checks) {
@@ -916,7 +1448,8 @@ export class WorkflowController {
       (kind !== 'plan-review-a' && kind !== 'plan-review-b' || attempt.task.input.planRevision === run.planRevision));
   }
 
-  private async queueActor(run: DevelopmentRun, kind: ActorKind, input: Record<string, unknown>, section?: SectionState, lens?: Lens): Promise<boolean> {
+  private async queueActor(run: DevelopmentRun, kind: ActorKind, input: Record<string, unknown>,
+    section?: SectionState, lens?: Lens, featureId?: string): Promise<boolean> {
     const candidateId = section?.candidateId ?? run.currentCandidateId;
     const candidate = candidateId ? run.candidates[candidateId] : undefined;
     const task: ActorTask = {
@@ -924,7 +1457,7 @@ export class WorkflowController {
       controlEpoch: run.controlEpoch, workspace: kind === 'implementer' || !candidate ? run.workspace : { ...run.workspace, path: candidate.workspacePath },
       input: JSON.parse(JSON.stringify(input)) as Record<string, unknown>,
       outputSchema: outputSchemaFor(kind), timeoutMs: run.policy.actorTimeoutMs,
-      ...(section ? { sectionId: section.id } : {}), ...(lens ? { lens } : {}),
+      ...(section ? { sectionId: section.id } : {}), ...(lens ? { lens } : {}), ...(featureId ? { featureId } : {}),
       ...(candidateId ? { candidateId } : {}),
       ...(kind === 'implementer' && section && this.sectionPlan(run, section).implementation === 'large' && run.policy.largeImplementerRoute
         ? { route: run.policy.largeImplementerRoute }
@@ -1032,7 +1565,14 @@ export class WorkflowController {
       if (draft.status !== 'running' || task.controlEpoch !== draft.controlEpoch || task.inputContractVersion !== (currentSection?.inputContractVersion ?? draft.inputContractVersion) || task.input.phase !== (currentSection?.stage ?? draft.stage)) return;
       const record = draft.attempts.find((entry) => entry.id === attempt.id)!;
       record.state = 'admitted'; record.admittedOutput = output;
-      if (['reviewer-a', 'reviewer-b', 'closure-reviewer'].includes(task.kind)) {
+      if (task.kind === 'reviewer-a' && task.featureId) {
+        const gap = draft.integrationGaps?.find((entry) => entry.featureId === task.featureId &&
+          `INTEGRATION-${entry.id}` === task.lens?.id && entry.candidateId === task.candidateId);
+        if (!gap) throw new Error('Independent integration review lost its frozen Feature gap.');
+        draft.integrationReviews ??= [];
+        draft.integrationReviews.push({ id: `integration:${attempt.id}`, attemptId: attempt.id,
+          candidateId: task.candidateId!, featureId: task.featureId, gapId: gap.id, output: output as ReviewOutput });
+      } else if (['reviewer-a', 'reviewer-b', 'closure-reviewer'].includes(task.kind)) {
         const state = draft.sections[task.sectionId!]!;
         const evidence: ReviewEvidence = {
           id: `review:${attempt.id}`, attemptId: attempt.id, candidateId: task.candidateId!, sectionId: state.id,
@@ -1040,6 +1580,16 @@ export class WorkflowController {
           lensId: task.lens?.id ?? (task.kind === 'reviewer-b' ? 'B' : 'CLOSURE'), output: output as ReviewOutput, valid: true,
         };
         draft.reviews.push(evidence); state.reviewIds.push(evidence.id);
+        if (task.kind === 'reviewer-a') {
+          state.simplifications ??= [];
+          for (const suggestion of (output as ReviewOutput).simplifications ?? []) {
+            if (state.simplifications.some((action) => action.proposedCandidateId === evidence.candidateId &&
+              action.mechanism === suggestion.mechanism && action.preservationOracle === suggestion.preservationOracle)) continue;
+            const id = `SIMP-${String(state.simplifications.length + 1).padStart(3, '0')}`;
+            state.simplifications.push({ ...suggestion, id, originReviewId: evidence.id,
+              proposedCandidateId: evidence.candidateId, status: 'proposed' });
+          }
+        }
       }
       if (['adjudicator', 'feature-verifier', 'diagnostician'].includes(task.kind)) {
         const evidence = { id: `decision:${attempt.id}`, attemptId: attempt.id, ...(task.sectionId ? { sectionId: task.sectionId } : {}), ...(task.candidateId ? { candidateId: task.candidateId } : {}), output: output as AdjudicationOutput | FeatureVerificationOutput | DiagnosticOutput, createdAt: this.now() };
@@ -1103,12 +1653,63 @@ export class WorkflowController {
     return false;
   }
 
-  private async block(id: string, reason: string, kind: 'semantic' | 'recovery' | 'budget' | 'infrastructure', sectionId?: string): Promise<void> {
+  private advisorAdopted(run: DevelopmentRun, attemptId: string, trigger: AdvisorTrigger): boolean {
+    return run.advisorCase?.status === 'adopted' && run.advisorCase.trigger === trigger &&
+      run.advisorCase.sourceAttemptId === attemptId;
+  }
+
+  private async block(id: string, reason: string,
+    kind: 'semantic' | 'recovery' | 'budget' | 'infrastructure' | 'advisor',
+    sectionId?: string, advisorTrigger?: AdvisorTrigger, sourceAttemptId?: string): Promise<void> {
     await this.change(id, (run) => {
       if (['paused', 'pausing', 'cancelled', 'completed'].includes(run.status)) return;
-      run.status = kind === 'semantic' || kind === 'budget' ? 'waiting-user' : 'blocked';
+      run.status = kind === 'semantic' || kind === 'budget' || kind === 'advisor' ? 'waiting-user' : 'blocked';
       run.blockedReason = reason;
-      run.pendingDecision = { id: this.id(), question: reason, context: `Run ${run.id}, ${sectionId ? `Section ${sectionId}` : run.stage}`, kind, ...(sectionId ? { sectionId } : {}), createdAt: this.now() };
+      if (kind === 'advisor') {
+        if (!advisorTrigger) throw new Error('External Advisor hold requires an exact original SFD trigger.');
+        const section = sectionId ? run.sections[sectionId] : undefined;
+        const candidate = section?.candidateId ? run.candidates[section.candidateId] :
+          run.currentCandidateId ? run.candidates[run.currentCandidateId] : undefined;
+        const scopedReviews = run.reviews.filter((review) => !sectionId || review.sectionId === sectionId);
+        const scopedDecisions = run.decisions.filter((decision) => !sectionId || decision.sectionId === sectionId);
+        const advisorEvidence = {
+          trigger: advisorTrigger, reason,
+          authority: { currentGoal: run.goal, requirementsHistory: run.requirementsHistory,
+            authorizedPlan: run.plan, planRevision: run.planRevision,
+            ownerDecisions: run.decisionHistory.filter((entry) => entry.kind !== 'advisor') },
+          source: { originalBase: run.workspace.baseCommit, branch: run.workspace.branch,
+            candidateId: candidate?.id, candidateTree: candidate?.treeHash, candidateHead: candidate?.head,
+            candidatePath: candidate?.workspacePath, changedFiles: candidate?.changedFiles },
+          originalLineage: section ? { id: section.lineageId, sectionId: section.id,
+            materialRepairWaves: section.materialRepairWaves, recovery: section.recovery,
+            appliedRepairHistory: run.events.filter((event) => event.sectionId === section.id &&
+              (event.type === 'repair-admitted' || event.type.startsWith('hardcap'))) } : undefined,
+          reviewEvidence: scopedReviews.map((review) => ({ id: review.id, candidateId: review.candidateId,
+            sectionId: review.sectionId, stage: review.stage, lensId: review.lensId,
+            verdict: review.output.verdict, findings: review.output.findings, limitations: review.output.limitations })),
+          decisions: scopedDecisions.map((decision) => ({ id: decision.id, candidateId: decision.candidateId,
+            output: decision.output })), requiredChecks: section?.checks ?? run.featureChecks,
+          interruptedAttempts: run.attempts.filter((attempt) =>
+            attempt.state === 'unknown' || (attempt.outcome && attempt.outcome.status !== 'completed'))
+            .map((attempt) => ({ id: attempt.id, kind: attempt.task.kind,
+              state: attempt.state, error: attempt.outcome?.error })),
+        };
+        const request = ['# SFD external-human Advisor handoff',
+          'This is a locally retained evidence index, not a sanitized ZIP or permission to forward private source automatically.',
+          'The owner must inspect the immutable source candidate and linked evidence, review sensitive content, and manually deliver the request.',
+          'One external advisor result is not authority until a human separately adopts it.',
+          JSON.stringify(advisorEvidence, null, 2),
+          'Do not decide unrelated product promises, reset the original repair lineage, rewrite Git history or authorize publication.'].join('\n\n');
+        run.advisorCase = { trigger: advisorTrigger, ...(sectionId ? { sectionId } : {}),
+          ...(sourceAttemptId ? { sourceAttemptId } : {}),
+          ...(candidate ? { candidateId: candidate.id } : {}), raisedAt: this.now(), request,
+          reportIds: run.reviews.filter((review) => !sectionId || review.sectionId === sectionId).map((review) => review.id),
+          status: 'waiting-external' };
+      }
+      run.pendingDecision = { id: this.id(), question: reason,
+        context: `Run ${run.id}, ${sectionId ? `Section ${sectionId}` : run.stage}`, kind,
+        ...(sectionId ? { sectionId } : {}), ...(advisorTrigger ? { advisorTrigger } : {}),
+        createdAt: this.now() };
       this.event(run, 'blocked', reason, sectionId ? { sectionId } : {});
     });
   }

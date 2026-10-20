@@ -8,7 +8,7 @@ const plan = (): DevelopmentPlan => ({
   title: 'Workflow', assumptions: [],
   features: [{ id: 'F1', title: 'Feature', outcome: 'User outcome', acceptanceCriteria: ['Real path'], sectionIds: ['S1', 'S2'], checks: [] }],
   sections: [
-    { id: 'S1', title: 'Producer', objective: 'Produce contract', featureIds: ['F1'], dependencies: [], writeScope: ['src/a.ts'], acceptanceCriteria: ['Producer works'], implementation: 'standard', checks: [], subsections: [{ id: 'S1a', objective: 'Internal step', acceptanceCriteria: ['Local check'] }] },
+    { id: 'S1', title: 'Producer', objective: 'Produce contract', featureIds: ['F1'], dependencies: [], writeScope: ['src/a.ts'], acceptanceCriteria: ['Producer works'], implementation: 'standard', checks: [], subsections: [{ id: 'S1a', objective: 'Internal step', acceptanceCriteria: ['Local check'], writeScope: ['src/a.ts'], consumer: 'Parent producer interface', safeIntermediateState: 'Internal producer remains importable', checks: [{id:'local',command:['node','--version'],required:true}] }] },
     { id: 'S2', title: 'Consumer', objective: 'Consume contract', featureIds: ['F1'], dependencies: ['S1'], writeScope: ['src/b.ts'], acceptanceCriteria: ['Composition works'], implementation: 'standard', checks: [], subsections: [] },
   ],
 });

@@ -37,7 +37,7 @@ async function fixture(t: TestContext, options: GitWorkspaceOptions = {}) {
   t.after(async () => { await workspace.dispose(); await writable(root); await rm(root, { recursive: true, force: true }); });
   const at = new Date().toISOString();
   const run: DevelopmentRun = {
-    id: randomUUID(), schemaVersion: 1, workflowVersion: '1.0.0', revision: 0,
+    id: randomUUID(), schemaVersion: 1, workflowVersion: '1.1.0', revision: 0,
     controlEpoch: 1, inputContractVersion: 1, createdAt: at, updatedAt: at,
     goal: 'Implement a verified change.', requirementsHistory: [{ version: 1, goal: 'Implement a verified change.', at }],
     workspace: await workspace.inspect(repo), policy: createPolicy({ commit: false }),

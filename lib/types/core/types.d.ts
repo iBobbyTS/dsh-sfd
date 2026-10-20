@@ -1,10 +1,10 @@
 /** Host-independent, persisted contracts for a native development run. */
-export declare const CORE_VERSION: "1.0.0";
-export declare const POLICY_VERSION: "sfd-native-1";
+export declare const CORE_VERSION: "1.1.0";
+export declare const POLICY_VERSION: "sfd-native-2";
 export type ActorKind = 'planner' | 'plan-review-a' | 'plan-review-b' | 'implementer' | 'review-selector' | 'reviewer-a' | 'reviewer-b' | 'adjudicator' | 'closure-reviewer' | 'feature-verifier' | 'diagnostician';
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
 export type RunStage = 'planning' | 'plan-review-a' | 'plan-review-b' | 'sections' | 'feature-verification' | 'delivery' | 'done';
-export type SectionStage = 'pending' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
+export type SectionStage = 'pending' | 'subsection-implementing' | 'subsection-review' | 'subsection-adjudicating' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
 export interface ActorRoute {
     preset: string;
     model?: string;
@@ -55,6 +55,32 @@ export interface SubsectionPlan {
     id: string;
     objective: string;
     acceptanceCriteria: string[];
+    writeScope: string[];
+    safeIntermediateState: string;
+    consumer: string;
+    checks: CheckSpec[];
+    implementation?: 'standard' | 'large';
+}
+export interface SubsectionCheckpoint {
+    subsectionId: string;
+    candidateId: string;
+    reviewId: string;
+    checkIds: string[];
+    priorCandidateId?: string;
+}
+export interface SimplificationProposal {
+    mechanism: string;
+    simplerPath: string;
+    preservedInvariants: string[];
+    preservationOracle: string;
+    affectedConsumers: string[];
+}
+export interface SimplificationAction extends SimplificationProposal {
+    id: string;
+    originReviewId: string;
+    proposedCandidateId: string;
+    status: 'proposed' | 'deferred' | 'rejected' | 'batched' | 'preserved';
+    closureCandidateId?: string;
 }
 export interface SectionPlan {
     id: string;
@@ -67,6 +93,8 @@ export interface SectionPlan {
     implementation: 'standard' | 'large';
     checks: CheckSpec[];
     subsections: SubsectionPlan[];
+    /** Only a diagnosed, original-lineage structural hard-cap recovery may use this field. */
+    replacesSectionId?: string;
 }
 export interface DevelopmentPlan {
     title: string;
@@ -119,12 +147,15 @@ export interface Finding {
     severity: 'critical' | 'major' | 'minor';
     invariant: string;
     location?: string;
+    classification?: 'PLAN_BLOCKER' | 'PLAN_SCOPE_EXPANSION' | 'OWNER_DECISION' | 'PLAN_NIT';
 }
 export interface ClosureFinding {
     findingId: string;
     status: 'verified-closed' | 'still-open' | 'regression' | 'insufficient-evidence';
     evidence: string;
 }
+export type AdvisorTrigger = 'ADV-01' | 'ADV-02' | 'ADV-03' | 'ADV-04' | 'ADV-05' | 'ADV-06';
+export type RecoveryClassification = 'CONTINUE_CURRENT' | 'SIMPLIFY_CURRENT' | 'REPAIR_EVIDENCE' | 'SPLIT_REMAINING' | 'REBOUND_OWNER' | 'RESTART_FROM_BASE';
 export interface ReviewOutput {
     verdict: 'clean' | 'findings' | 'incomplete';
     summary: string;
@@ -132,10 +163,23 @@ export interface ReviewOutput {
     limitations: string[];
     findings: Finding[];
     closures?: ClosureFinding[];
+    simplifications?: SimplificationProposal[];
+    simplificationClosures?: {
+        actionId: string;
+        status: 'preserved' | 'regressed' | 'insufficient-evidence';
+        evidence: string;
+    }[];
+    advisorTrigger?: AdvisorTrigger;
+    /** PLAN_DELTA carries source-qualified coverage from its own earlier logical slot. */
+    planEvidenceReuse?: {
+        attemptId: string;
+        reason: string;
+    }[];
 }
 export interface PlanOutput {
     plan: DevelopmentPlan;
     explanation: string;
+    advisorTrigger?: AdvisorTrigger;
 }
 export interface ImplementationOutput {
     summary: string;
@@ -173,10 +217,16 @@ export interface AdjudicationOutput {
         evidenceId: string;
         reason: string;
     }[];
+    simplificationDispositions?: {
+        actionId: string;
+        decision: 'batch' | 'defer' | 'reject';
+        reason: string;
+    }[];
+    advisorTrigger?: AdvisorTrigger;
     question?: string;
 }
 export interface FeatureVerificationOutput {
-    verdict: 'accepted' | 'repair' | 'needs-user';
+    verdict: 'accepted' | 'repair' | 'needs-user' | 'integration-review';
     summary: string;
     /** One item for every actual business acceptance criterion, with evidence references. */
     criteria: {
@@ -185,15 +235,29 @@ export interface FeatureVerificationOutput {
         evidenceIds: string[];
         satisfied: boolean;
     }[];
+    unprovenComposition?: {
+        id: string;
+        featureId: string;
+        lens: string;
+        boundary: string;
+    }[];
+    integrationDispositions?: {
+        findingId: string;
+        decision: 'fix' | 'reject';
+        reason: string;
+    }[];
     repairSectionIds: string[];
     repairInstructions: string;
     question?: string;
+    advisorTrigger?: AdvisorTrigger;
 }
 export interface DiagnosticOutput {
     summary: string;
     recommendation: 'retry' | 'revise-plan' | 'needs-user';
     instructions: string;
     question?: string;
+    recoveryClass?: RecoveryClassification;
+    advisorTrigger?: AdvisorTrigger;
 }
 export type ActorOutput = PlanOutput | ReviewOutput | ImplementationOutput | ReviewSelectionOutput | AdjudicationOutput | FeatureVerificationOutput | DiagnosticOutput;
 export interface ExecutionIdentity {
@@ -257,6 +321,14 @@ export interface ReviewEvidence {
     output: ReviewOutput;
     valid: boolean;
 }
+export interface IntegrationEvidence {
+    id: string;
+    attemptId: string;
+    candidateId: string;
+    featureId: string;
+    gapId: string;
+    output: ReviewOutput;
+}
 export interface DecisionEvidence {
     id: string;
     attemptId: string;
@@ -286,6 +358,21 @@ export interface SectionState {
     aCoverageEvidenceIds: string[];
     closureFindingIds?: string[];
     freshRepairLensIds?: string[];
+    subsectionIndex?: number;
+    subsectionCheckpoints?: SubsectionCheckpoint[];
+    subsectionCurrentChecks?: CheckEvidence[];
+    subsectionChecks?: CheckEvidence[];
+    subsectionRiskLenses?: Lens[];
+    subsectionFindingIds?: string[];
+    simplifications?: SimplificationAction[];
+    activeSimplificationIds?: string[];
+    recovery?: {
+        classification: RecoveryClassification;
+        atMaterialWaves: number;
+        extraWaveLimit: number;
+        diagnosisAttemptId: string;
+        structuralPending?: boolean;
+    };
 }
 export interface Operation {
     id: string;
@@ -305,7 +392,10 @@ export interface UserDecision {
     id: string;
     question: string;
     context: string;
-    kind: 'semantic' | 'recovery' | 'budget' | 'infrastructure';
+    kind: 'semantic' | 'recovery' | 'budget' | 'infrastructure' | 'advisor';
+    advisorTrigger?: AdvisorTrigger;
+    advisorResult?: string;
+    advisorAdoption?: 'accept' | 'reject' | 'clarify';
     sectionId?: string;
     createdAt: string;
     answer?: string;
@@ -341,6 +431,11 @@ export interface DevelopmentRun {
     planRevision: number;
     planRepairs: number;
     planRequirementsVersion?: number;
+    planSilentRetirement?: {
+        slot: 'plan-review-a';
+        reportIds: string[];
+        rationale: string;
+    };
     retiredSections?: Record<string, {
         state: SectionState;
         contract: SectionPlan;
@@ -357,8 +452,27 @@ export interface DevelopmentRun {
     reviews: ReviewEvidence[];
     decisions: DecisionEvidence[];
     featureChecks: CheckEvidence[];
+    integrationGaps?: {
+        id: string;
+        featureId: string;
+        lens: string;
+        boundary: string;
+        candidateId: string;
+        reviewed?: boolean;
+    }[];
+    integrationReviews?: IntegrationEvidence[];
     featureVerificationAttemptId?: string;
     pendingDecision?: UserDecision;
+    advisorCase?: {
+        trigger: AdvisorTrigger;
+        sectionId?: string;
+        candidateId?: string;
+        sourceAttemptId?: string;
+        raisedAt: string;
+        request: string;
+        reportIds: string[];
+        status: 'waiting-external' | 'waiting-human-decision' | 'adopted';
+    };
     decisionHistory: UserDecision[];
     events: RunEvent[];
     commit?: CommitEvidence;
@@ -380,6 +494,8 @@ export interface DecideInput {
     decisionId: string;
     answer: string;
     action?: 'continue' | 'retry' | 'replan' | 'cancel';
+    advisorResult?: string;
+    advisorAdoption?: 'accept' | 'reject' | 'clarify';
 }
 export interface RunSummary {
     id: string;

@@ -178,7 +178,10 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
   @Remote({ resources: { session: (request: DecideRequest) => SessionId(request.sessionId) } })
   async decide(request: DecideRequest): Promise<DevelopmentRun> {
     request = decideRequestSchema.parse(request); this.assertOwner(request);
-    return this.controller.decide(request.runId, { decisionId: request.decisionId, answer: request.answer, ...(request.action === undefined ? {} : { action: request.action }) });
+    return this.controller.decide(request.runId, { decisionId: request.decisionId, answer: request.answer,
+      ...(request.action === undefined ? {} : { action: request.action }),
+      ...(request.advisorResult === undefined ? {} : { advisorResult: request.advisorResult }),
+      ...(request.advisorAdoption === undefined ? {} : { advisorAdoption: request.advisorAdoption }) });
   }
 
   @Remote({ resources: { session: (request: ReviseRequest) => SessionId(request.sessionId) } })
@@ -194,7 +197,7 @@ export async function executeCommand(service: DevelopmentWorkflowService, agent:
   const action = split?.[1] ?? 'list';
   const tail = split?.[2] ?? '';
   const sessionId = String(agent.id);
-  if (action === 'help') return '/sfd create <goal> | list | status/start/pause/resume/cancel/recover <run-id> | revise <run-id> <goal> | decide <run-id> <decision-id> <continue|retry|replan|cancel> <answer>';
+  if (action === 'help') return '/sfd create <goal> | list | status/start/pause/resume/cancel/recover <run-id> | revise <run-id> <goal> | decide <run-id> <decision-id> <continue|retry|replan|cancel> <answer> | advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>';
   if (action === 'list') return JSON.stringify(await service.list({ sessionId }), null, 2);
   if (action === 'create') return JSON.stringify(await service.create({ sessionId, goal: tail }), null, 2);
   const parts = /^(\S+)(?:\s+([\s\S]*))?$/.exec(tail);
@@ -202,6 +205,14 @@ export async function executeCommand(service: DevelopmentWorkflowService, agent:
   const runId = parts[1];
   const rest = parts[2] ?? '';
   if (action === 'revise') return JSON.stringify(await service.revise({ sessionId, runId, goal: rest }), null, 2);
+  if (action === 'advisor') {
+    const answer = /^(\S+)\s+(accept|reject|clarify)\s+(continue|replan|cancel)\s+([\s\S]+)$/.exec(rest);
+    if (!answer) throw new Error('Use /sfd advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>.');
+    return JSON.stringify(await service.decide(decideRequestSchema.parse({
+      sessionId, runId, decisionId: answer[1], advisorAdoption: answer[2], action: answer[3],
+      advisorResult: answer[4], answer: `Human disposition: ${answer[2]} external Advisor advice.`,
+    })), null, 2);
+  }
   if (action === 'decide') {
     const decision = /^(\S+)\s+(continue|retry|replan|cancel)\s+([\s\S]+)$/.exec(rest);
     if (!decision) throw new Error('Use /sfd decide <run-id> <decision-id> <continue|retry|replan|cancel> <answer>.');

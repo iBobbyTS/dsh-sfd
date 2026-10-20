@@ -1,4 +1,4 @@
-# Validation record — 0.1.0
+# Validation record — 0.2.0
 
 ## Environment and scope
 
@@ -15,16 +15,16 @@ npm pack --ignore-scripts
 node scripts/verify-package.mjs
 ```
 
-The implementation verification passed TypeScript checking, **69 named tests with zero failures or skips**, and JavaScript/declaration builds. The package verifier checks required files, every declared export, compiled Host/role/core/client imports, and the absence of installation-time build hooks. GitHub CI repeats these checks on Node 24 and checks that committed `lib/` matches a fresh build.
+The implementation verification passed TypeScript checking, **80 named tests with zero failures or skips**, and JavaScript/declaration builds. The package verifier checks required files, every declared export, compiled Host/role/core/client imports, and the absence of installation-time build hooks. GitHub CI repeats these checks on Node 24 and checks that committed `lib/` matches a fresh build.
 
 ## What the tests establish
 
 | Area | Evidence exercised |
 | --- | --- |
-| Workflow and admission | Independent PLAN A/B, logical Code A/B, required actual checks, material repair closure, composed Feature acceptance, and truthful worktree/commit delivery |
-| Goal continuity | Explicit user decisions enter the relevant task; retired requirements retain their history and budgets; dependency release requires accepted and integrated Sections |
+| Workflow and admission | Independent PLAN A/B and PLAN_DELTA, PLAN-only silent retirement, actual serial Subsection R01, logical Code A/B, itemized closure and SIMP preservation, residual integration review, composed Feature acceptance and truthful commit delivery |
+| Goal continuity | Explicit user decisions enter the relevant task; retired requirements and structural child replacements preserve original lineage/budgets; dependency release requires accepted/integrated parent Sections |
 | Long execution | Parallel report admission, control-epoch fences, late startup/results, bounded noncooperative teardown, retained unknown-writer ownership, and separate infrastructure retry budgets |
-| Recovery | Prepared worktree and completed commit admission gaps reconciled from real Git/filesystem evidence without replaying uncertain side effects |
+| Recovery | Prepared worktree and completed commit gaps reconciled from real Git/filesystem evidence; bounded one-time hard-cap recovery, descendant ownership and original-wave inheritance, mandatory ADV-01 after second convergence failure |
 | Evidence | Complete tracked/staged/unstaged/untracked trees, independent frozen review/check worktrees, tamper detection, self-modifying-check rejection, and unchanged source checkout/index |
 | Native DSH | Actual Cordis Host, storage domain, Session ownership, native subagent spawn, role tools, structured output, observed model route, deadline/cleanup, Remote API and command registrations |
 | Native checks | Real pre-tool denial stops shell dispatch; a successful fixed command returns through the actual BashSandbox/subprocess/tools result schema |
@@ -52,3 +52,5 @@ The resolved configuration contains the Host contribution and all eleven explici
 ## Release boundaries
 
 The package targets the pinned DSH SDK. `standard` and `large` implementation contracts use the same native writer preset, with a separately configurable Host-owned large model route. The default large route inherits the standard implementer route if no override is supplied. Submodules, source-changing checkout filters, automatic takeover from another Host, automatic import of historical SFD Markdown state, and independent role/permission-definition migrations are outside this release's supported scope. The README and recovery guide describe operational behavior and explicit intervention points.
+
+No successful live paid-model end-to-end long-run benchmark, sanitized external Advisor ZIP generator, native third-party notification or old-Run migration is claimed by these deterministic tests. The exact build and test count on the final main commit should be checked in its own CI run.

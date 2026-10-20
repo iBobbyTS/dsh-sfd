@@ -63,18 +63,34 @@ function DecisionForm({ run, decision, busy, controller }: {
 }): ReactNode {
   const [answer, setAnswer] = useState('');
   const [action, setAction] = useState<NonNullable<DecideRequest['action']>>('continue');
+  const [advisorResult, setAdvisorResult] = useState('');
+  const [advisorAdoption, setAdvisorAdoption] = useState<'accept' | 'reject' | 'clarify'>('accept');
+  const external = decision.kind === 'advisor';
   return <form className="sfd-notice sfd-form" onSubmit={(event) => {
     event.preventDefault();
-    void controller.decide(run.id, decision.id, answer.trim(), action);
+    void controller.decide(run.id, decision.id, answer.trim(), action,
+      external ? { advisorResult: advisorResult.trim(), advisorAdoption } : undefined);
   }}>
     <h3>Your decision is needed</h3>
     <p>{decision.question}</p>
     {decision.context && <details><summary>Context</summary><p>{decision.context}</p></details>}
+    {external && <>
+      <p>External human Advisor: {run.advisorCase?.trigger}. Development remains blocked until its actual advice and your separate human disposition have been recorded.</p>
+      {run.advisorCase && <details open><summary>Frozen handoff facts</summary>
+        <pre>{run.advisorCase.request}</pre><p>Candidate: {run.advisorCase.candidateId ?? 'PLAN'}</p>
+      </details>}
+      <label>Verbatim external Advisor result<textarea required value={advisorResult} onChange={(event) => setAdvisorResult(event.target.value)} disabled={busy}/></label>
+      <label>Your disposition<select value={advisorAdoption} onChange={(event) => setAdvisorAdoption(event.target.value as typeof advisorAdoption)} disabled={busy}>
+        <option value="accept">Accept bounded advice</option>
+        <option value="reject">Reject (replan or cancel)</option>
+        <option value="clarify">Request clarification; keep hold</option>
+      </select></label>
+    </>}
     <label>Your instruction<textarea required value={answer} onChange={(event) => setAnswer(event.target.value)} disabled={busy}/></label>
     <label>Next step<select value={action} onChange={(event) => setAction(event.target.value as NonNullable<DecideRequest['action']>)} disabled={busy}>
       <option value="continue">Continue with this decision</option><option value="retry">Retry the interrupted task</option><option value="replan">Revise the plan</option><option value="cancel">Cancel the run</option>
     </select></label>
-    <div><button className="sfd-primary" type="submit" disabled={busy || !answer.trim()}>Record decision</button></div>
+    <div><button className="sfd-primary" type="submit" disabled={busy || !answer.trim() || (external && !advisorResult.trim())}>Record decision</button></div>
   </form>;
 }
 

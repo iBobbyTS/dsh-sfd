@@ -184,6 +184,11 @@ export class GitWorkspace implements WorkspacePort {
       const clean = scope.replaceAll('\\', '/');
       if (!clean.trim() || isAbsolute(clean) || clean.split('/').includes('..') || clean.includes('\0')) throw new Error('Invalid or escaping Section writeScope.');
     }
+    if (run.sections[sectionId]?.stage === 'subsection-implementing') {
+      const current = section.subsections[run.sections[sectionId]!.subsectionIndex ?? 0];
+      if (!current) throw new Error(`Missing active Subsection writeScope for ${sectionId}.`);
+      return current.writeScope;
+    }
     return section.writeScope;
   }
 

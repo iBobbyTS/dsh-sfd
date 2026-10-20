@@ -105,3 +105,17 @@ test('planning accounts for isolated check bootstraps and explicit hook validati
   assert.ok(implementer.includes('does not prepare the Host checks'));
   assert.ok(implementer.includes('before candidate capture') || implementer.includes('before returning'));
 });
+
+test('native A review projection retains real child checkpoint contracts but hides unrelated reviewer conclusions', () => {
+  const packet = buildActorPrompt(task('reviewer-a', {
+    subsection: { id: 'S01a', objective: 'Bounded child owner', safeIntermediateState: 'Producer remains callable' },
+    checkpointMode: 'SUBSECTION_DELTA', targetFindingIds: ['review:child:BUG-1'],
+    previousCheckpoints: [{ subsectionId: 'S01a', review: { id: 'checkpoint-review' } }],
+    peerReview: ['SECRET_OTHER_A_FINDING'],
+  }));
+  assert.match(packet, /SUBSECTION_DELTA/);
+  assert.match(packet, /Producer remains callable/);
+  assert.match(packet, /review:child:BUG-1/);
+  assert.match(packet, /checkpoint-review/);
+  assert.ok(!packet.includes('SECRET_OTHER_A_FINDING'));
+});

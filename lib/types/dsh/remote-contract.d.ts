@@ -17,6 +17,8 @@ export interface DecideRequest extends RunRequest {
     decisionId: string;
     answer: string;
     action?: 'continue' | 'retry' | 'replan' | 'cancel';
+    advisorResult?: string;
+    advisorAdoption?: 'accept' | 'reject' | 'clarify';
 }
 export interface ReviseRequest extends RunRequest {
     goal: string;
@@ -44,6 +46,12 @@ export declare const decideRequestSchema: z.ZodObject<{
         continue: "continue";
         replan: "replan";
         cancel: "cancel";
+    }>>;
+    advisorResult: z.ZodOptional<z.ZodString>;
+    advisorAdoption: z.ZodOptional<z.ZodEnum<{
+        reject: "reject";
+        accept: "accept";
+        clarify: "clarify";
     }>>;
 }, z.core.$strict>;
 export declare const reviseRequestSchema: z.ZodObject<{

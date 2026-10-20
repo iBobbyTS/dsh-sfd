@@ -37,6 +37,22 @@ Use **Revise goal** or `/sfd revise` to supply the updated complete objective. N
 
 For a semantic question, answer the actual question rather than using retry as approval. For budget exhaustion, narrow/revise the authorized plan or cancel. Infrastructure retries do not consume material repair waves and do not silently change the model.
 
+
+## Hard-cap recovery and external human Advisor
+
+The original Section owns five ordinary material repair waves. A sixth is never granted by a renamed child, a new candidate, or a new model. At the boundary, the Host creates a bounded diagnosis and admits at most one automatic recovery classification, with original-lineage identity:
+
+- `CONTINUE_CURRENT`, `SIMPLIFY_CURRENT`, `REPAIR_EVIDENCE`: one additional named wave; a further material failure triggers `ADV-01`.
+- `SPLIT_REMAINING`: two declared remaining peer Sections must cite `replacesSectionId` and inherit the same original repair lineage and shared lifetime counters; their fresh window is an offset, not a reset. The replaced original stays in retained history.
+- `REBOUND_OWNER`: must change the concrete owner scope/dependency boundary; a renamed label is not evidence.
+- `RESTART_FROM_BASE`: potentially destructive abandonment of validated work does **not** run automatically. It stops for an external-human `ADV-03` decision and explicit follow-up; no automatic Git reset is authorized.
+
+An Advisor case carries trigger ADV-01…ADV-06, original goal, Section/Feature obligations, frozen candidate identity, review findings, checks and historical decisions. The native Development panel/command requires verbatim external advice **and** a separate explicit human disposition. Clarification leaves the hold in place; a goal revision cannot bypass it. The native handoff is a local evidence **index**; it is not a scrubbed ZIP, automatic Feishu notification, or an external transmission. Inspect secrets and provenance before transferring any private data. A reviewer-subagent can never act as the external Advisor.
+
+## Persisted workflow format upgrade
+
+Version 0.2.0 uses `CORE_VERSION=1.1.0`, `POLICY_VERSION=sfd-native-2`, and `ROLE_PROTOCOL_VERSION=sfd-native-roles-2`. The format intentionally rejects incompatible active 0.1.0 state instead of silently interpreting old Subsection plans or reviewer contracts under new semantics. Finish active Runs using the old version or preserve them for explicit inspection/migration before upgrading the Host profile. This release does **not** provide an in-place legacy Run migration.
+
 ## Environment constraints
 
 - Use a Git repository with an initial commit. A source HEAD change between creation and preparation requires reviewing the new inputs.

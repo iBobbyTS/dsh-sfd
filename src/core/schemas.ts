@@ -10,6 +10,8 @@ const actorKind = z.enum(['planner', 'plan-review-a', 'plan-review-b', 'implemen
 const route = z.strictObject({ preset: identity, model: text.optional(), provider: text.optional(), effort: text.optional() });
 const workspace = z.strictObject({ path: identity, branch: text, baseCommit: identity, prepared: z.boolean().optional() });
 const candidate = z.strictObject({ id: identity, capturedAt: identity, workspacePath: identity, head: identity, treeHash: identity, diff: text, changedFiles: z.array(text) });
+const advisorTrigger = z.enum(['ADV-01','ADV-02','ADV-03','ADV-04','ADV-05','ADV-06']);
+const recoveryClass = z.enum(['CONTINUE_CURRENT','SIMPLIFY_CURRENT','REPAIR_EVIDENCE','SPLIT_REMAINING','REBOUND_OWNER','RESTART_FROM_BASE']);
 const checkEvidence = z.strictObject({
   id: identity, candidateId: identity, specId: identity, status: z.enum(['passed', 'failed', 'cancelled', 'unknown']),
   exitCode: z.number().int().nullable(), startedAt: identity, endedAt: identity, output: text, artifactRefs: z.array(text).optional(),
@@ -34,17 +36,37 @@ const attempt = z.strictObject({
   recoveryDecisionId: identity.optional(), reconciledAt: identity.optional(),
 });
 const section = z.strictObject({
-  id: identity, stage: z.enum(['pending', 'implementing', 'reroute', 'review-selection', 'review-a', 'adjudicating-a', 'repairing', 'closure', 'review-b', 'adjudicating-b', 'accepted', 'integrated']),
+  id: identity, stage: z.enum(['pending', 'subsection-implementing', 'subsection-review', 'subsection-adjudicating', 'implementing', 'reroute', 'review-selection', 'review-a', 'adjudicating-a', 'repairing', 'closure', 'review-b', 'adjudicating-b', 'accepted', 'integrated']),
   inputContractVersion: integer, lineageId: identity, materialRepairWaves: integer, diagnosticCount: integer,
   candidateId: identity.optional(), lenses: z.array(lens), checks: z.array(checkEvidence), reviewIds: z.array(identity), decisionIds: z.array(identity),
   repairInstructions: text.optional(), repairOrigin: z.enum(['a', 'b', 'feature']).optional(),
   acceptedCandidateId: identity.optional(), integratedCandidateId: identity.optional(),
   aAcceptedCandidateId: identity.optional(), aCoverageEvidenceIds: z.array(identity),
+  subsectionIndex: integer.optional(),
+  subsectionCurrentChecks: z.array(checkEvidence).optional(),
+  subsectionChecks: z.array(checkEvidence).optional(),
+  subsectionRiskLenses: z.array(lens).optional(),
+  subsectionCheckpoints: z.array(z.strictObject({
+    subsectionId: identity, candidateId: identity, reviewId: identity, checkIds: z.array(identity),
+    priorCandidateId: identity.optional(),
+  })).optional(),
+  subsectionFindingIds: z.array(identity).optional(),
+  simplifications: z.array(z.strictObject({
+    id: identity, originReviewId: identity, proposedCandidateId: identity, mechanism: identity, simplerPath: identity,
+    preservedInvariants: z.array(identity), preservationOracle: identity, affectedConsumers: z.array(text),
+    status: z.enum(['proposed', 'deferred', 'rejected', 'batched', 'preserved']),
+    closureCandidateId: identity.optional(),
+  })).optional(),
+  activeSimplificationIds: z.array(identity).optional(),
+  recovery: z.strictObject({ classification: recoveryClass, atMaterialWaves: integer,
+    extraWaveLimit: integer, diagnosisAttemptId: identity, structuralPending: z.boolean().optional() }).optional(),
   closureFindingIds: z.array(identity).optional(), freshRepairLensIds: z.array(identity).optional(),
 });
 const decision = z.strictObject({
-  id: identity, question: identity, context: text, kind: z.enum(['semantic', 'recovery', 'budget', 'infrastructure']),
+  id: identity, question: identity, context: text, kind: z.enum(['semantic', 'recovery', 'budget', 'infrastructure', 'advisor']),
   sectionId: identity.optional(), createdAt: identity, answer: text.optional(),
+  advisorTrigger: advisorTrigger.optional(), advisorResult: text.optional(),
+  advisorAdoption: z.enum(['accept','reject','clarify']).optional(),
 });
 const persistedRunSchema = z.strictObject({
   id: identity, schemaVersion: z.literal(1), workflowVersion: z.literal(CORE_VERSION),
@@ -62,6 +84,7 @@ const persistedRunSchema = z.strictObject({
   stage: z.enum(['planning', 'plan-review-a', 'plan-review-b', 'sections', 'feature-verification', 'delivery', 'done']),
   plan: planSchema.optional(), planRevision: integer, planRepairs: integer, planFeedback: z.array(text),
   planRequirementsVersion: integer.optional(),
+  planSilentRetirement: z.strictObject({ slot: z.literal('plan-review-a'), reportIds: z.array(identity), rationale: identity }).optional(),
   retiredSections: z.record(z.string(), z.strictObject({ state: section, contract: planSchema.shape.sections.element, requirementsVersion: integer, retiredAt: identity })).optional(),
   sections: z.record(z.string(), section), activeSectionId: identity.optional(),
   candidates: z.record(z.string(), candidate), currentCandidateId: identity.optional(),
@@ -78,8 +101,16 @@ const persistedRunSchema = z.strictObject({
     stage: z.enum(['a', 'closure', 'b']), lensId: identity, output: reviewSchema, valid: z.boolean(),
   })),
   decisions: z.array(z.strictObject({ id: identity, attemptId: identity, sectionId: identity.optional(), candidateId: identity.optional(), output: z.unknown(), createdAt: identity })),
-  featureChecks: z.array(checkEvidence), featureVerificationAttemptId: identity.optional(),
-  pendingDecision: decision.optional(), decisionHistory: z.array(decision),
+  featureChecks: z.array(checkEvidence),
+  integrationGaps: z.array(z.strictObject({ id: identity, featureId: identity, lens: identity, boundary: identity, candidateId: identity, reviewed: z.boolean().optional() })).optional(),
+  integrationReviews: z.array(z.strictObject({ id: identity, attemptId: identity, candidateId: identity,
+    featureId: identity, gapId: identity, output: reviewSchema })).optional(),
+  featureVerificationAttemptId: identity.optional(),
+  pendingDecision: decision.optional(),
+  advisorCase: z.strictObject({ trigger: advisorTrigger, sectionId: identity.optional(),
+    candidateId: identity.optional(), sourceAttemptId: identity.optional(), raisedAt: identity, request: identity,
+    reportIds: z.array(identity), status: z.enum(['waiting-external','waiting-human-decision','adopted']) }).optional(),
+  decisionHistory: z.array(decision),
   events: z.array(z.strictObject({ id: identity, at: identity, type: identity, message: text, attemptId: identity.optional(), sectionId: identity.optional() })),
   commit: z.strictObject({ commit: identity, candidateId: identity, branch: identity, createdAt: identity, message: text }).optional(),
   delivery: z.strictObject({ mode: z.enum(['worktree', 'commit']), candidateId: identity, path: identity, branch: identity, createdAt: identity, commit: identity.optional() }).optional(),

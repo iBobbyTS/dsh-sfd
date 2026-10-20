@@ -46,6 +46,12 @@ export declare class WorkflowController {
     private drivePlanning;
     private drivePlanReview;
     private driveSections;
+    /** A Subsection is an actual gated increment inside one parent lineage, never a child Feature. */
+    private subsection;
+    private driveSubsectionImplementation;
+    private advanceSubsection;
+    private driveSubsectionReview;
+    private driveSubsectionAdjudication;
     private driveImplementation;
     private driveSelection;
     /** The old Skill re-routes the repair delta before closing A; it does not restart unaffected lenses. */
@@ -71,6 +77,7 @@ export declare class WorkflowController {
     private admit;
     private completedOperation;
     private operation;
+    private advisorAdopted;
     private block;
     private stopLocal;
     private finishStop;

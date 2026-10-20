@@ -51,15 +51,15 @@ The controller reserves each actor or operation as an intent, durably marks disp
 
 ## Review semantics
 
-The plan models observable Features, parent Sections and internal Subsections. Parent Sections form a validated DAG. Subsections have no external dependency identity and no separate acceptance or repair allowance.
+The plan models observable Features, parent Sections and internal Subsections. Parent Sections form a validated DAG. Each declared Subsection has an owned scope, safe intermediate state, consumer and required scoped oracle. Children execute serially with independently observed R01 checkpoints; the parent R01 reconciliation consumes their actual results. Children have no external dependency identity or separate acceptance/repair allowance.
 
 PLAN A and B independently inspect the current plan in serial order. Code A always includes the complete R01 baseline plus explicitly selected material risk lenses. The controller joins the required current reports before asking for semantic adjudication.
 
 Code B1 receives a complete bounded candidate and requirements, but no earlier A conclusions, repair narratives or implementer self-assessment. Its input is filtered before prompt formatting **and before writing any context artifact**. B2 is the subsequent adjudication of B1 against applicable A/closure evidence on that same candidate; it is not presented as another independent blind reviewer.
 
-Repairs retain the original Section lineage. Current targeted closure can support explicitly reasoned reuse of unaffected A coverage; it cannot impersonate a new full A baseline. A materially repaired B candidate gets a new full blind B1. Missing coverage triggers bounded additional review/diagnosis; neither failure nor exhausted budget becomes approval. Historical incomplete reports remain history and do not poison a later valid current coverage set.
+Repairs retain the original Section lineage. Current targeted closure can support explicitly reasoned reuse of unaffected A coverage; it cannot impersonate a new full A baseline. SAFE_SIMPLIFICATION is recorded separately with stable SIMP identity; it is not material finding severity and cannot alone demand a repair wave. A batched simplification requires its own preservation-oracle closure. A materially repaired B candidate gets a new full blind B1. Missing coverage triggers bounded additional review/diagnosis; neither failure nor exhausted budget becomes approval. Historical incomplete reports remain history and do not poison a later valid current coverage set.
 
-Every accepted Section is integrated against the actual writer tree before its successors can start. Feature verification checks composed business criteria on the final common candidate. Evidence IDs must exist, required Host checks must actually pass and all required parent Sections must be integrated. The semantic verifier still owns the interpretation of evidence; structural validity does not prove model correctness.
+Every accepted Section is integrated against the actual writer tree before its successors can start. Feature verification checks composed business criteria on the final common candidate. An actually unproven composition risk can request one bounded independent focused review of the specific boundary; this is not another full peer-Section A/B. Evidence IDs must exist, required Host checks must actually pass and all required parent Sections must be integrated. The semantic verifier still owns the interpretation of evidence; structural validity does not prove model correctness.
 
 ## Source and evidence
 
@@ -69,7 +69,7 @@ Checks use another worktree, run in plan order through DSH's ordinary tool polic
 
 Large actor evidence is stored verbatim as read-only JSON, with content hashes and an index that the actor can page through using its read tool. Required goal text is retained. Context overflow creates an explicit actionable hold, not a shortened goal or invented completion. The durable ActorTask retains the exact logical input and output schema independently of this presentation.
 
-`commit: false` delivers an exact verified worktree. `commit: true` creates a Git commit from the accepted immutable tree and moves only the dedicated branch using an expected old head. A durable commit intent and receipt allow a known completed commit to be acknowledged after a crash without generating another one. Required repository hook checks belong in the sandboxed verification plan; plumbing never executes arbitrary repository hooks.
+At the DSH Host entry, the native EXECUTE_WITH_COMMIT workflow always authorizes a commit on its non-main task branch. Internally, `commit: false` is available only as a core/testing contract and delivers an exact verified worktree. `commit: true` creates a Git commit from the accepted immutable tree and moves only the dedicated branch using an expected old head. A durable commit intent and receipt allow a known completed commit to be acknowledged after a crash without generating another one. Required repository hook checks belong in the sandboxed verification plan; plumbing never executes arbitrary repository hooks.
 
 ## Permission and observation boundary
 
@@ -82,3 +82,9 @@ Routes come from the Host configuration captured in Run policy, never arbitrary 
 ## Deliberate limits
 
 This version coordinates one writer per Run in one Host process, with an exclusive physical owner file to prevent a second Host from entering the same worktree. It does not claim durable continuation of vanished JavaScript stacks or exactly-once external processes. Human-confirmed reconciliation handles the remaining side-effect uncertainty. Model reasoning quality and exhaustive coverage remain matters for model evaluation, not facts implied by the state-machine tests.
+
+## Remaining old-Skill semantics and upgrade boundary
+
+PLAN full A/B, bounded own-slot PLAN_DELTA, owner-decision hold and the original PLAN-only silent-A retirement rule are in the Host transition paths. Hard-cap diagnosis allows one nonstructural additional wave or a source-backed structural replan retaining original lineage; a second failure cannot silently create another five-wave lineage. The six Advisor conditions are explicit human holds. Advisor evidence is exposed locally and is **not** automatically sanitized, sent to Feishu, or forwarded externally.
+
+This release uses workflow protocol 1.1.0, policy sfd-native-2, and role protocol sfd-native-roles-2. Previous native Run records must not be silently interpreted as new plans; there is no automatic old-Run migration. The source evidence and active Run must be preserved for manual transition where needed. The local deterministic tests do not prove actual model judgment quality or uninterrupted multi-day real-model execution.

@@ -10,6 +10,7 @@ export interface RunRequest extends SessionRequest { runId: string }
 export interface CreateRequest extends SessionRequest { goal: string; workspacePath?: string; commit?: boolean }
 export interface DecideRequest extends RunRequest {
   decisionId: string; answer: string; action?: 'continue' | 'retry' | 'replan' | 'cancel';
+  advisorResult?: string; advisorAdoption?: 'accept' | 'reject' | 'clarify';
 }
 export interface ReviseRequest extends RunRequest { goal: string }
 
@@ -21,6 +22,8 @@ export const createRequestSchema = sessionRequestSchema.extend({
 export const decideRequestSchema = runRequestSchema.extend({
   decisionId: z.string().min(1), answer: z.string().trim().min(1).max(100_000),
   action: z.enum(['continue', 'retry', 'replan', 'cancel']).optional(),
+  advisorResult: z.string().trim().min(1).max(100_000).optional(),
+  advisorAdoption: z.enum(['accept','reject','clarify']).optional(),
 }).strict();
 export const reviseRequestSchema = runRequestSchema.extend({ goal: z.string().trim().min(1).max(100_000) }).strict();
 

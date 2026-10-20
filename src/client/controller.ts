@@ -163,8 +163,10 @@ export class DevelopmentClientController {
     return this.mutate(() => this.remote[action](this.request(runId)));
   }
 
-  decide(runId: string, decisionId: string, answer: string, action: DecideRequest['action']): Promise<boolean> {
-    return this.mutate(() => this.remote.decide({ ...this.request(runId), decisionId, answer, ...(action ? { action } : {}) }));
+  decide(runId: string, decisionId: string, answer: string, action: DecideRequest['action'],
+    advisor?: Pick<DecideRequest, 'advisorResult' | 'advisorAdoption'>): Promise<boolean> {
+    return this.mutate(() => this.remote.decide({ ...this.request(runId), decisionId, answer,
+      ...(action ? { action } : {}), ...advisor }));
   }
 
   revise(runId: string, goal: string): Promise<boolean> {
