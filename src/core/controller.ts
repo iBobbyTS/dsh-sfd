@@ -1049,12 +1049,30 @@ export class WorkflowController {
     const allReviews = run.reviews.filter((review) => review.sectionId === section.id);
     const currentReviews = this.currentReviews(allReviews, candidate.id);
     const isB = section.stage === 'adjudicating-b';
+    // The Run retains complete historical reports, but the LLM should not
+    // repeatedly re-adjudicate hundreds of already disposed historical findings.
+    const decisions = run.decisions.filter((decision) => decision.sectionId === section.id);
+    const disposedIds = new Set(decisions.flatMap((decision) => {
+      const output = decision.output as { dispositions?: { findingId: string }[] } | null;
+      return output?.dispositions?.map(item => item.findingId) ?? [];
+    }));
+    const relevantReviews = allReviews.filter(review =>
+      review.candidateId === candidate.id ||
+      section.aCoverageEvidenceIds.includes(review.id) ||
+      review.output.findings.some(finding => !disposedIds.has(`${review.id}:${finding.id}`)));
+    const priorEvidenceIndex = decisions.map(decision => {
+      const output = decision.output as { resolution?: string; dispositions?: { findingId: string; decision: string }[] } | null;
+      return { id: decision.id, candidateId: decision.candidateId,
+        resolution: output?.resolution ?? 'other', dispositions: output?.dispositions ?? [] };
+    });
     if (!attempt) return this.queueActor(run, 'adjudicator', {
       ...this.contractInput(run, section),
       purpose: isB ? 'b-admission' : currentReviews.some((review) => review.stage === 'closure') ? 'closure-admission' : 'a-admission',
-      reviews: allReviews,
-      findings: allReviews.flatMap((review) => review.output.findings.map((finding) => ({ ...finding, id: `${review.id}:${finding.id}`, evidenceId: review.id, candidateId: review.candidateId }))),
-      previousDecisions: run.decisions.filter((decision) => decision.sectionId === section.id),
+      reviews: relevantReviews,
+      findings: relevantReviews.flatMap((review) => review.output.findings
+        .filter(finding => review.candidateId === candidate.id || !disposedIds.has(`${review.id}:${finding.id}`))
+        .map((finding) => ({ ...finding, id: `${review.id}:${finding.id}`, evidenceId: review.id, candidateId: review.candidateId }))),
+      previousDecisions: priorEvidenceIndex,
       simplificationActions: (section.simplifications ?? []).filter((action) => action.status === 'proposed' && action.proposedCandidateId === candidate.id),
       repairBudget: { used: section.materialRepairWaves, maximum: run.policy.maxRepairWaves, lineageId: section.lineageId },
       selectedLenses: section.lenses,
