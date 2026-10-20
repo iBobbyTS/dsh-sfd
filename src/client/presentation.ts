@@ -45,7 +45,12 @@ export function availableActions(run: DevelopmentRun): RunAction[] {
 
 export function observedIdentity(attempt: Attempt): string {
   const observed = attempt.outcome?.identity.observed;
-  if (!observed) return 'Not recorded';
+  if (!observed) {
+    const admitted = attempt.outcome?.identity.external;
+    return admitted?.admittedModel
+      ? `External ${admitted.subagent} / ${admitted.admittedModel} (admitted; runtime echo unavailable)`
+      : 'Not recorded';
+  }
   const parts = [observed.provider, observed.model, observed.effort].filter(Boolean);
   return parts.length ? parts.join(' / ') : 'Not recorded';
 }
@@ -53,7 +58,7 @@ export function observedIdentity(attempt: Attempt): string {
 export function requestedIdentity(attempt: Attempt): string {
   const route = attempt.outcome?.identity.requested ?? attempt.task.route;
   if (!route) return 'Host configuration';
-  return [route.provider, route.model, route.effort, route.preset].filter(Boolean).join(' / ');
+  return [route.transport, route.provider, route.model, route.effort, route.preset].filter(Boolean).join(' / ');
 }
 
 export function shorten(value: string | undefined, size = 12): string {
