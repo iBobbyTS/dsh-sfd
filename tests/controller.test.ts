@@ -993,3 +993,50 @@ test('identical unfinished handoffs without source progress are diagnosed and th
   assert.ok(actors.calls.filter((call) => call.kind === 'implementer').length >= 3);
   await controller.dispose();
 });
+
+
+test('an admitted source repair consumes an original wave even when classified nonmaterial', async () => {
+  const { controller, actors, workspace } = rig();
+  let bCalls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'reviewer-b' && ++bCalls === 1) return {
+      ...clean, verdict: 'findings',
+      findings: [{ id: 'BUG', title: 'Required behavior missing',
+        body: 'A real reachable case fails.', severity: 'major', invariant: 'User export works' }],
+    };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'b-admission' && workspace.version === 1) {
+      return accept({ resolution: 'repair', material: false,
+        dispositions: [{ findingId: (task.input.findings as { id: string }[])[0].id,
+          decision: 'fix', reason: 'Reproduced required behavior.' }],
+        repairInstructions: 'Restore required export response on the exact route.' });
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed', 'blocked', 'waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.sections.S1.materialRepairWaves, 1);
+  assert.equal(actors.calls.filter((task) => task.kind === 'implementer').length, 2);
+  await controller.dispose();
+});
+
+test('an incomplete historical PLAN slot is not offered as reusable PLAN_DELTA authority', async () => {
+  const { controller, actors } = rig();
+  let bCalls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'plan-review-b' && ++bCalls === 1) {
+      return { ...clean, verdict: 'incomplete', coverage: [], limitations: ['Repository evidence temporarily unavailable'] };
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const waiting = await waitFor(controller, id, (run) => run.status === 'waiting-user');
+  await controller.decide(id, { decisionId: waiting.pendingDecision!.id, action: 'replan', answer: 'Retry reviewed plan with available source.' });
+  const done = await waitFor(controller, id, (run) => ['completed', 'blocked', 'waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  const b = actors.calls.filter((call) => call.kind === 'plan-review-b');
+  assert.equal(b.length, 2);
+  assert.equal(b[1]?.input.reviewMode, 'FULL');
+  assert.equal(b[1]?.input.previousSlot, undefined);
+  await controller.dispose();
+});
