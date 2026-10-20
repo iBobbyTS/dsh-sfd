@@ -53,12 +53,14 @@ export class WorkflowController {
     if (!input.goal.trim()) throw new Error('A development goal is required.');
     const workspace = await this.workspace.inspect(input.workspacePath);
     const at = this.now();
+    const intent = input.intent ?? 'execute';
+    if (intent === 'plan-handoff' && input.policy?.commit) throw new Error('PLAN_HANDOFF cannot create a product commit.');
     const run: DevelopmentRun = {
       id: this.id(), schemaVersion: 1, workflowVersion: CORE_VERSION,
       revision: 0, controlEpoch: 0, inputContractVersion: 1, createdAt: at, updatedAt: at,
-      goal: input.goal.trim(), requirementsHistory: [{ version: 1, goal: input.goal.trim(), at }],
+      goal: input.goal.trim(), intent, requirementsHistory: [{ version: 1, goal: input.goal.trim(), at }],
       ...(input.requireInitialPlanApproval ? { initialPlanApprovalRequired: true } : {}),
-      workspace, policy: createPolicy(input.policy), status: 'draft', stage: 'planning',
+      workspace, policy: createPolicy({ ...input.policy, ...(intent === 'plan-handoff' ? { commit: false } : {}) }), status: 'draft', stage: 'planning',
       planRevision: 0, planRepairs: 0, planFeedback: [], sections: {}, candidates: {},
       attempts: [], operations: [], reviews: [], decisions: [], featureChecks: [],
       decisionHistory: [], events: [],
@@ -337,7 +339,9 @@ export class WorkflowController {
     for (const attempt of run.attempts.filter((value) => value.state === 'intent' && !value.rejection)) {
       if (!this.activeActors.has(attempt.id)) this.launchActor(run.id, attempt);
     }
-    if (!run.workspace.prepared) {
+    // PLAN_HANDOFF only reads the existing repository, without a task worktree
+    // or any product/test commits. Reviews still use fresh independent actors.
+    if (!run.workspace.prepared && run.intent !== 'plan-handoff') {
       return this.operation(run, 'prepare', 'prepare', undefined, async (snapshot) => this.workspace.prepare(snapshot), (draft, result) => {
         draft.workspace = { ...result as DevelopmentRun['workspace'], prepared: true };
       });
@@ -542,8 +546,13 @@ export class WorkflowController {
     }
     if (!admittedCorrections.length && !output.limitations.length && output.coverage.length) {
       await this.change(run.id, (draft) => {
-        draft.stage = kind === 'plan-review-a' ? 'plan-review-b' : 'sections';
-        this.event(draft, 'plan-review-accepted', `${kind}: current independent coverage and admitted PLAN finding dispositions are complete.`);
+        if (kind === 'plan-review-b' && draft.intent === 'plan-handoff') {
+          draft.stage = 'done'; draft.status = 'completed';
+          this.event(draft, 'plan-handoff-completed', 'Independent PLAN A/B accepted; deliver the reviewed plan without implementation or commits.');
+        } else {
+          draft.stage = kind === 'plan-review-a' ? 'plan-review-b' : 'sections';
+          this.event(draft, 'plan-review-accepted', `${kind}: current independent coverage and admitted PLAN finding dispositions are complete.`);
+        }
       });
     } else if (run.planRepairs >= run.policy.maxPlanRepairs) {
       await this.change(run.id, (draft) => {

@@ -75,6 +75,7 @@ const decision = z.strictObject({
 });
 const persistedRunSchema = z.strictObject({
   id: identity, schemaVersion: z.literal(1), workflowVersion: z.literal(CORE_VERSION),
+  intent: z.enum(['execute', 'plan-handoff']).optional(),
   revision: integer, controlEpoch: integer, inputContractVersion: integer,
   createdAt: identity, updatedAt: identity, goal: identity,
   requirementsHistory: z.array(z.strictObject({ version: integer, goal: identity, at: identity })).min(1),
