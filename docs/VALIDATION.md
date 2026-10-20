@@ -79,3 +79,5 @@ The new source-level deterministic regression tests cover:
 The original parallel parent-Section product implementation and automatic legacy state import were **deliberately removed by user instruction**. Independent read-only Code A evidence can still run concurrently.
 
 **Verification limits:** deterministic actor fixtures are not a live-model end-to-end benchmark; the real Feishu bot and real external-subagent/ZCode/Codex credentials are not installed in GitHub Actions. Advisor secret scans are best-effort and require human inspection before any ZIP is forwarded. The generated `lib/` output and installed package need the final main commit build/pack consistency check. Do not claim those steps pass before their recorded CI status is available.
+
+Distribution refresh is explicitly requested only after the source parity changes are committed. The next verification run must confirm `lib/` byte-for-byte matches the source build before release.
