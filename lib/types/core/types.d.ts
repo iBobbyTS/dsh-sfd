@@ -4,7 +4,7 @@ export declare const POLICY_VERSION: "sfd-native-1";
 export type ActorKind = 'planner' | 'plan-review-a' | 'plan-review-b' | 'implementer' | 'review-selector' | 'reviewer-a' | 'reviewer-b' | 'adjudicator' | 'closure-reviewer' | 'feature-verifier' | 'diagnostician';
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
 export type RunStage = 'planning' | 'plan-review-a' | 'plan-review-b' | 'sections' | 'feature-verification' | 'delivery' | 'done';
-export type SectionStage = 'pending' | 'implementing' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
+export type SectionStage = 'pending' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
 export interface ActorRoute {
     preset: string;
     model?: string;
@@ -118,12 +118,18 @@ export interface Finding {
     invariant: string;
     location?: string;
 }
+export interface ClosureFinding {
+    findingId: string;
+    status: 'verified-closed' | 'still-open' | 'regression' | 'insufficient-evidence';
+    evidence: string;
+}
 export interface ReviewOutput {
     verdict: 'clean' | 'findings' | 'incomplete';
     summary: string;
     coverage: string[];
     limitations: string[];
     findings: Finding[];
+    closures?: ClosureFinding[];
 }
 export interface PlanOutput {
     plan: DevelopmentPlan;
@@ -143,6 +149,8 @@ export interface Lens {
 export interface ReviewSelectionOutput {
     lenses: Lens[];
     rationale: string;
+    invalidatedLensIds?: string[];
+    invalidationReason?: string;
 }
 export interface FindingDisposition {
     findingId: string;
@@ -274,6 +282,8 @@ export interface SectionState {
     integratedCandidateId?: string;
     aAcceptedCandidateId?: string;
     aCoverageEvidenceIds: string[];
+    closureFindingIds?: string[];
+    freshRepairLensIds?: string[];
 }
 export interface Operation {
     id: string;

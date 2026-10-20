@@ -48,6 +48,8 @@ export declare class WorkflowController {
     private driveSections;
     private driveImplementation;
     private driveSelection;
+    /** The old Skill re-routes the repair delta before closing A; it does not restart unaffected lenses. */
+    private driveReroute;
     private driveA;
     private driveClosure;
     private driveB;

@@ -76,6 +76,16 @@ export declare const reviewSchema: z.ZodObject<{
         invariant: z.ZodString;
         location: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>>;
+    closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        findingId: z.ZodString;
+        status: z.ZodEnum<{
+            "verified-closed": "verified-closed";
+            "still-open": "still-open";
+            regression: "regression";
+            "insufficient-evidence": "insufficient-evidence";
+        }>;
+        evidence: z.ZodString;
+    }, z.core.$strict>>>;
 }, z.core.$strict>;
 export declare const implementationSchema: z.ZodObject<{
     summary: z.ZodString;
@@ -90,6 +100,8 @@ export declare const selectionSchema: z.ZodObject<{
         focus: z.ZodString;
     }, z.core.$strict>>;
     rationale: z.ZodString;
+    invalidatedLensIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    invalidationReason: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>;
 export declare const adjudicationSchema: z.ZodObject<{
     resolution: z.ZodEnum<{
@@ -214,6 +226,16 @@ export declare const actorOutputSchemas: {
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
         }, z.core.$strict>>;
+        closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            findingId: z.ZodString;
+            status: z.ZodEnum<{
+                "verified-closed": "verified-closed";
+                "still-open": "still-open";
+                regression: "regression";
+                "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>;
     'plan-review-b': z.ZodObject<{
         verdict: z.ZodEnum<{
@@ -236,6 +258,16 @@ export declare const actorOutputSchemas: {
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
         }, z.core.$strict>>;
+        closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            findingId: z.ZodString;
+            status: z.ZodEnum<{
+                "verified-closed": "verified-closed";
+                "still-open": "still-open";
+                regression: "regression";
+                "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>;
     implementer: z.ZodObject<{
         summary: z.ZodString;
@@ -250,6 +282,8 @@ export declare const actorOutputSchemas: {
             focus: z.ZodString;
         }, z.core.$strict>>;
         rationale: z.ZodString;
+        invalidatedLensIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+        invalidationReason: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>;
     'reviewer-a': z.ZodObject<{
         verdict: z.ZodEnum<{
@@ -272,6 +306,16 @@ export declare const actorOutputSchemas: {
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
         }, z.core.$strict>>;
+        closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            findingId: z.ZodString;
+            status: z.ZodEnum<{
+                "verified-closed": "verified-closed";
+                "still-open": "still-open";
+                regression: "regression";
+                "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>;
     'reviewer-b': z.ZodObject<{
         verdict: z.ZodEnum<{
@@ -294,6 +338,16 @@ export declare const actorOutputSchemas: {
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
         }, z.core.$strict>>;
+        closures: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            findingId: z.ZodString;
+            status: z.ZodEnum<{
+                "verified-closed": "verified-closed";
+                "still-open": "still-open";
+                regression: "regression";
+                "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
+        }, z.core.$strict>>>;
     }, z.core.$strict>;
     adjudicator: z.ZodObject<{
         resolution: z.ZodEnum<{
@@ -343,6 +397,16 @@ export declare const actorOutputSchemas: {
             }>;
             invariant: z.ZodString;
             location: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>>;
+        closures: z.ZodArray<z.ZodObject<{
+            findingId: z.ZodString;
+            status: z.ZodEnum<{
+                "verified-closed": "verified-closed";
+                "still-open": "still-open";
+                regression: "regression";
+                "insufficient-evidence": "insufficient-evidence";
+            }>;
+            evidence: z.ZodString;
         }, z.core.$strict>>;
     }, z.core.$strict>;
     'feature-verifier': z.ZodObject<{

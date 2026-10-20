@@ -33,8 +33,9 @@ export declare class GitWorkspace implements WorkspacePort {
     private snapshotCommit;
     prepare(run: DevelopmentRun): Promise<WorkspaceInfo>;
     private assertPrepared;
+    private sectionPlanScope;
     private freeze;
-    capture(run: DevelopmentRun, _sectionId?: string): Promise<Candidate>;
+    capture(run: DevelopmentRun, sectionId?: string): Promise<Candidate>;
     check(run: DevelopmentRun, candidate: Candidate, specs: CheckSpec[], signal?: AbortSignal): Promise<CheckEvidence[]>;
     commit(run: DevelopmentRun, candidate: Candidate, message: string): Promise<CommitEvidence>;
     reconcile(run: DevelopmentRun): Promise<WorkspaceRecovery>;
