@@ -1,0 +1,60 @@
+/** Scoped to this panel; uses the host's inherited font and color scheme. */
+export const PANEL_STYLES = `
+.sfd-workflow { height:100%; overflow:auto; box-sizing:border-box; padding:28px max(24px, var(--dsh-frame-leading-clearance, 24px)); color:var(--dsh-color-text-primary, inherit); background:var(--dsh-color-bg-primary, transparent); font:inherit; }
+.sfd-workflow * { box-sizing:border-box; }
+.sfd-workflow h1 { margin:0; font-size:25px; line-height:1.3; font-weight:650; }
+.sfd-workflow h2 { margin:0 0 12px; font-size:18px; }
+.sfd-workflow h3 { margin:0 0 8px; font-size:15px; }
+.sfd-workflow p { margin:7px 0 12px; line-height:1.6; }
+.sfd-workflow code { overflow-wrap:anywhere; font-size:12px; }
+.sfd-workflow small, .sfd-muted { opacity:.7; font-size:12px; }
+.sfd-head, .sfd-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.sfd-head { justify-content:space-between; margin-bottom:20px; }
+.sfd-toolbar { display:flex; align-items:end; gap:12px; margin:18px 0; flex-wrap:wrap; }
+.sfd-workflow button, .sfd-workflow select, .sfd-workflow input, .sfd-workflow textarea { font:inherit; color:inherit; }
+.sfd-workflow button { border:1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius:7px; background:color-mix(in srgb, currentColor 4%, transparent); padding:7px 12px; cursor:pointer; }
+.sfd-workflow button:hover:not(:disabled) { background:color-mix(in srgb, currentColor 9%, transparent); }
+.sfd-workflow button:disabled { opacity:.45; cursor:default; }
+.sfd-workflow button:focus-visible, .sfd-workflow select:focus-visible, .sfd-workflow input:focus-visible, .sfd-workflow textarea:focus-visible, .sfd-workflow summary:focus-visible { outline:2px solid #488df5; outline-offset:2px; }
+.sfd-workflow .sfd-primary { color:#fff; background:#236cdd; border-color:#236cdd; }
+.sfd-workflow .sfd-primary:hover:not(:disabled) { background:#165bc5; }
+.sfd-workflow .sfd-danger { color:#cc4a50; }
+.sfd-workflow label { display:grid; gap:6px; font-size:13px; }
+.sfd-workflow select, .sfd-workflow input:not([type=checkbox]), .sfd-workflow textarea { width:100%; border:1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius:6px; background:transparent; padding:8px 10px; }
+.sfd-workflow select { max-width:450px; }
+.sfd-workflow select option { color:CanvasText; background:Canvas; }
+.sfd-workflow textarea { resize:vertical; min-height:96px; line-height:1.55; }
+.sfd-workflow .sfd-check { display:flex; flex-direction:row; align-items:center; gap:8px; }
+.sfd-owner { min-width:240px; max-width:520px; flex:1; }
+.sfd-layout { display:grid; grid-template-columns:minmax(210px, 270px) minmax(0, 1fr); gap:24px; }
+.sfd-run-list { display:grid; align-content:start; gap:8px; }
+.sfd-workflow .sfd-run { text-align:left; padding:12px; display:grid; gap:7px; line-height:1.45; }
+.sfd-workflow .sfd-run[aria-current=true] { border-color:#488df5; background:color-mix(in srgb, #488df5 8%, transparent); }
+.sfd-run-title { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.sfd-detail { min-width:0; }
+.sfd-card { border:1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius:9px; padding:16px; margin-bottom:14px; }
+.sfd-badge { font-size:11px; font-weight:600; padding:3px 7px; border-radius:4px; display:inline-block; background:color-mix(in srgb, currentColor 7%, transparent); }
+.sfd-badge[data-status=running], .sfd-badge[data-status=started] { color:#3980e8; background:color-mix(in srgb, #3980e8 10%, transparent); }
+.sfd-badge[data-status=completed], .sfd-badge[data-status=integrated], .sfd-badge[data-status=passed], .sfd-badge[data-status=admitted] { color:#268468; background:color-mix(in srgb, #268468 10%, transparent); }
+.sfd-badge[data-status=blocked], .sfd-badge[data-status=failed], .sfd-badge[data-status=waiting-user], .sfd-badge[data-status=unknown] { color:#c07824; background:color-mix(in srgb, #c07824 10%, transparent); }
+.sfd-notice { padding:12px 14px; border-left:3px solid #c07824; background:color-mix(in srgb, #c07824 7%, transparent); margin:12px 0; line-height:1.6; }
+.sfd-error { color:#cf525a; overflow-wrap:anywhere; }
+.sfd-form { display:grid; gap:14px; max-width:820px; margin:16px 0 24px; }
+.sfd-workflow dl { display:grid; grid-template-columns:max-content minmax(0, 1fr); gap:6px 14px; margin:12px 0; font-size:13px; }
+.sfd-workflow dt { opacity:.65; }
+.sfd-workflow dd { margin:0; overflow-wrap:anywhere; }
+.sfd-workflow ul { padding-left:20px; margin:10px 0; line-height:1.65; }
+.sfd-workflow li { margin:3px 0; }
+.sfd-workflow summary { cursor:pointer; line-height:1.6; }
+.sfd-workflow details { margin:10px 0; }
+.sfd-workflow details > .sfd-card { margin-top:10px; }
+.sfd-workflow table { border-collapse:collapse; width:100%; text-align:left; font-size:12px; }
+.sfd-table { width:100%; overflow:auto; margin:10px 0; }
+.sfd-workflow th, .sfd-workflow td { vertical-align:top; padding:9px 8px; border-bottom:1px solid color-mix(in srgb, currentColor 12%, transparent); line-height:1.55; }
+.sfd-workflow th { font-weight:600; }
+.sfd-workflow pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:340px; overflow:auto; padding:12px; background:color-mix(in srgb, currentColor 4%, transparent); border-radius:6px; font-size:12px; }
+.sfd-timeline { list-style:none; padding:0!important; }
+.sfd-timeline li { margin:10px 0; padding-left:12px; border-left:2px solid color-mix(in srgb, currentColor 18%, transparent); }
+.sfd-empty { padding:36px 16px; opacity:.7; text-align:center; line-height:1.7; }
+@media (max-width:900px) { .sfd-layout { grid-template-columns:1fr; } .sfd-run-list { grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); } .sfd-workflow { padding:22px 16px; } }
+`;

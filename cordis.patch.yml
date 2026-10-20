@@ -1,0 +1,159 @@
+# One Host controller, with independent preset generations for bounded actors.
+- insert:
+    - id: dsh-sfd
+      name: dsh-sfd
+    - id: sfd-preset-planner
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-planner
+        name: SFD Planner
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: planner }
+    - id: sfd-preset-plan-review-a
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-plan-review-a
+        name: SFD Plan Review A
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: plan-review-a }
+    - id: sfd-preset-plan-review-b
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-plan-review-b
+        name: SFD Plan Review B
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: plan-review-b }
+    - id: sfd-preset-implementer
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-implementer
+        name: SFD Implementer
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: '@deepseek-ai/dsh-tool-bash'
+            config: { enableRunInBackground: false, promoteOnTimeout: false }
+          - name: dsh-sfd/role
+            config: { kind: implementer }
+    - id: sfd-preset-review-selector
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-review-selector
+        name: SFD Review Selection
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: review-selector }
+    - id: sfd-preset-reviewer-a
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-reviewer-a
+        name: SFD Code Review A
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: reviewer-a }
+    - id: sfd-preset-reviewer-b
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-reviewer-b
+        name: SFD Code Review B
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: reviewer-b }
+    - id: sfd-preset-adjudicator
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-adjudicator
+        name: SFD Evidence Adjudication
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: adjudicator }
+    - id: sfd-preset-closure-reviewer
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-closure-reviewer
+        name: SFD Repair Closure
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: closure-reviewer }
+    - id: sfd-preset-feature-verifier
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-feature-verifier
+        name: SFD Feature Acceptance
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: feature-verifier }
+    - id: sfd-preset-diagnostician
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-diagnostician
+        name: SFD Diagnosis
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: '@deepseek-ai/dsh-tool-fs'
+            config: { write: false, edit: false }
+          - name: '@deepseek-ai/dsh-tool-fs-search'
+            config: { sampleOverCapGlobResults: false }
+          - name: dsh-sfd/role
+            config: { kind: diagnostician }

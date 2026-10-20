@@ -1,0 +1,31 @@
+name: Verify plugin
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: Verify committed distributable matches source
+        run: git diff --exit-code -- lib
+      - name: Verify package contents
+        run: |
+          npm pack --ignore-scripts
+          node scripts/verify-package.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-sfd-package
+          path: '*.tgz'
