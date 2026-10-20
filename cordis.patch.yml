@@ -157,3 +157,14 @@
             config: { sampleOverCapGlobResults: false }
           - name: dsh-sfd/role
             config: { kind: diagnostician }
+
+    - id: sfd-preset-advisor-notice
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: sfd-advisor-notice
+        name: SFD Advisor Notification
+        plugins:
+          - name: '@deepseek-ai/dsh-agent-instructions'
+            config: { maxBytes: 65536 }
+          - name: dsh-sfd/role
+            config: { kind: advisor-notice }
