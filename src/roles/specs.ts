@@ -11,7 +11,7 @@ export interface RoleSpec {
   readonly toolNames: readonly string[];
 }
 
-const READ_TOOLS = ['read', 'read_image', 'glob', 'grep', 'structured_output'] as const;
+const READ_TOOLS = ['read', 'read_image', 'glob', 'grep', 'structured_output', 'sfd_knowledge'] as const;
 const WRITE_TOOLS = [...READ_TOOLS, 'write', 'edit', 'bash'] as const;
 
 export const ROLE_SPECS = {
