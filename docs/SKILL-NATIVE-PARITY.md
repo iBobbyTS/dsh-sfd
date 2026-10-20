@@ -37,4 +37,4 @@ Host-specific Codex/ZCode/external-subagent routing references remain historical
 
 ## Validation
 
-The final migration-branch GitHub Actions run validated 80 deterministic tests without failures, TypeScript checking, generated bundles and npm package verification on DSH 0.2.1-rc.2. Live paid-model long-horizon quality, external manual Advisor transport and migration of active 0.1.0 Runs have not been verified. Core/Policy/Role protocol versions were intentionally changed to reject unconverted old state.
+The initial migration validated 80 deterministic tests without failures; parity convergence expanded this to 88 tests, including exact Section-boundary and native workflow regression cases. The branch GitHub Actions run validated these without failures, TypeScript checking, generated bundles and npm package verification on DSH 0.2.1-rc.2. Live paid-model long-horizon quality, external manual Advisor transport and migration of active 0.1.0 Runs have not been verified. Core/Policy/Role protocol versions were intentionally changed to reject unconverted old state.
