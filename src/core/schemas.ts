@@ -115,7 +115,7 @@ const persistedRunSchema = z.strictObject({
   pendingDecision: decision.optional(),
   advisorCase: z.strictObject({ trigger: advisorTrigger, sectionId: identity.optional(),
     candidateId: identity.optional(), sourceAttemptId: identity.optional(), raisedAt: identity, request: identity,
-    reportIds: z.array(identity), status: z.enum(['waiting-external','waiting-human-decision','adopted']),
+    reportIds: z.array(identity), status: z.enum(['preparing','waiting-external','waiting-human-decision','adopted']),
     package: z.strictObject({ path: identity, sha256: identity, requestId: identity, requestPath: identity, responsePath: identity, exclusionsPath: identity, generatedAt: identity, bigFiles: integer }).optional(),
     notice: z.strictObject({ project: identity, feature: identity, reason: identity }).optional(),
     notification: z.strictObject({ status: z.enum(['sent','failed','unknown']), attemptedAt: identity, failure: text.optional() }).optional(),
