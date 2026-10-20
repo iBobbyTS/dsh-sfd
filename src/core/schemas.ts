@@ -8,7 +8,7 @@ const integer = z.number().int().nonnegative();
 const object = z.record(z.string(), z.unknown());
 const actorKind = z.enum(['planner', 'plan-review-a', 'plan-review-b', 'implementer', 'review-selector', 'reviewer-a', 'reviewer-b', 'adjudicator', 'closure-reviewer', 'feature-verifier', 'diagnostician']);
 const route = z.strictObject({ preset: identity, model: text.optional(), provider: text.optional(), effort: text.optional() });
-const workspace = z.strictObject({ path: identity, branch: text, baseCommit: identity, prepared: z.boolean().optional() });
+const workspace = z.strictObject({ path: identity, branch: text, baseCommit: identity, initialTreeHash: identity.optional(), prepared: z.boolean().optional() });
 const candidate = z.strictObject({ id: identity, capturedAt: identity, workspacePath: identity, head: identity, treeHash: identity, diff: text, changedFiles: z.array(text),
   sectionDelta: z.strictObject({ sectionId: identity, baseTreeHash: identity, diff: text, changedFiles: z.array(text) }).optional() });
 const advisorTrigger = z.enum(['ADV-01','ADV-02','ADV-03','ADV-04','ADV-05','ADV-06']);
@@ -39,7 +39,7 @@ const attempt = z.strictObject({
 const section = z.strictObject({
   id: identity, stage: z.enum(['pending', 'subsection-implementing', 'subsection-review', 'subsection-adjudicating', 'implementing', 'reroute', 'review-selection', 'review-a', 'adjudicating-a', 'repairing', 'closure', 'review-b', 'adjudicating-b', 'accepted', 'integrated']),
   inputContractVersion: integer, lineageId: identity, materialRepairWaves: integer, diagnosticCount: integer,
-  candidateId: identity.optional(), sectionBaseCandidateId: identity.optional(),
+  candidateId: identity.optional(), sectionBaseTreeHash: identity.optional(),
   unfinishedContinuation: z.strictObject({ phase: z.enum(['implementing', 'subsection-implementing']), subsectionId: identity.optional(), treeHash: identity, remainingWork: text, repeats: integer }).optional(),
   lenses: z.array(lens), checks: z.array(checkEvidence), reviewIds: z.array(identity), decisionIds: z.array(identity),
   repairInstructions: text.optional(), repairOrigin: z.enum(['a', 'b', 'feature']).optional(),
