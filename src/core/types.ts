@@ -69,7 +69,7 @@ export interface SectionPlan {
 }
 export interface DevelopmentPlan { title: string; features: FeaturePlan[]; sections: SectionPlan[]; assumptions: string[] }
 export interface WorkspaceInfo {
-  path: string; branch: string; baseCommit: string;
+  path: string; branch: string; baseCommit: string; initialTreeHash?: string;
   /** A prepared run must use a dedicated non-default branch. */
   prepared?: boolean;
 }
@@ -196,7 +196,7 @@ export interface SectionState {
   lineageId: string; materialRepairWaves: number; diagnosticCount: number;
   candidateId?: string;
   /** Frozen source just before this parent Section first became executable. */
-  sectionBaseCandidateId?: string;
+  sectionBaseTreeHash?: string;
   unfinishedContinuation?: { phase: 'implementing' | 'subsection-implementing'; subsectionId?: string; treeHash: string; remainingWork: string; repeats: number };
   lenses: Lens[];
   checks: CheckEvidence[];
