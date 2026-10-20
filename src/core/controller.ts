@@ -1607,7 +1607,8 @@ export class WorkflowController {
     }
     if (attempt.outcome?.status !== 'completed') {
       await this.change(run.id, (draft) => { draft.attempts.find((entry) => entry.id === attempt.id)!.rejection = attempt.outcome?.error ?? 'Execution did not complete.'; });
-      if (task.kind !== 'implementer' && attempt.outcome?.status === 'failed' && attempt.infrastructureRetries < run.policy.maxInfrastructureRetries) {
+      const nonRetryableTransport = /^(EXTERNAL_SUBAGENT_SPAWN_UNCERTAIN|MODEL_CONFIGURATION_UNVERIFIED)/.test(attempt.outcome?.error ?? '');
+      if (task.kind !== 'implementer' && attempt.outcome?.status === 'failed' && !nonRetryableTransport && attempt.infrastructureRetries < run.policy.maxInfrastructureRetries) {
         await this.change(run.id, (draft) => { this.event(draft, 'infrastructure-retry', `Retrying the same ${task.kind} route after an execution failure; semantic repair budget unchanged.`, { attemptId: attempt.id }); });
         return;
       }
