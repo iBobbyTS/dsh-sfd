@@ -8,7 +8,7 @@ import { buildActorPrompt } from '../roles/prompts.js';
 import { prepareActorPrompt } from '../workspace/actor-context.js';
 import { runProcess } from '../workspace/process.js';
 import type { DomainRunStore } from './store.js';
-import { externalTarget } from './model-routing.js';
+import { configuredActorRoute, externalTarget } from './model-routing.js';
 import { validateActorRoute } from './actors.js';
 import { ROLE_PRESETS } from '../roles/specs.js';
 
@@ -129,13 +129,7 @@ export class ExternalSubagentRunner implements ActorRunner {
     const run = await this.store.get(task.runId);
     const owner = this.store.ownerOf(task.runId);
     if (!run || !owner) throw new Error(`External SFD actor has no owning Run: ${task.runId}`);
-    const section = task.kind === 'implementer' && task.sectionId
-      ? run.plan?.sections.find((entry) => entry.id === task.sectionId) : undefined;
-    const expected = section?.implementation === 'large'
-      ? run.policy.largeImplementerRoute : run.policy.routes[task.kind];
-    if (section?.implementation === 'large' && !expected) {
-      throw new Error('MODEL_CONFIGURATION_UNVERIFIED: impl_large needs its explicitly authorized model route.');
-    }
+    const expected = configuredActorRoute(task, run);
     validateActorRoute(task, expected);
     const route = task.route ?? expected ?? { preset: ROLE_PRESETS[task.kind] };
     const target = externalTarget(route, ROLE_SPECS[task.kind].access, owner.sandboxMode);

@@ -210,7 +210,7 @@ export class GitWorkspace implements WorkspacePort {
     // Compare only the newly authored delta, not previously integrated Sections
     // or dirty user input copied into the worktree before implementation.
     const section = sectionId ? run.sections[sectionId] : undefined;
-    if (section && ['implementing', 'repairing'].includes(section.stage)) {
+    if (section && ['implementing', 'repairing', 'subsection-implementing'].includes(section.stage)) {
       const previous = run.currentCandidateId ? run.candidates[run.currentCandidateId] : undefined;
       const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Manifest;
       const beforeTree = previous?.treeHash ?? manifest.initialTree;

@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-working-directory';
 import type { ActorHandle, ActorRunner } from '../core/ports.js';
 import type { ActorOutcome, ActorRoute, ActorTask, ExecutionIdentity } from '../core/types.js';
 import { ROLE_PRESETS } from '../roles/index.js';
+import { configuredActorRoute } from './model-routing.js';
 import { prepareActorPrompt } from '../workspace/actor-context.js';
 import type { DomainRunStore, RunOwner } from './store.js';
 
@@ -107,13 +108,7 @@ export class NativeActorRunner implements ActorRunner {
     const run = await this.store.get(task.runId);
     const owner = this.store.ownerOf(task.runId);
     if (run === undefined || owner === undefined) throw new Error(`Unknown Run: ${task.runId}`);
-    const sectionContract = task.kind === 'implementer' && task.sectionId
-      ? run.plan?.sections.find((section) => section.id === task.sectionId) : undefined;
-    if (sectionContract?.implementation === 'large' && !run.policy.largeImplementerRoute) {
-      throw new Error('MODEL_CONFIGURATION_UNVERIFIED: impl_large has no explicitly authorized Host model route. No silent standard-model fallback.');
-    }
-    const allowedRoute = sectionContract?.implementation === 'large'
-      ? run.policy.largeImplementerRoute : run.policy.routes[task.kind];
+    const allowedRoute = configuredActorRoute(task, run);
     validateActorRoute(task, allowedRoute);
     const route = task.route ?? allowedRoute ?? { preset: ROLE_PRESETS[task.kind] };
     const requestedOptions = nativeAgentOptions(owner, route);
