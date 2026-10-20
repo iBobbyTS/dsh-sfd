@@ -135,9 +135,9 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
         provider: <your-configured-provider-id>
         model: <your-configured-model-id>
     # 与原 SFD 的 impl_large 路由对应，供实施等级为 large 的 Section 使用：
-    largeImplementerModel:
-      provider: <your-large-provider-id>
-      model: <your-large-model-id>
+    largeImplementerProvider: <your-large-provider-id>
+    largeImplementerModel: <your-large-model-id>
+    # largeImplementerEffort: high
 ```
 
 路由固定在 Run policy 中，actor 结果不能更改模型或角色 preset。执行记录区分请求路由与实际请求头观察到的路由，缺失观察时不会伪造模型身份。`standard/large` 使用同一个原生实施者 preset，但可按 Section 等级选择不同的 Host 授权模型路由。未指定 large 专用模型时沿用标准 implementer 路由。
