@@ -1697,6 +1697,9 @@ export class WorkflowController {
       if (draft.status !== 'running' || task.controlEpoch !== draft.controlEpoch || task.inputContractVersion !== (currentSection?.inputContractVersion ?? draft.inputContractVersion) || task.input.phase !== (currentSection?.stage ?? draft.stage)) return;
       const record = draft.attempts.find((entry) => entry.id === attempt.id)!;
       record.state = 'admitted'; record.admittedOutput = output;
+      const raw = attempt.outcome?.output;
+      if (raw && typeof raw === 'object' && !Array.isArray(raw) && typeof (raw as Record<string, unknown>).reportMarkdown === 'string')
+        record.reportMarkdown = (raw as { reportMarkdown: string }).reportMarkdown;
       if (task.kind === 'reviewer-a' && task.featureId) {
         const gap = draft.integrationGaps?.find((entry) => entry.featureId === task.featureId &&
           `INTEGRATION-${entry.id}` === task.lens?.id && entry.candidateId === task.candidateId);
