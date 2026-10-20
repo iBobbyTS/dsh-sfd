@@ -603,6 +603,32 @@ export class WorkflowController {
     }));
   }
 
+  /** Partial work is not a failed review wave; diagnose only repeated absence of progress. */
+  private async continueUnfinished(run: DevelopmentRun, section: SectionState, output: ImplementationOutput,
+    candidate: Candidate, subsectionId?: string): Promise<boolean> {
+    const previous = section.unfinishedContinuation;
+    const remaining = JSON.stringify(output.remainingWork);
+    const phase = section.stage === 'subsection-implementing' ? 'subsection-implementing' : 'implementing';
+    const repeats = previous?.phase === phase && previous.subsectionId === subsectionId &&
+      previous.treeHash === candidate.treeHash && previous.remainingWork === remaining ? previous.repeats + 1 : 0;
+    await this.change(run.id, (draft) => {
+      const state = draft.sections[section.id]!;
+      state.inputContractVersion++;
+      state.unfinishedContinuation = { phase, ...(subsectionId ? { subsectionId } : {}),
+        treeHash: candidate.treeHash, remainingWork: remaining, repeats };
+      state.repairInstructions = `Continue the existing owned ${subsectionId ? `Subsection ${subsectionId}` : 'Section'} from the captured actual changes. Remaining: ${output.remainingWork.join('; ')}.`;
+      if (repeats >= 1 && state.diagnosticCount < draft.policy.maxDiagnostics) {
+        draft.diagnostic = { reason: `No observable implementation progress across repeated partial ${subsectionId ?? section.id} handoffs; identify a concrete obstacle and a bounded next action.`, sectionId: section.id, requestedAt: this.now() };
+      }
+      this.event(draft, 'owned-work-continued', repeats ? 'Repeated partial handoff has unchanged source and obligations.' : 'Partial authorized implementation retained; progress can continue.', { sectionId: state.id });
+    });
+    if (repeats >= 1 && section.diagnosticCount >= run.policy.maxDiagnostics) {
+      await this.block(run.id, 'Repeated incomplete handoffs made no observable progress after the bounded diagnosis.', 'semantic', section.id);
+      return false;
+    }
+    return true;
+  }
+
   private async driveSubsectionImplementation(run: DevelopmentRun, section: SectionState): Promise<boolean> {
     const child = this.subsection(run, section);
     const attempt = this.latest(run, 'implementer', section);
@@ -624,20 +650,7 @@ export class WorkflowController {
           draft.candidates[value.id] = value; draft.currentCandidateId = value.id;
           draft.sections[section.id]!.candidateId = value.id;
         });
-      const repeats = run.attempts.filter((item) => item.task.sectionId === section.id &&
-        item.task.input.phase === 'subsection-implementing' && item.task.input.subsection &&
-        (item.task.input.subsection as { id: string }).id === child.id && item.state === 'admitted' &&
-        (item.admittedOutput as ImplementationOutput).remainingWork.length).length;
-      if (repeats > 3) {
-        await this.block(run.id, `Subsection ${child.id} remains unfinished after bounded continuation.`, 'semantic', section.id);
-        return false;
-      }
-      await this.change(run.id, (draft) => {
-        const state = draft.sections[section.id]!;
-        state.inputContractVersion++;
-        state.repairInstructions = `Continue the same Subsection ${child.id} from actual changes: ${result.remainingWork.join('; ')}`;
-      });
-      return true;
+      return this.continueUnfinished(run, section, result, this.candidate(run, section), child.id);
     }
     const captureKey = `subsection-capture:${attempt.id}`;
     if (!this.completedOperation(run, captureKey)) return this.operation(run, 'capture', captureKey, section.id,
@@ -688,7 +701,7 @@ export class WorkflowController {
       state.subsectionIndex = (state.subsectionIndex ?? 0) + 1;
       state.inputContractVersion++;
       state.stage = state.subsectionIndex < this.sectionPlan(draft, state).subsections.length ? 'subsection-implementing' : 'review-selection';
-      delete state.subsectionFindingIds; delete state.subsectionCurrentChecks; delete state.subsectionRiskLenses; delete state.repairInstructions;
+      delete state.subsectionFindingIds; delete state.subsectionCurrentChecks; delete state.subsectionRiskLenses; delete state.repairInstructions; delete state.unfinishedContinuation;
       delete state.repairOrigin; delete state.closureFindingIds; delete state.freshRepairLensIds;
       this.event(draft, 'subsection-checkpoint-verified', `Subsection ${child.id}: CHECKPOINT_VERIFIED, not parent ACCEPTED.`, { sectionId: state.id });
     });
@@ -815,20 +828,10 @@ export class WorkflowController {
       if (!this.completedOperation(run, captureKey)) return this.operation(run, 'capture', captureKey, section.id,
         (snapshot) => this.workspace.capture(snapshot, section.id), (draft, value) => {
           const actual = value as Candidate;
-          draft.candidates[actual.id] = actual; draft.currentCandidateId = actual.id; draft.sections[section.id]!.candidateId = actual.id;
+          draft.candidates[actual.id] = actual; draft.currentCandidateId = actual.id;
+          draft.sections[section.id]!.candidateId = actual.id;
         });
-      const unfinished = run.attempts.filter((entry) => entry.state === 'admitted' && entry.task.sectionId === section.id && entry.task.kind === 'implementer' && (entry.admittedOutput as ImplementationOutput).remainingWork.length > 0).length;
-      if (unfinished > 3) {
-        await this.block(run.id, `Owned implementation remains unfinished after bounded continuation and diagnosis: ${result.remainingWork.join('; ')}`, 'semantic', section.id); return false;
-      }
-      await this.change(run.id, (draft) => {
-        const state = draft.sections[section.id]!;
-        state.inputContractVersion++;
-        state.repairInstructions = `Continue the existing owned task from the captured actual changes. Complete: ${result.remainingWork.join('; ')}. Do not propose a new scope for already authorized work.`;
-        if (unfinished === 2) draft.diagnostic = { reason: 'Repeated execution stopped with unfinished owned work; identify the obstacle and concrete continuation.', sectionId: section.id, requestedAt: this.now() };
-        this.event(draft, 'owned-work-continued', 'Unfinished authorized work retained in the same Section and continued from actual changes.', { sectionId: section.id });
-      });
-      return true;
+      return this.continueUnfinished(run, section, result, this.candidate(run, section));
     }
     const captureKey = `capture:${attempt.id}`;
     if (!this.completedOperation(run, captureKey)) {
@@ -847,6 +850,7 @@ export class WorkflowController {
     }
     await this.change(run.id, (draft) => {
       const next = draft.sections[section.id]!;
+      delete next.unfinishedContinuation;
       next.stage = section.stage === 'repairing' ? 'reroute' : 'review-selection';
       this.event(draft, 'implementation-captured', 'Actual implementation candidate and host-run checks recorded.', { sectionId: section.id, attemptId: attempt.id });
     });
