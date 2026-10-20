@@ -236,7 +236,15 @@ export class GitWorkspace implements WorkspacePort {
     }
     const diff = await this.git(run.workspace.path, ['diff', '--binary', run.workspace.baseCommit, treeHash, '--']);
     const changedFiles = (await this.git(run.workspace.path, ['diff', '--name-only', '-z', run.workspace.baseCommit, treeHash, '--'])).split('\0').filter(Boolean);
-    const candidate: Candidate = { id, capturedAt: now(), workspacePath, head, treeHash, diff, changedFiles };
+    const sectionBase = section?.sectionBaseCandidateId && run.candidates[section.sectionBaseCandidateId];
+    if (sectionId && !sectionBase) throw new Error(`Parent Section ${sectionId} has no frozen starting candidate; refusing a cumulative Feature diff as Section coverage.`);
+    const sectionDelta = sectionBase && sectionId ? {
+      sectionId, baseTreeHash: sectionBase.treeHash,
+      diff: await this.git(run.workspace.path, ['diff', '--binary', sectionBase.treeHash, treeHash, '--']),
+      changedFiles: (await this.git(run.workspace.path, ['diff', '--name-only', '-z', sectionBase.treeHash, treeHash, '--'])).split('\0').filter(Boolean),
+    } : undefined;
+    const candidate: Candidate = { id, capturedAt: now(), workspacePath, head, treeHash, diff, changedFiles,
+      ...(sectionDelta ? { sectionDelta } : {}) };
     await this.writeJson(join(candidateDirectory, `${id}.json`), candidate);
     return candidate;
   }
