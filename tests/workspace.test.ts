@@ -282,3 +282,21 @@ test('unknown workflow and policy versions cannot silently reinterpret an existi
   assert.equal(runSchema.safeParse({ ...run, policy: { ...run.policy, version: 'future-policy' } }).success, false);
   assert.throws(() => createPolicy({ version: 'future-policy' }), /Explicit migration/);
 });
+
+test('a Section writer may change its admitted scope but cannot silently modify another owner', async (t) => {
+  const { workspace, run } = await fixture(t);
+  run.plan = {
+    title: 'Scope ownership', assumptions: [],
+    features: [{ id: 'F1', title: 'Local edit', outcome: 'Update source', acceptanceCriteria: ['source reflects edit'], sectionIds: ['S1'], checks: [] }],
+    sections: [{ id: 'S1', title: 'Local owner', featureIds: ['F1'], objective: 'Edit source', dependencies: [],
+      writeScope: ['source.txt'], acceptanceCriteria: ['edit source'], implementation: 'standard', checks: [], subsections: [] }],
+  };
+  run.sections = { S1: { id: 'S1', stage: 'implementing', inputContractVersion: 1, lineageId: 'S1-original',
+    materialRepairWaves: 0, diagnosticCount: 0, lenses: [], checks: [], reviewIds: [], decisionIds: [], aCoverageEvidenceIds: [] } };
+  run.workspace = await workspace.prepare(run);
+  await writeFile(join(run.workspace.path, 'source.txt'), 'in scope\n');
+  const valid = await workspace.capture(run, 'S1');
+  assert.ok(valid.treeHash);
+  await writeFile(join(run.workspace.path, 'another-owner.txt'), 'out of scope\n');
+  await assert.rejects(workspace.capture(run, 'S1'), /outside its admitted writeScope: another-owner\.txt/);
+});
