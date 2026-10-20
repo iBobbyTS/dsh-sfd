@@ -32,7 +32,7 @@ npm run check
 dsh plugin --profile dev add "$PWD" --ignore-scripts
 ```
 
-Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `/sfd` 命令。插件 bundle 安装一个 Host 服务和 11 个独立角色 preset。
+Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `/sfd` 命令。插件 bundle 安装一个 Host 服务和 12 个独立角色 preset。
 
 ## 开始一个任务
 
@@ -74,13 +74,25 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 /sfd advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>
 ```
 
-不会自动联系外部 Advisor，也不会把项目源码或对话上传给第三方。当前提供的是持久化的证据索引和人工接管 UI，**不自动生成原 Skill 的脱敏 Advisor ZIP，也不自动通过飞书发送通知**；需要用户自行检查候选代码和敏感内容后交接。未人工裁决的 Advisor hold 不允许通过 `revise` 或 `resume` 绕过。
+不会自动联系外部 Advisor，也不会将 ZIP 或源码传给飞书或第三方。**一旦触发 ADV-01—ADV-06，Host 程序化终止当前执行器、生成原版保密过滤策略的本地 Advisor ZIP、验证 SHA-256、持久记录排除清单与请求证据，然后调用专用的只读通知角色生成三个短字段，由 Host 使用本机飞书签名机器人直接通知。** 飞书只发送：项目、正在实现的功能、需要 Advisor 的原因。ZIP 只供用户检查后人工提交。通知失败/未知会保存真实状态并在 Development 面板显示三项内容与 ZIP 路径/Hash，不允许解除 Advisor 等待；也不自动改用邮件。外部 Advisor 原文与人工采纳决定保留在 response/ 中。原 Skill 的安全扫描是 best effort，不能保证绝对无敏感信息，分享前仍需人工检查。
+
+本机飞书配置遵循 [iBobbyTS/AGENTS 的 feishu-message-sender](https://github.com/iBobbyTS/AGENTS/tree/main/skills/feishu-message-sender)：`~/.config/feishu-message-sender/secret.json` 包含 `webhook`、`secret`、`name`，仅 Host 读取，不暴露给模型、回执、通知或 Git。本插件获得本项目 Advisor 自动通知的显式用户授权，无需由 LLM 自行启动临时 Python reporter。需要预先安装 Python 3 和该配置；无配置时记录失败并提示，不伪称已发。**尚未在真实已授权飞书配置和付费模型上完成通知的端到端验证。**
 
 ## PLAN_HANDOFF（只规划、不写产品代码）
 
 原 SFD 的 `PLAN_HANDOFF` 现在可以直接使用：在 Development 面板将 Intent 选择为 **PLAN_HANDOFF** 后创建并启动，或在拥有仓库的会话中输入 `/sfd plan <goal>`。程序执行 Planner → 独立 PLAN A → 独立 PLAN B（含必要的有界修订/裁决），完成后在 Run 中保留已审查的结构化计划和证据。此模式不创建任务 worktree、不运行产品 Implementer、不执行产品检查、不提交 Git；它允许原生只读 Session。`sfd_run` 工具也可通过 `create` 的 `intent: plan-handoff` 创建，随后显式 `start`。旧 Run 未设置 Intent 时保持原执行模式。
 
-`REVIEW_ONLY`、跨 Section 并行实施及旧版任务中途接管尚未在这一阶段实现，不应把 PLAN_HANDOFF 的交付错误标记成已实现这些模式。
+### REVIEW_ONLY：冻结现有变更，只审查不实施
+
+选择 Development 面板 **REVIEW_ONLY**、`/sfd review <goal>` 或 `sfd_run.create(intent=review-only)`。Host 从当前源 HEAD 及暂存、工作区、非忽略未跟踪文件准备独立 detached 快照，不新建开发分支；按现有 PLAN A/B、Code A/B 和 Feature 证据规则阅读及验收。**不调度产品 Implementer、不修改用户源工作区、不创建产品提交**。发现需要产品修复时转为用户决策，不偷偷获得写权限或沿用修复预算。实际模型端到端审查仍需独立验证。
+
+### Markdown 报告与机器裁决
+
+各角色报告使用 Markdown：每一个标题下面紧接一行格式化 JSON 元数据，随后才是可读叙述；模板由 Host 下发。`reportMarkdown` 是结构化工具中的**报告文本字段**，Host 单独保存；剩余 JSON 字段为状态机所需的最终机器结果，不依赖 Markdown 自由文本猜测状态。为保留既有 deterministic fixtures 的兼容，目前 `reportMarkdown` 仍为可选字段；这是过渡性协议，不应宣称已通过所有真实模型验证。错误 Finding/Evidence 引用允许一次有界、同角色的格式更正；真实失败检查仍不可绕过。
+
+### 明确不保留的能力
+
+按最新要求，**不再提供跨 Section 并行产品实施**；各父 Section 串行执行，满足依赖才派发下一写者，仍允许独立 Code A 只读审查并行。**不提供原版 Markdown/旧 native Run 的自动状态导入**；不解释不兼容记录，不清空旧结果自行重跑。中途接管已经存在的另一任务以及非 main 起点的人工选择仍需单独补齐，不能冒充这两项已经有能力。
 
 ## 执行过程
 
@@ -187,6 +199,6 @@ node scripts/verify-package.mjs
 
 针对 DSH `0.2.1-rc.2`、已有初始提交的普通 Git 仓库和 Bash 兼容的受沙箱约束的检查环境实现。Submodule 的独立工作树、会改变源码内容的 checkout filter、跨多个 Host 自动接管，以及旧 SFD Markdown 状态的自动导入不在当前版本范围内。持久状态拒绝不匹配的 schema、workflow 和 policy 版本；此版升级了 Core/Policy/Role 协议（Core 1.1.0 / sfd-native-2 / roles-2），尚没有为旧的活动 Run 提供自动转换。**升级前应先结束或保存并另行处理 0.1.0 的 Run**，不要假定它们可以无损继续执行。
 
-对于依赖原生持久状态的旧 `0.1.0` Run，本版本不提供自动原地升级；升级 DSH Host 前先结束活动任务或单独保留旧状态供人工迁移。外部人工 Advisor 的材料必须由用户检查敏感信息后自行交接，插件不会自动生成脱敏 ZIP 或向第三方发送源代码。
+对于依赖原生持久状态的旧 `0.1.0` Run，本版本不提供自动原地升级；升级 DSH Host 前先结束活动任务或单独保留旧状态供人工迁移。外部人工 Advisor 的 ZIP 由 Host 在本地生成、验证 SHA-256、保存排除回执，并程序化发送仅三项非敏感飞书文本字段；完整 ZIP 源码不自动上传，分享前必须由用户检查。
 
 MIT，保留原仓库许可证。
