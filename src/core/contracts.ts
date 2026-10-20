@@ -26,12 +26,14 @@ export const findingSchema = z.strictObject({
 export const reviewSchema = z.strictObject({
   verdict: z.enum(['clean', 'findings', 'incomplete']), summary: text,
   coverage: texts, limitations: texts, findings: z.array(findingSchema).max(200),
+  closures: z.array(z.strictObject({ findingId: text, status: z.enum(['verified-closed', 'still-open', 'regression', 'insufficient-evidence']), evidence: text })).max(200).optional(),
 });
 export const implementationSchema = z.strictObject({
   summary: text, completedCriteria: texts, remainingWork: texts, changedInterfaces: texts,
 });
 export const selectionSchema = z.strictObject({
   lenses: z.array(z.strictObject({ id, name: text, focus: text })).min(1).max(6), rationale: text,
+  invalidatedLensIds: z.array(id).optional(), invalidationReason: text.optional(),
 });
 export const adjudicationSchema = z.strictObject({
   resolution: z.enum(['accept', 'repair', 'more-review', 'needs-user']), summary: text,
@@ -58,7 +60,7 @@ export const actorOutputSchemas = {
   'reviewer-a': reviewSchema,
   'reviewer-b': reviewSchema,
   adjudicator: adjudicationSchema,
-  'closure-reviewer': reviewSchema,
+  'closure-reviewer': reviewSchema.extend({ closures: reviewSchema.shape.closures.unwrap() }),
   'feature-verifier': featureVerificationSchema,
   diagnostician: diagnosticSchema,
 } satisfies Record<ActorKind, z.ZodType>;
@@ -94,6 +96,8 @@ export function parseActorOutput(kind: ActorKind, value: unknown): ActorOutput {
   if ('lenses' in result) {
     assertUnique(result.lenses.map((lens) => lens.id), 'lens');
     if (!result.lenses.some((lens) => lens.id === 'R01')) throw new Error('Code A requires the independent full behavior baseline R01.');
+    assertUnique(result.invalidatedLensIds ?? [], 'invalidated lens');
+    if (result.invalidatedLensIds?.length && !result.invalidationReason?.trim()) throw new Error('Invalidated A coverage requires a concrete reason.');
   }
   return result;
 }

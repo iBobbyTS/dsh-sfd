@@ -34,12 +34,13 @@ const attempt = z.strictObject({
   recoveryDecisionId: identity.optional(), reconciledAt: identity.optional(),
 });
 const section = z.strictObject({
-  id: identity, stage: z.enum(['pending', 'implementing', 'review-selection', 'review-a', 'adjudicating-a', 'repairing', 'closure', 'review-b', 'adjudicating-b', 'accepted', 'integrated']),
+  id: identity, stage: z.enum(['pending', 'implementing', 'reroute', 'review-selection', 'review-a', 'adjudicating-a', 'repairing', 'closure', 'review-b', 'adjudicating-b', 'accepted', 'integrated']),
   inputContractVersion: integer, lineageId: identity, materialRepairWaves: integer, diagnosticCount: integer,
   candidateId: identity.optional(), lenses: z.array(lens), checks: z.array(checkEvidence), reviewIds: z.array(identity), decisionIds: z.array(identity),
   repairInstructions: text.optional(), repairOrigin: z.enum(['a', 'b', 'feature']).optional(),
   acceptedCandidateId: identity.optional(), integratedCandidateId: identity.optional(),
   aAcceptedCandidateId: identity.optional(), aCoverageEvidenceIds: z.array(identity),
+  closureFindingIds: z.array(identity).optional(), freshRepairLensIds: z.array(identity).optional(),
 });
 const decision = z.strictObject({
   id: identity, question: identity, context: text, kind: z.enum(['semantic', 'recovery', 'budget', 'infrastructure']),

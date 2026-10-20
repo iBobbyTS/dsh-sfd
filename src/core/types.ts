@@ -9,7 +9,7 @@ export type ActorKind =
 
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
 export type RunStage = 'planning' | 'plan-review-a' | 'plan-review-b' | 'sections' | 'feature-verification' | 'delivery' | 'done';
-export type SectionStage = 'pending' | 'implementing' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
+export type SectionStage = 'pending' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
 export interface ActorRoute { preset: string; model?: string; provider?: string; effort?: string }
 export interface WorkflowPolicy {
   version: string;
@@ -65,14 +65,16 @@ export interface Finding {
   severity: 'critical' | 'major' | 'minor';
   invariant: string; location?: string;
 }
+export interface ClosureFinding { findingId: string; status: 'verified-closed' | 'still-open' | 'regression' | 'insufficient-evidence'; evidence: string }
 export interface ReviewOutput {
   verdict: 'clean' | 'findings' | 'incomplete';
   summary: string; coverage: string[]; limitations: string[]; findings: Finding[];
+  closures?: ClosureFinding[];
 }
 export interface PlanOutput { plan: DevelopmentPlan; explanation: string }
 export interface ImplementationOutput { summary: string; completedCriteria: string[]; remainingWork: string[]; changedInterfaces: string[] }
 export interface Lens { id: string; name: string; focus: string }
-export interface ReviewSelectionOutput { lenses: Lens[]; rationale: string }
+export interface ReviewSelectionOutput { lenses: Lens[]; rationale: string; invalidatedLensIds?: string[]; invalidationReason?: string }
 export interface FindingDisposition { findingId: string; decision: 'fix' | 'reject' | 'needs-user'; reason: string }
 export interface AdjudicationOutput {
   resolution: 'accept' | 'repair' | 'more-review' | 'needs-user';
@@ -162,6 +164,8 @@ export interface SectionState {
   integratedCandidateId?: string;
   aAcceptedCandidateId?: string;
   aCoverageEvidenceIds: string[];
+  closureFindingIds?: string[];
+  freshRepairLensIds?: string[];
 }
 export interface Operation {
   id: string;
