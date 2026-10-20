@@ -66,7 +66,7 @@ export class NativeActorRunner implements ActorRunner {
 
   constructor(private readonly ctx: Context, private readonly store: DomainRunStore) {}
 
-  private async anchor(task: ActorTask): Promise<NativeAgentHandle> {
+  private async anchor(task: ActorTask, options: AgentOptions & LlmCallConfig): Promise<NativeAgentHandle> {
     if (this.disposed) throw new Error('Native actor runner is disposed.');
     let pending = this.anchors.get(task.runId);
     if (pending === undefined) {
@@ -76,7 +76,9 @@ export class NativeActorRunner implements ActorRunner {
         sessionId: SessionId(`sfd-anchor-${task.runId}-${this.bootId}`),
         signal: this.shutdown.signal,
         meta: { cwd: task.workspace.path, parentSession: SessionId(owner.sessionId), origin: 'subagent', delegationDepth: 0 },
-        agentOptions: nativeAgentOptions(owner),
+        // The idle anchor must not require an unrelated owner-chat GLM/GPT
+        // provider when this native task is explicitly routed to DeepSeek.
+        agentOptions: options,
         setup: (_agentCtx, agent) => {
           seedAgentPermission(agent, owner);
           agent.ctx.tools.restrict({ allow: [] });
@@ -153,7 +155,7 @@ export class NativeActorRunner implements ActorRunner {
     try {
       lifetime.throwIfAborted();
       await this.ctx.llm.resolveCallConfig(requestedOptions, lifetime);
-      const anchor = await this.anchor(task);
+      const anchor = await this.anchor(task, requestedOptions);
       lifetime.throwIfAborted();
       activation = await this.ctx.subagents.startActivation({
         provider: 'spawn', childId, label: `${task.kind}: ${task.sectionId ?? task.runId}`,
