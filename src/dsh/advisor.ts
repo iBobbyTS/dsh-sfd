@@ -152,6 +152,18 @@ export class NativeAdvisorHandoff implements AdvisorPort {
     };
   }
 
+  async saveHumanResponse(run: DevelopmentRun, advice: string, adoption: 'accept' | 'reject' | 'clarify',
+    humanAnswer: string, action?: string): Promise<void> {
+    const pack = run.advisorCase?.package;
+    if (!pack) throw new Error('An external response cannot be recorded without a verified Advisor request ZIP.');
+    await mkdir(dirname(pack.responsePath), { recursive: true, mode: 0o700 });
+    await writeStable(pack.responsePath, advice);
+    await writeStable(join(dirname(pack.responsePath), 'ADVISOR-DECISION.json'), JSON.stringify({
+      requestId: pack.requestId, source: 'human', adoption, humanAnswer, action: action ?? null,
+      packageSha256: pack.sha256,
+    }, null, 2) + '\n');
+  }
+
   async notify(run: DevelopmentRun, pack: AdvisorPackage, fields: AdvisorNotice): Promise<AdvisorNotification> {
     const project = safeField(fields.project, 100);
     const feature = safeField(fields.feature, 160);
