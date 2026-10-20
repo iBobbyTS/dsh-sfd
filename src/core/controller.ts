@@ -1395,6 +1395,7 @@ export class WorkflowController {
     const attempt = this.latest(run, 'feature-verifier');
     if (!attempt) return this.queueActor(run, 'feature-verifier', {
       goal: run.goal, phase: run.stage, plan, candidate,
+      criterionReferences: plan.features.flatMap(feature => feature.acceptanceCriteria.map((criterion, index) => ({ featureId: feature.id, criterionId: 'C' + String(index + 1).padStart(3, '0'), criterion }))),
       sectionAcceptances: Object.values(run.sections).map((section) => ({ ...section, evidence: run.reviews.filter((review) => section.reviewIds.includes(review.id)) })),
       evidence: [...run.reviews, ...run.decisions, ...(run.integrationReviews ?? [])],
       integrationGaps: run.integrationGaps ?? [], checks: run.featureChecks,
@@ -1502,10 +1503,11 @@ export class WorkflowController {
             'resolution' in decision.output && decision.output.resolution === 'accept') evidenceIds.add(decision.id);
       }
     }
-    const expected = run.plan!.features.flatMap((feature) => feature.acceptanceCriteria.map((criterion) => ({ featureId: feature.id, criterion })));
+    const expected = run.plan!.features.flatMap((feature) => feature.acceptanceCriteria.map((criterion, index) => ({ featureId: feature.id, criterion, criterionId: 'C' + String(index + 1).padStart(3, '0') })));
+    if (output.criteria.some(claim => !claim.criterionId && !claim.criterion)) throw new Error('Feature result must cite a stable criterionId or exact legacy criterion.');
     if (output.criteria.length !== expected.length) throw new Error('Feature acceptance must account for each business criterion exactly once.');
     for (const entry of expected) {
-      const claims = output.criteria.filter((claim) => claim.featureId === entry.featureId && claim.criterion === entry.criterion);
+      const claims = output.criteria.filter((claim) => claim.featureId === entry.featureId && (claim.criterionId !== undefined ? claim.criterionId === entry.criterionId : claim.criterion === entry.criterion));
       if (claims.length !== 1 || !claims[0]!.satisfied || !claims[0]!.evidenceIds.length) throw new Error(`Business criterion remains unproven: ${entry.featureId}/${entry.criterion}.`);
       for (const id of claims[0]!.evidenceIds) if (!evidenceIds.has(id)) throw new Error(`Acceptance references missing evidence ${id}.`);
     }
