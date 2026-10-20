@@ -44,7 +44,16 @@ Use the real published SDK for static/build and Host integration checks, determi
 
 The baseline implementation remains a durable DSH-native orchestration engine; it is not being replaced by conversational Skill dispatch. The first follow-up slice fixes Subsection effective-tier routing and Git-scoped candidate admission and adds `PLAN_HANDOFF`, including independent plan coverage without a writable session. The existing Adjudicator continues to make semantic review decisions; programmatic transitions still gate acceptance.
 
-Outstanding migration scope: `REVIEW_ONLY` with explicit existing-code diff identity; approved isolated parent-Section parallelism; independent Feature-integration repair lineage; branch-base and mid-feature adoption; original human Advisor packaging/notification; bounded per-finding verification, native dynamic probes and a possible native provider adapter for external-subagent. These require separate design, tests and evidence; neither source parity docs nor fixture tests imply that they already work.
+Native migration follow-up implemented after the foundation:
+
+- `REVIEW_ONLY` snapshots the exact current dirty source in a dedicated **detached** review worktree and runs the usual independent plan/code/Feature evidentiary checks, never dispatching an implementer or creating a commit. Confirmed repairs stop for a new user-authorized execution.
+- An Advisor hold now invokes the real original content-filtering ZIP exporter from the Host after actor termination, freezes requirements/plan/reviews/attempt/check history, validates ZIP SHA-256, retains exclusions and an external-human handoff request. Only after ZIP verification does a small, role-limited notification actor provide project/feature/reason; the Host alone signs and sends the three Feishu text lines. ZIP and source are never auto-transmitted; failed/uncertain notification remains visible without releasing the hold. Verbatim Advisor advice and independent human disposition are retained.
+- Role reports are Markdown with single-line JSON heading metadata and an independent machine-JSON admission output. The reportMarkdown field currently travels as a string argument of the DSH structured-output tool to preserve native result validation; it is not a requirement to express prose as nested JSON. One bounded malformed-reference correction is allowed only for actual structural ID inconsistencies, never failed checks or missing coverage.
+- Feature criteria can use Host-assigned stable IDs to avoid copying long acceptance strings. Adjudicator packets are reduced to current, unresolved, and latest relevant prior coverage evidence; already admitted historical reports remain in storage.
+
+Explicitly **removed** by current user authority: parallel parent-Section product writers and automatic import of legacy Skill/old native Run state. The active packaged planning knowledge no longer instructs LLMs to dispatch concurrent parent writers. Independent Code A **read-only** passes remain concurrent.
+
+Outstanding work requiring further changes or live validation: comprehensive Feature-integration repair lineage, non-main branch-base choice, authorized mid-feature takeover that preserves legacy review evidence without silently importing old state, optional dynamic sandboxed review probes, potential native external-subagent provider adapter, live Feishu and paid-model long-horizon execution. This list is an explicit gap report, not authorization to skip any other original SFD feature.
 
 ## Delivery checklist
 
