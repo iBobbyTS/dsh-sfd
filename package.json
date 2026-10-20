@@ -40,7 +40,8 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "docs"
+    "docs",
+    "scripts/advisor_pack.py"
   ],
   "dsh": {
     "bundle": {
