@@ -95,7 +95,7 @@ test('external GLM and GPT runs use the requested runtime and admit only strict 
     const result = await handle.result;
     assert.equal(result.status, 'completed', result.error);
     assert.equal((result.output as { verdict: string }).verdict, clean.verdict);
-    assert.match((result.output as { reportMarkdown: string }).reportMarkdown, /^# SFD Role Report\\n/);
+    assert.match((result.output as { reportMarkdown: string }).reportMarkdown, /^# SFD Role Report\n/);
     assert.equal(result.identity.transport, 'external');
     assert.equal(result.identity.external?.subagent, subagent);
     assert.equal(result.identity.external?.admittedModel, subagent === 'zcode' ? `zai/${model}` : model);
