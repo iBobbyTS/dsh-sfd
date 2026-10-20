@@ -28,4 +28,5 @@ export interface WorkspacePort {
 export interface AdvisorPort {
   pack(run: DevelopmentRun): Promise<AdvisorPackage>;
   notify(run: DevelopmentRun, pack: AdvisorPackage, fields: AdvisorNotice): Promise<AdvisorNotification>;
+  saveHumanResponse(run: DevelopmentRun, advice: string, adoption: 'accept' | 'reject' | 'clarify', humanAnswer: string, action?: string): Promise<void>;
 }
