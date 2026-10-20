@@ -131,7 +131,7 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
       ...(permissionPreset === undefined ? {} : { permissionPreset }),
     };
     if (intent === 'execute' && request.commit === false) throw new RemoteError('development-workflow/forbidden', 'EXECUTE_WITH_COMMIT requires an accepted commit on the isolated run branch; choose PLAN_HANDOFF for no-commit planning.', { sessionId: request.sessionId });
-    if (intent === 'plan-handoff' && request.commit === true) throw new RemoteError('development-workflow/forbidden', 'PLAN_HANDOFF never creates a product commit.', { sessionId: request.sessionId });
+    if (intent !== 'execute' && request.commit === true) throw new RemoteError('development-workflow/forbidden', 'PLAN_HANDOFF never creates a product commit.', { sessionId: request.sessionId });
     if (intent === 'execute' && this.config.allowCommits === false) throw new RemoteError('development-workflow/forbidden', 'This deployment disables workflow commits.', { sessionId: request.sessionId });
     const routes: Partial<Record<ActorKind, ActorRoute>> = {};
     for (const kind of Object.keys(ROLE_PRESETS) as ActorKind[]) routes[kind] = freezeModelRoute(ROLE_PRESETS[kind], owner, this.config.modelRoutes?.[kind]);
@@ -206,9 +206,13 @@ export async function executeCommand(service: DevelopmentWorkflowService, agent:
   const action = split?.[1] ?? 'list';
   const tail = split?.[2] ?? '';
   const sessionId = String(agent.id);
-  if (action === 'help') return '/sfd create <goal> | plan <goal> | list | status/start/pause/resume/cancel/recover <run-id> | revise <run-id> <goal> | decide <run-id> <decision-id> <continue|retry|replan|cancel> <answer> | advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>';
+  if (action === 'help') return '/sfd create <goal> | plan <goal> | review <goal> | list | status/start/pause/resume/cancel/recover <run-id> | revise <run-id> <goal> | decide <run-id> <decision-id> <continue|retry|replan|cancel> <answer> | advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>';
   if (action === 'list') return JSON.stringify(await service.list({ sessionId }), null, 2);
   if (action === 'create') return JSON.stringify(await service.create({ sessionId, goal: tail }), null, 2);
+  if (action === 'review') {
+    const created = await service.create({ sessionId, goal: tail, intent: 'review-only' });
+    return JSON.stringify(await service.start({ sessionId, runId: created.id }), null, 2);
+  }
   if (action === 'plan') {
     const created = await service.create({ sessionId, goal: tail, intent: 'plan-handoff' });
     return JSON.stringify(await service.start({ sessionId, runId: created.id }), null, 2);
@@ -258,7 +262,7 @@ function installEntries(ctx: Context, service: DevelopmentWorkflowService): void
     parameters: {
       action: { type: 'string', required: true, enum: ['create', 'start', 'list', 'status', 'pause', 'resume', 'cancel'] },
       goal: { type: 'string', description: 'Authorized user goal, required only when creating.' },
-      intent: { type: 'string', enum: ['execute', 'plan-handoff'], description: 'Choose full execution or PLAN_HANDOFF without code changes.' },
+      intent: { type: 'string', enum: ['execute', 'plan-handoff', 'review-only'], description: 'Choose implementation, plan-only handoff or read-only review of current changes.' },
       run_id: { type: 'string', description: 'This Session’s existing Run id.' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
