@@ -7,7 +7,7 @@ import {
   type Attempt, type Candidate, type CheckEvidence, type CreateRunInput, type DecideInput,
   type DevelopmentPlan, type DevelopmentRun, type DiagnosticOutput, type FeatureVerificationOutput,
   type ImplementationOutput, type Lens, type Operation, type PlanOutput, type ReviewEvidence,
-  type ReviewOutput, type ReviewSelectionOutput, type SectionPlan, type SectionState,
+  type ReviewOutput, type ReviewSelectionOutput, type SectionPlan, type SectionState, type WorkspaceRecovery,
 } from './types.js';
 
 export interface ControllerOptions {
@@ -191,7 +191,7 @@ export class WorkflowController {
     if (decision.kind === 'budget' && input.action !== 'replan') {
       throw new Error('An exhausted repair budget cannot be reset by retry. Revise the plan or cancel; existing Section lineage is preserved.');
     }
-    const recovery = decision.kind === 'recovery'
+    const recovery: WorkspaceRecovery | undefined = decision.kind === 'recovery'
       ? current.intent === 'plan-handoff' ? { safe: true } : await this.workspace.reconcile(current)
       : undefined;
     if (recovery && !recovery.safe && !recovery.candidate) {
