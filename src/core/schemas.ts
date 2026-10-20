@@ -7,7 +7,7 @@ const identity = z.string().min(1);
 const integer = z.number().int().nonnegative();
 const object = z.record(z.string(), z.unknown());
 const actorKind = z.enum(['planner', 'plan-review-a', 'plan-review-b', 'implementer', 'review-selector', 'reviewer-a', 'reviewer-b', 'adjudicator', 'closure-reviewer', 'feature-verifier', 'diagnostician']);
-const route = z.strictObject({ preset: identity, model: text.optional(), provider: text.optional(), effort: text.optional() });
+const route = z.strictObject({ preset: identity, model: text.optional(), provider: text.optional(), effort: text.optional(), transport: z.enum(['dsh-native', 'external-subagent/zcode', 'external-subagent/codex']).optional() });
 const workspace = z.strictObject({ path: identity, branch: text, baseCommit: identity, initialTreeHash: identity.optional(), prepared: z.boolean().optional() });
 const candidate = z.strictObject({ id: identity, capturedAt: identity, workspacePath: identity, head: identity, treeHash: identity, diff: text, changedFiles: z.array(text),
   sectionDelta: z.strictObject({ sectionId: identity, baseTreeHash: identity, diff: text, changedFiles: z.array(text) }).optional() });
@@ -26,6 +26,7 @@ const task = z.strictObject({
 });
 const actorIdentity = z.strictObject({
   requested: route.optional(),
+  external: z.strictObject({ subagent: z.enum(['zcode','codex']), agentId: z.number().int().min(10000000).max(99999999), admittedModel: text.optional(), admittedEffort: text.optional() }).optional(),
   observed: z.strictObject({ provider: text.optional(), model: text.optional(), effort: text.optional(), preset: text.optional() }).optional(),
   transport: z.enum(['dsh-native', 'external', 'test']), sessionId: identity.optional(),
 });
