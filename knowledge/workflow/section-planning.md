@@ -96,8 +96,8 @@ A section should normally have:
 Section IDs are handles for `.agent-work/` plan, packet and ledger files only.
 Repository artifacts — file and directory names, tests, fixtures, docs, configuration, identifiers, UI strings, code comments — are named after the feature or behavior they own (`tests/runtime-selection.test.mjs`, `docs/gap-handoff.md`), never after a section ID or any other SFD process label; when a repository artifact name would otherwise collide or be too generic, record a feature slug in the plan and use that.
 
-Branch names and commit messages on delivered history follow the same rule: the feature branch and each commit message are named after the feature or behavior they carry, never after a section ID or any other SFD process label — including commits serialized from parallel worktrees.
-The short-lived parallel worktree branches and directories [parallel-execution.md](parallel-execution.md) prescribes are process infrastructure, not delivered artifacts, and keep their section-based names.
+Branch names and commit messages on delivered history follow the same rule: the feature branch and each commit message are named after the feature or behavior they carry, never after a section ID or any other SFD process label. Native DSH serializes all parent Section writers.
+Concurrent parent-Section worktrees are intentionally unsupported in native DSH SFD. The Host uses one persistent Run worktree and separate immutable review/test snapshots.
 
 A section may touch multiple files and layers when those edits are required for one vertical behavior. File count alone does not define reviewability.
 
@@ -383,4 +383,4 @@ Do not divide merely by language, line count or number of files.
 If one worker will implement two nominal parents with one combined acceptance, decide before PLAN review whether they are really one parent with children.
 Do not claim two serial parent acceptances from one combined result.
 Conversely, a small cohesive change does not need a child for every function.
-Record a one-line parallel/serial reason in the existing plan, using actual owner/contract/resource dependencies; no parallelism quota or extra planning report.
+Record actual dependencies and ownership in the existing PLAN. Parent Section writers are always serial in native DSH SFD; no parallel/serial choice or quota is needed.
