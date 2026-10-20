@@ -59,7 +59,9 @@ test('native Advisor ZIP includes request, business evidence and source; secrets
   const second = await adapter.notify(owning, pack, fields);
   assert.equal(second.status, 'failed');
   assert.ok((await readFile(pack.exclusionsPath, 'utf8')).includes('.env'));
-  const config = join(repo, 'fake-feishu-only-for-test.json');
+  const configRoot = await mkdtemp(join(tmpdir(), 'sfd-feishu-credential-fixture-'));
+  t.after(async () => rm(configRoot, { recursive: true, force: true }));
+  const config = join(configRoot, 'fake-feishu-only-for-test.json');
   await writeFile(config, JSON.stringify({ webhook: 'https://open.feishu.cn/open-apis/bot/v2/hook/testing',
     secret: 'fixture-secret-not-real', name: 'Bot Fixture' }));
   let payload: Record<string, unknown> | undefined;
