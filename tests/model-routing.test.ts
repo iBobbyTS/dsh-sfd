@@ -177,3 +177,31 @@ test('Host-level model-family runner selects external execution without invoking
     await ctx.fiber.dispose();
   }
 });
+
+test('external review siblings share a workspace serially, avoiding daemon ownership conflicts', async () => {
+  const { task, store } = fixture();
+  let releaseFirst!: () => void;
+  const firstWait = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  let released = false;
+  class BlockingFirstWaitCli extends FakeCli {
+    override async call(command: ExternalCommand, input: Record<string, unknown>) {
+      if (command === 'wait' && !released) await firstWait;
+      return super.call(command, input);
+    }
+  }
+  const cli = new BlockingFirstWaitCli();
+  const runner = new ExternalSubagentRunner(store, cli);
+  try {
+    const first = await runner.start(task, new AbortController().signal);
+    const secondTask = { ...task, id: 'another-independent-lens', input: { ...task.input, lens: 'R03' } };
+    const pending = runner.start(secondTask, new AbortController().signal);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(cli.calls.filter((entry) => entry.command === 'spawn').length, 1);
+    released = true; releaseFirst();
+    assert.equal((await first.result).status, 'completed');
+    const second = await pending;
+    assert.equal((await second.result).status, 'completed');
+    assert.equal(cli.calls.filter((entry) => entry.command === 'spawn').length, 2);
+    await first.dispose(); await second.dispose();
+  } finally { await runner.dispose(); }
+});
