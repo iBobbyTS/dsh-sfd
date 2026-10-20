@@ -19,7 +19,7 @@ flowchart TD
   Checks --> Host
 ```
 
-The anchor is a real live Agent created in the Host's persistent Context. It receives no model-driving prompt. Fresh native spawn activations use explicit role presets and `delivery: caller`. Their final conversational output is never a completion authority. Native structured output is checked by the DSH schema subset, then the stricter plugin Zod and semantic admission rules.
+The anchor is a real live Agent created in the Host's persistent Context. It receives no model-driving prompt. DeepSeek actors use fresh native spawn activations with explicit role presets and `delivery: caller`. GLM actors use external-subagent's ZCode runtime and GPT actors use its Codex runtime; this family transport is frozen in Run policy at creation. External-subagent calls use its published CLI JSON-stdin interface (same fields/projections as the MCP API): spawn, bounded wait, complete paged result, cancel and close. Their final text must parse as the same exact role JSON result and pass Host Zod/semantic admission; a terminal conversation is never completion authority. External admitted model/effort is distinct from runtime-observed identity, which remains UNKNOWN without a verified echo. Native structured output is checked by the DSH schema subset, then the stricter plugin Zod and semantic admission rules.
 
 ## Modules
 
@@ -30,7 +30,7 @@ The anchor is a real live Agent created in the Host's persistent Context. It rec
 | `src/workspace/git-workspace.ts` | Complete source trees, worktree ownership, immutable snapshots, real checks and exact-tree delivery |
 | `src/workspace/actor-context.ts` | Bounded role presentation with exact immutable evidence files |
 | `src/dsh/store.ts` | A single strict native domain containing Run plus its captured owner |
-| `src/dsh/actors.ts`, `checks.ts`, `role-policy.ts` | Native execution, deadlines, scoped tools, actual permission and route handling |
+| `src/dsh/actors.ts`, `routing-runner.ts`, `model-routing.ts`, `external-actor.ts`, `checks.ts`, `role-policy.ts` | Frozen model-family routing, native DeepSeek and external GLM/GPT transport, bounded result retrieval and cancellation, deadlines, existing role permissions and Host checks |
 | `src/dsh/index.ts`, `remote-contract.ts` | Host service, native entries and Session-resource Remote boundary |
 | `src/roles` | Versioned internal workflow knowledge and independent-review projections |
 | `src/client` | Read model, owner selection, controls and evidence presentation |
