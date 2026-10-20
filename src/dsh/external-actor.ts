@@ -45,7 +45,7 @@ function record(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 function agentId(value: unknown): number {
-  if (!Number.isInteger(value) || Number(value) < 10_000_000 || Number(value) > 99_999_999) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 10_000_000 || value > 99_999_999) {
     throw new Error('external-subagent returned an invalid agent_id.');
   }
   return Number(value);
