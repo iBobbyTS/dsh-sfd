@@ -1273,7 +1273,7 @@ export class WorkflowController {
       });
       return true;
     }
-    if (result.recommendation === 'needs-user' || !section || !['repairing', 'implementing'].includes(section.stage)) {
+    if (result.recommendation === 'needs-user' || !section || !['repairing', 'implementing', 'subsection-implementing'].includes(section.stage)) {
       await this.block(run.id, result.question ?? `${result.summary}\n${result.instructions}`, !section ? 'budget' : 'semantic', section?.id);
       return false;
     }
