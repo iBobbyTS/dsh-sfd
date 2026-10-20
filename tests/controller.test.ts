@@ -540,3 +540,22 @@ test('repair delta can reroute one new independent lens without repeating the un
   assert.equal(actors.calls.filter((call) => call.kind === 'review-selector').length, 2);
   await controller.dispose();
 });
+
+test('original standard/large implementation tiers select distinct Host-authorized native model routes', async () => {
+  const current = twoSectionPlan();
+  current.sections[1]!.implementation = 'large';
+  const { controller, actors } = rig(current);
+  const run = await controller.create({ goal: 'Implement both Sections.', workspacePath: '/project', policy: {
+    commit: true, largeImplementerRoute: { preset: 'sfd-implementer', provider: 'fixture', model: 'fixture-large', effort: 'high' },
+  } });
+  await controller.start(run.id);
+  const done = await waitFor(controller, run.id, (r) => ['completed', 'blocked', 'waiting-user'].includes(r.status));
+  assert.equal(done.status, 'completed', done.blockedReason);
+  const standard = actors.calls.find((call) => call.kind === 'implementer' && call.sectionId === 'S1')!;
+  const large = actors.calls.find((call) => call.kind === 'implementer' && call.sectionId === 'S2')!;
+  assert.equal(standard.route, undefined);
+  assert.equal(large.route?.model, 'fixture-large');
+  assert.equal(large.route?.provider, 'fixture');
+  assert.equal(large.route?.preset, 'sfd-implementer');
+  await controller.dispose();
+});

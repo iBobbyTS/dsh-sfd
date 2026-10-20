@@ -51,4 +51,4 @@ The resolved configuration contains the Host contribution and all eleven explici
 
 ## Release boundaries
 
-The package targets the pinned DSH SDK. `standard` and `large` implementation contracts currently share the implementer model route. Submodules, source-changing checkout filters, automatic takeover from another Host, automatic import of historical SFD Markdown state, and independent role/permission-definition migrations are outside this release's supported scope. The README and recovery guide describe operational behavior and explicit intervention points.
+The package targets the pinned DSH SDK. `standard` and `large` implementation contracts use the same native writer preset, with a separately configurable Host-owned large model route. The default large route inherits the standard implementer route if no override is supplied. Submodules, source-changing checkout filters, automatic takeover from another Host, automatic import of historical SFD Markdown state, and independent role/permission-definition migrations are outside this release's supported scope. The README and recovery guide describe operational behavior and explicit intervention points.

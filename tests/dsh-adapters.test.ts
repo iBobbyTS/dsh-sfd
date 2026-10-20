@@ -243,7 +243,14 @@ test('real DSH spawn keeps its Host anchor, isolates role tools, captures struct
     assert.ok(child);
     assert.equal(ctx.sandboxPolicy.resolve({ session: child.session }).mode, 'read-only');
     const tools = adapter.requests[0].tools?.map(tool => tool.name) ?? [];
-    for (const tool of ['read', 'grep', 'glob', 'structured_output']) assert.ok(tools.includes(tool), `${tool} must be in the actual actor request`);
+    for (const tool of ['read', 'grep', 'glob', 'structured_output', 'sfd_knowledge']) assert.ok(tools.includes(tool), `${tool} must be in the actual actor request`);
+    const knowledge = await ctx.tools.execute({ name: 'sfd_knowledge', callId: ToolCallId('native-sfd-knowledge'),
+      arguments: { path: 'planning/router.md' }, agent: child, signal: new AbortController().signal });
+    assert.equal(knowledge.isError, false, 'native preset must be able to load the bundled old SFD planning router');
+    assert.match(String(knowledge.value), /Composable planning router/);
+    const traversal = await ctx.tools.execute({ name: 'sfd_knowledge', callId: ToolCallId('native-sfd-knowledge-traversal'),
+      arguments: { path: '../src/core/controller.ts' }, agent: child, signal: new AbortController().signal });
+    assert.equal(traversal.isError, true, 'knowledge reads may not escape the shipped reference set');
     for (const tool of ['write', 'edit', 'bash', 'sfd_run', 'spawn_agent']) assert.ok(!tools.includes(tool), `${tool} must be absent from the reviewer request`);
     const denied = await ctx.tools.execute({ name: 'write', callId: ToolCallId('blocked-write'), arguments: { file_path: join(root, 'blocked'), content: 'no' }, agent: child, signal: new AbortController().signal });
     assert.equal(denied.isError, true);
