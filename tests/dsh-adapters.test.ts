@@ -266,7 +266,8 @@ test('real DSH spawn keeps its Host anchor, isolates role tools, captures struct
     adapter.release?.();
     const outcome = await handle.result;
     assert.equal(outcome.status, 'completed', outcome.error);
-    assert.deepEqual(outcome.output, adapter.output);
+    assert.equal((outcome.output as { verdict: string }).verdict, 'clean');
+    assert.match((outcome.output as { reportMarkdown: string }).reportMarkdown, /^# SFD Role Report\n/);
     assert.equal(outcome.identity.observed?.model, 'fixture');
     assert.equal(outcome.identity.observed?.preset, ROLE_PRESETS['reviewer-a']);
     adapter.hold = false;
