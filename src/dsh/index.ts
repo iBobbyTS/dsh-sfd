@@ -32,6 +32,7 @@ export interface Config {
   maxInfrastructureRetries?: number;
   /** Deployment routes are user configuration, never fields in model tool input. */
   modelRoutes?: Partial<Record<ActorKind, { provider: string; model: string; effort?: string }>>;
+  largeImplementerModel?: { provider: string; model: string; effort?: string };
   allowCommits?: boolean;
 }
 export const Config: Schema<Config> = Schema.object({
@@ -40,6 +41,7 @@ export const Config: Schema<Config> = Schema.object({
   maxParallelReviews: Schema.natural().min(1).max(6).default(3),
   maxInfrastructureRetries: Schema.natural().max(3).default(1),
   modelRoutes: Schema.dict(Schema.object({ provider: Schema.string().min(1).required(), model: Schema.string().min(1).required(), effort: Schema.string().min(1) })).default({}),
+  largeImplementerModel: Schema.object({ provider: Schema.string().min(1).required(), model: Schema.string().min(1).required(), effort: Schema.string().min(1) }),
   allowCommits: Schema.boolean().default(true),
 });
 
@@ -126,6 +128,7 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
       maxParallelReviews: this.config.maxParallelReviews ?? 3,
       maxInfrastructureRetries: this.config.maxInfrastructureRetries ?? 1,
       commit: true, routes,
+      ...(this.config.largeImplementerModel ? { largeImplementerRoute: { preset: ROLE_PRESETS.implementer, ...this.config.largeImplementerModel } } : {}),
     };
     return this.store.withOwner(owner, () => this.controller.create({ goal: request.goal, workspacePath, policy }));
   }

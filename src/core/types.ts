@@ -22,6 +22,8 @@ export interface WorkflowPolicy {
   /** Explicit host authorization, never supplied by an actor result. */
   commit: boolean;
   routes: Partial<Record<ActorKind, ActorRoute>>;
+  /** Original SFD impl_large: same native writer preset, independently configured model route. */
+  largeImplementerRoute?: ActorRoute;
 }
 
 export interface CheckSpec { id: string; command: string[]; cwd?: string; timeoutMs?: number; required: boolean }

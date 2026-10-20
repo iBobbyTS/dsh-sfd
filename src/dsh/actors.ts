@@ -105,8 +105,12 @@ export class NativeActorRunner implements ActorRunner {
     const run = await this.store.get(task.runId);
     const owner = this.store.ownerOf(task.runId);
     if (run === undefined || owner === undefined) throw new Error(`Unknown Run: ${task.runId}`);
-    validateActorRoute(task, run.policy.routes[task.kind]);
-    const route = task.route ?? run.policy.routes[task.kind] ?? { preset: ROLE_PRESETS[task.kind] };
+    const sectionContract = task.kind === 'implementer' && task.sectionId
+      ? run.plan?.sections.find((section) => section.id === task.sectionId) : undefined;
+    const allowedRoute = sectionContract?.implementation === 'large'
+      ? run.policy.largeImplementerRoute ?? run.policy.routes[task.kind] : run.policy.routes[task.kind];
+    validateActorRoute(task, allowedRoute);
+    const route = task.route ?? allowedRoute ?? { preset: ROLE_PRESETS[task.kind] };
     const requestedOptions = nativeAgentOptions(owner, route);
     const provider = this.ctx.subagents.getProvider('spawn');
     if (provider === undefined || provider.prepareContinuable === undefined || provider.inheritsParentContext || !provider.capabilities.agentPreset || !provider.capabilities.outputSchema) {

@@ -56,7 +56,7 @@ const persistedRunSchema = z.strictObject({
     version: z.literal(POLICY_VERSION), actorTimeoutMs: z.number().int().positive(), maxParallelReviews: z.number().int().min(1).max(6),
     maxRepairWaves: z.number().int().min(1).max(5), maxPlanRepairs: z.number().int().min(1).max(2),
     maxDiagnostics: z.number().int().min(1).max(2), maxInfrastructureRetries: z.number().int().min(0).max(3),
-    commit: z.boolean(), routes: z.partialRecord(actorKind, route),
+    commit: z.boolean(), routes: z.partialRecord(actorKind, route), largeImplementerRoute: route.optional(),
   }),
   status: z.enum(['draft', 'running', 'pausing', 'paused', 'blocked', 'waiting-user', 'cancelled', 'completed']),
   stage: z.enum(['planning', 'plan-review-a', 'plan-review-b', 'sections', 'feature-verification', 'delivery', 'done']),

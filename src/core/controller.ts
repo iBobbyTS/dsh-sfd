@@ -925,7 +925,10 @@ export class WorkflowController {
       input: JSON.parse(JSON.stringify(input)) as Record<string, unknown>,
       outputSchema: outputSchemaFor(kind), timeoutMs: run.policy.actorTimeoutMs,
       ...(section ? { sectionId: section.id } : {}), ...(lens ? { lens } : {}),
-      ...(candidateId ? { candidateId } : {}), ...(run.policy.routes[kind] ? { route: run.policy.routes[kind] } : {}),
+      ...(candidateId ? { candidateId } : {}),
+      ...(kind === 'implementer' && section && this.sectionPlan(run, section).implementation === 'large' && run.policy.largeImplementerRoute
+        ? { route: run.policy.largeImplementerRoute }
+        : run.policy.routes[kind] ? { route: run.policy.routes[kind] } : {}),
     };
     const previousInfrastructureFailures = run.attempts.filter((entry) => entry.task.kind === kind && entry.task.sectionId === section?.id && entry.task.lens?.id === lens?.id &&
       entry.task.inputContractVersion === task.inputContractVersion && entry.task.input.phase === task.input.phase && entry.task.candidateId === task.candidateId &&
