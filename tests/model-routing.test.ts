@@ -47,7 +47,13 @@ class FakeCli implements ExternalSubagentClient {
     if (command === 'wait') return { task: { agent_id: 12345678,
       status: this.cancelled ? 'cancelled' : this.initialRunning ? 'running' : 'completed' }, pending_requests: [] };
     const spawn = this.calls.find((entry) => entry.command === 'spawn')!.input;
-    const text = this.invalidJson ? 'not-json' : JSON.stringify(clean);
+    const role = /\"role\"\\s*:\\s*\"([^\"]+)\"/.exec(String(spawn.prompt ?? ''))?.[1] ?? 'reviewer-a';
+    const reportMarkdown = '# SFD Role Report\n' +
+      JSON.stringify({ role, taskId: 'external-fixture' }) + '\n' +
+      '## Evidence\n' + JSON.stringify({ status: 'observed', sourceRefs: ['test'] }) +
+      '\nFixture result on the frozen source.\n## Outcome\n' +
+      JSON.stringify({ status: 'complete', limitations: [] }) + '\n';
+    const text = this.invalidJson ? 'not-json' : JSON.stringify({ ...clean, reportMarkdown });
     return { task: {
       agent_id: 12345678, status: this.cancelled ? 'cancelled' : 'completed',
       input_identity: {
@@ -88,7 +94,8 @@ test('external GLM and GPT runs use the requested runtime and admit only strict 
     const handle = await runner.start(task, new AbortController().signal);
     const result = await handle.result;
     assert.equal(result.status, 'completed', result.error);
-    assert.deepEqual(result.output, clean);
+    assert.equal((result.output as { verdict: string }).verdict, clean.verdict);
+    assert.match((result.output as { reportMarkdown: string }).reportMarkdown, /^# SFD Role Report\\n/);
     assert.equal(result.identity.transport, 'external');
     assert.equal(result.identity.external?.subagent, subagent);
     assert.equal(result.identity.external?.admittedModel, subagent === 'zcode' ? `zai/${model}` : model);
