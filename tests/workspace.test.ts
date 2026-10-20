@@ -300,3 +300,38 @@ test('a Section writer may change its admitted scope but cannot silently modify 
   await writeFile(join(run.workspace.path, 'another-owner.txt'), 'out of scope\n');
   await assert.rejects(workspace.capture(run, 'S1'), /outside its admitted writeScope: another-owner\.txt/);
 });
+
+
+test('parent Section review receives its own base-to-head delta rather than previously accepted changes', async (t) => {
+  const { workspace, run } = await fixture(t);
+  run.workspace = await workspace.prepare(run);
+  const makeState = (id: string, base: string) => ({
+    id, stage: 'implementing' as const, inputContractVersion: 1, lineageId: id,
+    materialRepairWaves: 0, diagnosticCount: 0, sectionBaseTreeHash: base,
+    lenses: [], checks: [], reviewIds: [], decisionIds: [], aCoverageEvidenceIds: [],
+  });
+  run.plan = {
+    title: 'Two independent parents', assumptions: [],
+    features: [{ id: 'F1', title: 'Feature', outcome: 'Both increments work',
+      acceptanceCriteria: ['End-to-end behavior'], sectionIds: ['S1', 'S2'], checks: [] }],
+    sections: [
+      { id: 'S1', title: 'First', featureIds: ['F1'], objective: 'First change', dependencies: [],
+        writeScope: ['source.txt'], acceptanceCriteria: ['First works'],
+        implementation: 'standard', checks: [], subsections: [] },
+      { id: 'S2', title: 'Second', featureIds: ['F1'], objective: 'Second change', dependencies: ['S1'],
+        writeScope: ['next.ts'], acceptanceCriteria: ['Second works'],
+        implementation: 'standard', checks: [], subsections: [] },
+    ],
+  };
+  run.sections.S1 = makeState('S1', run.workspace.initialTreeHash!);
+  await writeFile(join(run.workspace.path, 'source.txt'), 'first parent\n');
+  const first = await workspace.capture(run, 'S1');
+  assert.deepEqual(first.sectionDelta?.changedFiles, ['source.txt']);
+  run.candidates[first.id] = first; run.currentCandidateId = first.id;
+  run.sections.S2 = makeState('S2', first.treeHash);
+  await writeFile(join(run.workspace.path, 'next.ts'), 'second parent\n');
+  const second = await workspace.capture(run, 'S2');
+  assert.deepEqual(second.sectionDelta?.changedFiles, ['next.ts']);
+  assert.ok(second.diff.includes('first parent'), 'Full candidate still retains earlier code context');
+  assert.deepEqual(second.changedFiles.sort(), ['next.ts', 'source.txt']);
+});
