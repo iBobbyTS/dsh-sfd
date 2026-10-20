@@ -1,8 +1,8 @@
 /** Host-independent, persisted contracts for a native development run. */
 export declare const CORE_VERSION: "1.1.0";
 export declare const POLICY_VERSION: "sfd-native-2";
-export type ActorKind = 'planner' | 'plan-review-a' | 'plan-review-b' | 'implementer' | 'review-selector' | 'reviewer-a' | 'reviewer-b' | 'adjudicator' | 'closure-reviewer' | 'feature-verifier' | 'diagnostician';
-export type WorkflowIntent = 'execute' | 'plan-handoff';
+export type ActorKind = 'planner' | 'plan-review-a' | 'plan-review-b' | 'implementer' | 'review-selector' | 'reviewer-a' | 'reviewer-b' | 'adjudicator' | 'closure-reviewer' | 'feature-verifier' | 'diagnostician' | 'advisor-notice';
+export type WorkflowIntent = 'execute' | 'plan-handoff' | 'review-only';
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
 export type RunStage = 'planning' | 'plan-review-a' | 'plan-review-b' | 'sections' | 'feature-verification' | 'delivery' | 'done';
 export type SectionStage = 'pending' | 'subsection-implementing' | 'subsection-review' | 'subsection-adjudicating' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
@@ -165,6 +165,26 @@ export interface ClosureFinding {
     status: 'verified-closed' | 'still-open' | 'regression' | 'insufficient-evidence';
     evidence: string;
 }
+export interface AdvisorNotice {
+    project: string;
+    feature: string;
+    reason: string;
+}
+export interface AdvisorPackage {
+    path: string;
+    sha256: string;
+    requestId: string;
+    requestPath: string;
+    responsePath: string;
+    exclusionsPath: string;
+    generatedAt: string;
+    bigFiles: number;
+}
+export interface AdvisorNotification {
+    status: 'sent' | 'failed' | 'unknown';
+    attemptedAt: string;
+    failure?: string;
+}
 export type AdvisorTrigger = 'ADV-01' | 'ADV-02' | 'ADV-03' | 'ADV-04' | 'ADV-05' | 'ADV-06';
 export type RecoveryClassification = 'CONTINUE_CURRENT' | 'SIMPLIFY_CURRENT' | 'REPAIR_EVIDENCE' | 'SPLIT_REMAINING' | 'REBOUND_OWNER' | 'RESTART_FROM_BASE';
 export interface ReviewOutput {
@@ -242,7 +262,8 @@ export interface FeatureVerificationOutput {
     /** One item for every actual business acceptance criterion, with evidence references. */
     criteria: {
         featureId: string;
-        criterion: string;
+        criterion?: string;
+        criterionId?: string;
         evidenceIds: string[];
         satisfied: boolean;
     }[];
@@ -270,7 +291,7 @@ export interface DiagnosticOutput {
     recoveryClass?: RecoveryClassification;
     advisorTrigger?: AdvisorTrigger;
 }
-export type ActorOutput = PlanOutput | ReviewOutput | ImplementationOutput | ReviewSelectionOutput | AdjudicationOutput | FeatureVerificationOutput | DiagnosticOutput;
+export type ActorOutput = PlanOutput | ReviewOutput | ImplementationOutput | ReviewSelectionOutput | AdjudicationOutput | FeatureVerificationOutput | DiagnosticOutput | AdvisorNotice;
 export interface ExecutionIdentity {
     requested?: ActorRoute;
     /** External admission is not an observed runtime model echo. */
@@ -326,6 +347,8 @@ export interface Attempt {
     actorId?: string;
     outcome?: ActorOutcome;
     admittedOutput?: ActorOutput;
+    /** Full actor-authored Markdown report; the admitted machine result remains JSON. */
+    reportMarkdown?: string;
     rejection?: string;
     infrastructureRetries: number;
     recoveryDecisionId?: string;
@@ -505,7 +528,11 @@ export interface DevelopmentRun {
         raisedAt: string;
         request: string;
         reportIds: string[];
-        status: 'waiting-external' | 'waiting-human-decision' | 'adopted';
+        status: 'preparing' | 'waiting-external' | 'waiting-human-decision' | 'adopted';
+        package?: AdvisorPackage;
+        notice?: AdvisorNotice;
+        notification?: AdvisorNotification;
+        packageError?: string;
     };
     decisionHistory: UserDecision[];
     events: RunEvent[];

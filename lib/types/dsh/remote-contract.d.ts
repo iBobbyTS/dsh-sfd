@@ -12,7 +12,7 @@ export interface CreateRequest extends SessionRequest {
     goal: string;
     workspacePath?: string;
     commit?: boolean;
-    intent?: 'execute' | 'plan-handoff';
+    intent?: 'execute' | 'plan-handoff' | 'review-only';
 }
 export interface DecideRequest extends RunRequest {
     decisionId: string;
@@ -39,6 +39,7 @@ export declare const createRequestSchema: z.ZodObject<{
     intent: z.ZodOptional<z.ZodEnum<{
         execute: "execute";
         "plan-handoff": "plan-handoff";
+        "review-only": "review-only";
     }>>;
 }, z.core.$strict>;
 export declare const decideRequestSchema: z.ZodObject<{

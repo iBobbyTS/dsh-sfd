@@ -203,7 +203,8 @@ export declare const featureVerificationSchema: z.ZodObject<{
     summary: z.ZodString;
     criteria: z.ZodArray<z.ZodObject<{
         featureId: z.ZodString;
-        criterion: z.ZodString;
+        criterion: z.ZodOptional<z.ZodString>;
+        criterionId: z.ZodOptional<z.ZodString>;
         evidenceIds: z.ZodArray<z.ZodString>;
         satisfied: z.ZodBoolean;
     }, z.core.$strict>>;
@@ -730,7 +731,8 @@ export declare const actorOutputSchemas: {
         summary: z.ZodString;
         criteria: z.ZodArray<z.ZodObject<{
             featureId: z.ZodString;
-            criterion: z.ZodString;
+            criterion: z.ZodOptional<z.ZodString>;
+            criterionId: z.ZodOptional<z.ZodString>;
             evidenceIds: z.ZodArray<z.ZodString>;
             satisfied: z.ZodBoolean;
         }, z.core.$strict>>;
@@ -786,7 +788,16 @@ export declare const actorOutputSchemas: {
             "ADV-06": "ADV-06";
         }>>;
     }, z.core.$strict>;
+    'advisor-notice': z.ZodObject<{
+        project: z.ZodString;
+        feature: z.ZodString;
+        reason: z.ZodString;
+    }, z.core.$strict>;
 };
+/** A human-readable report is Markdown; the small machine decision remains JSON.
+ * The first line after each Markdown heading is a one-line metadata JSON object.
+ * Legacy deterministic fixtures without a report remain accepted during migration. */
+export declare function validateRoleReport(kind: ActorKind, markdown: string): void;
 export declare function outputSchemaFor(kind: ActorKind): Record<string, unknown>;
 /** A schema proves structure. These checks add bounded, decidable workflow invariants. */
 export declare function parseActorOutput(kind: ActorKind, value: unknown): ActorOutput;

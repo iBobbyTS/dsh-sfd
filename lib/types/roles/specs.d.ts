@@ -75,5 +75,11 @@ export declare const ROLE_SPECS: {
         readonly access: "reader";
         readonly toolNames: readonly ["read", "read_image", "glob", "grep", "structured_output", "sfd_knowledge"];
     };
+    readonly 'advisor-notice': {
+        readonly presetId: "sfd-advisor-notice";
+        readonly title: "Advisor Notification Fields";
+        readonly access: "reader";
+        readonly toolNames: readonly ["structured_output"];
+    };
 };
 export declare const ROLE_PRESETS: Record<ActorKind, string>;

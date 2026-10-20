@@ -1,4 +1,4 @@
-import type { ActorOutcome, ActorTask, Candidate, CheckEvidence, CheckSpec, CommitEvidence, DevelopmentRun, WorkspaceInfo, WorkspaceRecovery } from './types.js';
+import type { ActorOutcome, ActorTask, Candidate, CheckEvidence, CheckSpec, CommitEvidence, DevelopmentRun, WorkspaceInfo, WorkspaceRecovery, AdvisorNotice, AdvisorPackage, AdvisorNotification } from './types.js';
 /** update serializes a single Run and persists it before returning. Its callback is pure. */
 export interface RunStore {
     list(): Promise<DevelopmentRun[]>;
@@ -23,4 +23,10 @@ export interface WorkspacePort {
     commit(run: DevelopmentRun, candidate: Candidate, message: string): Promise<CommitEvidence>;
     reconcile(run: DevelopmentRun): Promise<WorkspaceRecovery>;
     dispose?(): Promise<void>;
+}
+/** Only the Host may produce and send Advisor handoffs. */
+export interface AdvisorPort {
+    pack(run: DevelopmentRun): Promise<AdvisorPackage>;
+    notify(run: DevelopmentRun, pack: AdvisorPackage, fields: AdvisorNotice): Promise<AdvisorNotification>;
+    saveHumanResponse(run: DevelopmentRun, advice: string, adoption: 'accept' | 'reject' | 'clarify', humanAnswer: string, action?: string): Promise<void>;
 }

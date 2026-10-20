@@ -1,9 +1,10 @@
-import type { ActorRunner, RunStore, WorkspacePort } from './ports.js';
+import type { ActorRunner, RunStore, WorkspacePort, AdvisorPort } from './ports.js';
 import { type CreateRunInput, type DecideInput, type DevelopmentRun } from './types.js';
 export interface ControllerOptions {
     store: RunStore;
     actors: ActorRunner;
     workspace: WorkspacePort;
+    advisor?: AdvisorPort;
     now?: () => string;
     id?: () => string;
     /** Public stop calls remain bounded; unconfirmed execution keeps its workspace reservation. */
@@ -15,6 +16,8 @@ export declare class WorkflowController {
     private readonly store;
     private readonly actors;
     private readonly workspace;
+    private readonly advisor?;
+    private readonly preparingAdvisors;
     private readonly now;
     private readonly id;
     private readonly cleanupTimeoutMs;
@@ -64,6 +67,7 @@ export declare class WorkflowController {
     private driveClosure;
     private driveB;
     private driveAdjudication;
+    private correctSemanticOutput;
     private validateAdjudication;
     private requestRepair;
     private driveDiagnostic;
@@ -83,6 +87,8 @@ export declare class WorkflowController {
     private operation;
     private advisorAdopted;
     private block;
+    /** Advisor escalation is a durable Host side effect, not a Skill instruction to a chat agent. */
+    private prepareAdvisor;
     private stopLocal;
     private finishStop;
 }
