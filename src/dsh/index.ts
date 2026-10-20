@@ -15,7 +15,9 @@ import type { ActorKind, ActorRoute, DevelopmentRun, WorkflowPolicy } from '../c
 import { GitWorkspace } from '../workspace/git-workspace.js';
 import { ROLE_PRESETS } from '../roles/index.js';
 import { DomainRunStore, type RunOwner } from './store.js';
-import { NativeActorRunner } from './actors.js';
+import { ModelFamilyActorRunner } from './routing-runner.js';
+import { freezeModelRoute } from './model-routing.js';
+import { ExternalSubagentCli } from './external-actor.js';
 import { nativeCheckExecutor } from './checks.js';
 import {
   TYPERT_REMOTE, createRequestSchema, decideRequestSchema, reviseRequestSchema, runRequestSchema, sessionRequestSchema,
@@ -36,6 +38,8 @@ export interface Config {
   largeImplementerModel?: string;
   largeImplementerEffort?: string;
   allowCommits?: boolean;
+  /** Shell-free external-subagent CLI binary; JSON arguments are sent via stdin. */
+  externalSubagentExecutable?: string;
 }
 export const Config: Schema<Config> = Schema.object({
   stateRoot: Schema.string(),
@@ -47,6 +51,7 @@ export const Config: Schema<Config> = Schema.object({
   largeImplementerModel: Schema.string(),
   largeImplementerEffort: Schema.string(),
   allowCommits: Schema.boolean().default(true),
+  externalSubagentExecutable: Schema.string(),
 });
 
 declare module '@deepseek-ai/cordis' {
@@ -126,16 +131,17 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
     if (request.commit === false) throw new RemoteError('development-workflow/forbidden', 'EXECUTE_WITH_COMMIT requires an accepted commit on the isolated run branch; choose a separately authorized plan-only workflow for no-commit work.', { sessionId: request.sessionId });
     if (this.config.allowCommits === false) throw new RemoteError('development-workflow/forbidden', 'This deployment disables workflow commits.', { sessionId: request.sessionId });
     const routes: Partial<Record<ActorKind, ActorRoute>> = {};
-    for (const kind of Object.keys(ROLE_PRESETS) as ActorKind[]) routes[kind] = { preset: ROLE_PRESETS[kind], ...this.config.modelRoutes?.[kind] };
+    for (const kind of Object.keys(ROLE_PRESETS) as ActorKind[]) routes[kind] = freezeModelRoute(ROLE_PRESETS[kind], owner, this.config.modelRoutes?.[kind]);
     const policy: Partial<WorkflowPolicy> = {
       actorTimeoutMs: this.config.actorTimeoutMs ?? 1_800_000,
       maxParallelReviews: this.config.maxParallelReviews ?? 3,
       maxInfrastructureRetries: this.config.maxInfrastructureRetries ?? 1,
       commit: true, routes,
       ...(this.config.largeImplementerProvider && this.config.largeImplementerModel ? {
-        largeImplementerRoute: { preset: ROLE_PRESETS.implementer, provider: this.config.largeImplementerProvider,
-          model: this.config.largeImplementerModel,
-          ...(this.config.largeImplementerEffort ? { effort: this.config.largeImplementerEffort } : {}) },
+        largeImplementerRoute: freezeModelRoute(ROLE_PRESETS.implementer, owner, {
+          provider: this.config.largeImplementerProvider, model: this.config.largeImplementerModel,
+          ...(this.config.largeImplementerEffort ? { effort: this.config.largeImplementerEffort } : {}),
+        }),
       } : {}),
     };
     return this.store.withOwner(owner, () => this.controller.create({ goal: request.goal, workspacePath, policy, requireInitialPlanApproval: automaticActivation }));
@@ -271,7 +277,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   for (const kind of Object.keys(config.modelRoutes ?? {})) if (!(kind in ROLE_PRESETS)) throw new Error(`Unknown configured SFD actor kind: ${kind}`);
   if (Boolean(config.largeImplementerProvider) !== Boolean(config.largeImplementerModel)) throw new Error('Large implementer routing requires both provider and model.');
   const store = await DomainRunStore.open(ctx.storageDomain);
-  const actors = new NativeActorRunner(ctx, store);
+  const actors = new ModelFamilyActorRunner(ctx, store, new ExternalSubagentCli(config.externalSubagentExecutable));
   const workspace = new GitWorkspace({ stateRoot: config.stateRoot, executeCheck: nativeCheckExecutor(ctx, store) });
   const controller = new WorkflowController({ store, actors, workspace });
   ctx.effect(() => async () => {

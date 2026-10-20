@@ -6,7 +6,7 @@ Original normative source: `iBobbyTS/sectioned-feature-development` main at `1a5
 This migration does **not** revise the original method; it moves enforcement and task ownership from conversational prose into DeepSeek Harness Host and native roles.
 
 The repository ships 100 active Skill/reference/template Markdown files under `knowledge/`. These are **read-only methodological source material**, not another active dispatcher, state store, or runtime dependency on the old repository.
-Host-specific Codex/ZCode/external-subagent routing references remain historical knowledge and do not configure DSH actors. DSH role presets and Host route policy remain authoritative.
+Host-specific Codex/ZCode/external-subagent routing references remain historical knowledge. The DSH Host's configured per-role model is authoritative; a frozen model-family rule now selects **GLM → external-subagent/zcode**, **GPT → external-subagent/codex**, **DeepSeek → native DSH subagent**. The original role model selection remains an explicit Host configuration choice, not an invented default. External daemon admission facts and DSH runtime observations remain distinct evidence.
 
 ## Ownership mapping
 
@@ -16,7 +16,7 @@ Host-specific Codex/ZCode/external-subagent routing references remain historical
 | Feature / Section / Subsection and dependency sequencing | Validated Feature/Section DAG; serial declared Subsections each have scoped implementation and real R01 checkpoint; parent R01 reconciles checkpoint reports/checks and only parent acceptance unblocks external dependencies |
 | Serial independent PLAN A/B | Agent-tool automatic activation stops after first PLAN for explicit owner approval; independent blind PLAN A/B, with a native semantic admission decision for material PLAN findings before any correction budget is consumed; subsequent PLAN_DELTA uses only the same slot's authored prior evidence and explicitly reasoned reuse; OWNER_DECISION blocks; PLAN_NIT never causes material churn; documented PLAN-only silent-A retirement after two qualifying rounds |
 | Single authorized implementer per Section | Isolated Git worktree, assigned writeScope, Host's implementation stage |
-| `impl_std` / `impl_large` dispatch | Same native implementer preset; optional distinct Host-configured large model/effort route |
+| `impl_std` / `impl_large` dispatch | Logical tier remains as planned; selected DeepSeek model activates native implementer, GPT goes to external Codex, GLM to external ZCode. Large requires an explicit Host model/effort route |
 | Frozen CODE A, R01 baseline, risk-qualified specialist selection | Immutable full Git candidate plus the exact parent Section start-tree → candidate delta, independent native reviewer-a activations, risk selector; `review/review-routing.md` is available on demand |
 | Post-repair delta risk rerouting | `reroute` runs after Section repairs; child checkpoint repair also re-routes new/invalidated R01–R12 risks; add focused reviews for new risks rather than another full A/B pair, and carry applicable earlier evidence explicitly |
 | One closure outcome per admitted repair finding | `closureFindingIds` + structured `closures`: verified-closed / still-open / regression / insufficient-evidence; Host enforces one supported closure per target; R02 SAFE_SIMPLIFICATION has separate SIMP IDs, batch-only-on-material-repair rules, and preservation-oracle closure |

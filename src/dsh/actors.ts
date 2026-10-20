@@ -43,7 +43,7 @@ export function validateActorRoute(task: ActorTask, route: ActorRoute | undefine
   const expected = route ?? { preset: ROLE_PRESETS[task.kind] };
   const selected = task.route ?? expected;
   if (selected.preset !== ROLE_PRESETS[task.kind]) throw new Error('An actor cannot replace its native role preset.');
-  if ((['preset', 'provider', 'model', 'effort'] as const).some(field => selected[field] !== expected[field])) throw new Error('Actor route differs from its admitted Run policy.');
+  if ((['preset', 'provider', 'model', 'effort', 'transport'] as const).some(field => selected[field] !== expected[field])) throw new Error('Actor route differs from its admitted Run policy.');
   if ((selected.provider === undefined) !== (selected.model === undefined)) throw new Error('Actor provider and model must be configured together.');
 }
 
@@ -66,7 +66,7 @@ export class NativeActorRunner implements ActorRunner {
 
   constructor(private readonly ctx: Context, private readonly store: DomainRunStore) {}
 
-  private async anchor(task: ActorTask): Promise<NativeAgentHandle> {
+  private async anchor(task: ActorTask, options: AgentOptions & LlmCallConfig): Promise<NativeAgentHandle> {
     if (this.disposed) throw new Error('Native actor runner is disposed.');
     let pending = this.anchors.get(task.runId);
     if (pending === undefined) {
@@ -76,7 +76,9 @@ export class NativeActorRunner implements ActorRunner {
         sessionId: SessionId(`sfd-anchor-${task.runId}-${this.bootId}`),
         signal: this.shutdown.signal,
         meta: { cwd: task.workspace.path, parentSession: SessionId(owner.sessionId), origin: 'subagent', delegationDepth: 0 },
-        agentOptions: nativeAgentOptions(owner),
+        // The idle anchor must not require an unrelated owner-chat GLM/GPT
+        // provider when this native task is explicitly routed to DeepSeek.
+        agentOptions: options,
         setup: (_agentCtx, agent) => {
           seedAgentPermission(agent, owner);
           agent.ctx.tools.restrict({ allow: [] });
@@ -153,7 +155,7 @@ export class NativeActorRunner implements ActorRunner {
     try {
       lifetime.throwIfAborted();
       await this.ctx.llm.resolveCallConfig(requestedOptions, lifetime);
-      const anchor = await this.anchor(task);
+      const anchor = await this.anchor(task, requestedOptions);
       lifetime.throwIfAborted();
       activation = await this.ctx.subagents.startActivation({
         provider: 'spawn', childId, label: `${task.kind}: ${task.sectionId ?? task.runId}`,

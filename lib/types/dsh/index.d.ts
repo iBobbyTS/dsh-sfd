@@ -24,6 +24,8 @@ export interface Config {
     largeImplementerModel?: string;
     largeImplementerEffort?: string;
     allowCommits?: boolean;
+    /** Shell-free external-subagent CLI binary; JSON arguments are sent via stdin. */
+    externalSubagentExecutable?: string;
 }
 export declare const Config: Schema<Config>;
 declare module '@deepseek-ai/cordis' {

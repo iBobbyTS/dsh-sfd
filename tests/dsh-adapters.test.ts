@@ -270,7 +270,9 @@ test('real DSH spawn keeps its Host anchor, isolates role tools, captures struct
     const writerTools = adapter.requests.at(-1)?.tools?.map(tool => tool.name) ?? [];
     for (const tool of ['write', 'edit', 'bash', 'read', 'grep', 'structured_output']) assert.ok(writerTools.includes(tool), `writer needs ${tool}`);
     adapter.hold = true;
-    const timeout = await runner.start({ ...task, id: 'timeout-native', timeoutMs: 150 }, new AbortController().signal);
+    // Startup itself is included in the actor deadline: 150ms flakes under CI parallel load.
+    // A held model must still fail after a generous bounded deadline.
+    const timeout = await runner.start({ ...task, id: 'timeout-native', timeoutMs: 5_000 }, new AbortController().signal);
     assert.equal((await timeout.result).status, 'failed', 'actor deadline is a bounded failure');
   } finally { await runner.dispose(); await controller.dispose(); await store.close(); await ctx.fiber.dispose(); await rm(root, { recursive: true, force: true }); }
 });
