@@ -178,6 +178,11 @@ export class NativeActorRunner implements ActorRunner {
         error: value.diagnostic ?? `Native actor stopped: ${value.stopReason}`, identity, artifactRefs,
       };
       if (value.structured === undefined) return { status: 'failed', error: 'The actor finished without the required structured output.', identity, artifactRefs };
+      if (task.kind !== 'advisor-notice' &&
+          (!value.structured || typeof value.structured !== 'object' ||
+           typeof (value.structured as Record<string, unknown>).reportMarkdown !== 'string')) {
+        return { status: 'failed', error: 'SFD_REPORT_MISSING: The actor did not provide its required Markdown report alongside the machine JSON.', identity, artifactRefs };
+      }
       return { status: 'completed', output: value.structured, identity, artifactRefs };
     }, (error): ActorOutcome => ({ status: signal.aborted ? 'cancelled' : 'failed', error: String(error), identity, artifactRefs })).finally(() => {
       clearTimeout(timeout); lifetime.removeEventListener('abort', onAbort); observe(); this.active.delete(handle);
