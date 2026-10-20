@@ -7,7 +7,7 @@ export type ActorKind =
   | 'review-selector' | 'reviewer-a' | 'reviewer-b' | 'adjudicator'
   | 'closure-reviewer' | 'feature-verifier' | 'diagnostician' | 'advisor-notice';
 
-export type WorkflowIntent = 'execute' | 'plan-handoff';
+export type WorkflowIntent = 'execute' | 'plan-handoff' | 'review-only';
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
 export type RunStage = 'planning' | 'plan-review-a' | 'plan-review-b' | 'sections' | 'feature-verification' | 'delivery' | 'done';
 export type SectionStage = 'pending' | 'subsection-implementing' | 'subsection-review' | 'subsection-adjudicating' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
