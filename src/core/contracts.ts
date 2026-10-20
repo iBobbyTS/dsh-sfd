@@ -89,6 +89,31 @@ export const actorOutputSchemas = {
   'advisor-notice': z.strictObject({ project: z.string().trim().min(1).max(100), feature: z.string().trim().min(1).max(160), reason: z.string().trim().min(1).max(500) }),
 } satisfies Record<ActorKind, z.ZodType>;
 
+/** A human-readable report is Markdown; the small machine decision remains JSON.
+ * The first line after each Markdown heading is a one-line metadata JSON object.
+ * Legacy deterministic fixtures without a report remain accepted during migration. */
+export function validateRoleReport(kind: ActorKind, markdown: string): void {
+  if (markdown.length > 200_000 || !markdown.startsWith('# SFD Role Report\n'))
+    throw new Error('Role report must begin with the canonical Markdown title.');
+  const lines = markdown.split(/\r?\n/);
+  let headings = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^#{1,3} .+/.test(lines[i] ?? '')) continue;
+    headings++;
+    const next = lines[i + 1] ?? '';
+    if (!next.startsWith('{') || !next.endsWith('}'))
+      throw new Error('First line below every Markdown report heading must be a JSON metadata object.');
+    let metadata: unknown;
+    try { metadata = JSON.parse(next); }
+    catch { throw new Error('Invalid first-line JSON in Markdown report.'); }
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+      throw new Error('Report heading metadata must be a JSON object.');
+    if (i === 0 && (metadata as { role?: string }).role !== kind)
+      throw new Error('Report title metadata role does not match the actual actor kind.');
+  }
+  if (headings < 2) throw new Error('Markdown report must contain at least one evidence heading.');
+}
+
 export function outputSchemaFor(kind: ActorKind): Record<string, unknown> {
   // DSH's native structured-output validator accepts a deliberate JSON Schema subset.
   // Preserve structural constraints there; full size/range/semantic validation remains
@@ -104,12 +129,29 @@ export function outputSchemaFor(kind: ActorKind): Record<string, unknown> {
     if (node.oneOf) result.oneOf = (node.oneOf as Record<string, unknown>[]).map(lower);
     return result;
   };
-  return lower(raw);
+  const shape = lower(raw);
+  if (kind !== 'advisor-notice') {
+    const props = shape.properties as Record<string, unknown>;
+    shape.properties = { ...props, reportMarkdown: {
+      type: 'string',
+      description: 'Full human-readable Markdown report. Begin with # SFD Role Report, then a one-line JSON metadata object. Each ## section must likewise begin with one JSON metadata line. The other fields are the final machine JSON.',
+    } };
+  }
+  return shape;
 }
 
 /** A schema proves structure. These checks add bounded, decidable workflow invariants. */
 export function parseActorOutput(kind: ActorKind, value: unknown): ActorOutput {
-  const result = actorOutputSchemas[kind].parse(value) as ActorOutput;
+  let report: string | undefined;
+  let decision = value;
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'reportMarkdown' in value) {
+    const { reportMarkdown, ...remaining } = value as Record<string, unknown>;
+    if (typeof reportMarkdown !== 'string') throw new Error('Markdown report is not text.');
+    validateRoleReport(kind, reportMarkdown);
+    report = reportMarkdown;
+    decision = remaining;
+  }
+  const result = actorOutputSchemas[kind].parse(decision) as ActorOutput;
   if (kind === 'planner') validatePlan((result as { plan: DevelopmentPlan }).plan);
   if ('verdict' in result && 'findings' in result) {
     if (result.verdict === 'clean' && result.findings.length) throw new Error('A clean review cannot contain findings.');
