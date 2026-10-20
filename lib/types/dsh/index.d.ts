@@ -43,7 +43,7 @@ export declare class DevelopmentWorkflowService extends TypertRemoteService {
     private assertOwner;
     private requireLiveOwner;
     list(request: SessionRequest): Promise<DevelopmentRun[]>;
-    create(request: CreateRequest): Promise<DevelopmentRun>;
+    create(request: CreateRequest, automaticActivation?: boolean): Promise<DevelopmentRun>;
     status(request: RunRequest): Promise<DevelopmentRun>;
     start(request: RunRequest): Promise<DevelopmentRun>;
     pause(request: RunRequest): Promise<DevelopmentRun>;

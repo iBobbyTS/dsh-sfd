@@ -106,6 +106,7 @@ export interface WorkspaceInfo {
     path: string;
     branch: string;
     baseCommit: string;
+    initialTreeHash?: string;
     /** A prepared run must use a dedicated non-default branch. */
     prepared?: boolean;
 }
@@ -117,6 +118,13 @@ export interface Candidate {
     treeHash: string;
     diff: string;
     changedFiles: string[];
+    /** Exact current parent Section delta, not the cumulative Feature diff. */
+    sectionDelta?: {
+        sectionId: string;
+        baseTreeHash: string;
+        diff: string;
+        changedFiles: string[];
+    };
 }
 export interface CommitEvidence {
     commit: string;
@@ -341,11 +349,20 @@ export interface SectionState {
     id: string;
     stage: SectionStage;
     inputContractVersion: number;
-    /** Never reset by a candidate change, replan, or child subdivision. */
+    /** Cumulative admitted repair waves. Retain the historical field name for persisted compatibility. */
     lineageId: string;
     materialRepairWaves: number;
     diagnosticCount: number;
     candidateId?: string;
+    /** Frozen source just before this parent Section first became executable. */
+    sectionBaseTreeHash?: string;
+    unfinishedContinuation?: {
+        phase: 'implementing' | 'subsection-implementing';
+        subsectionId?: string;
+        treeHash: string;
+        remainingWork: string;
+        repeats: number;
+    };
     lenses: Lens[];
     checks: CheckEvidence[];
     reviewIds: string[];
@@ -428,6 +445,9 @@ export interface DevelopmentRun {
     status: RunStatus;
     stage: RunStage;
     plan?: DevelopmentPlan;
+    /** Only automatic (agent-tool) activation requires owner approval of its first plan. */
+    initialPlanApprovalRequired?: boolean;
+    initialPlanApprovalObtained?: boolean;
     planRevision: number;
     planRepairs: number;
     planRequirementsVersion?: number;
@@ -489,6 +509,7 @@ export interface CreateRunInput {
     goal: string;
     workspacePath: string;
     policy?: Partial<WorkflowPolicy>;
+    requireInitialPlanApproval?: boolean;
 }
 export interface DecideInput {
     decisionId: string;
