@@ -181,6 +181,8 @@ export interface Attempt {
   actorId?: string;
   outcome?: ActorOutcome;
   admittedOutput?: ActorOutput;
+  /** Full actor-authored Markdown report; the admitted machine result remains JSON. */
+  reportMarkdown?: string;
   rejection?: string;
   infrastructureRetries: number;
   recoveryDecisionId?: string;
