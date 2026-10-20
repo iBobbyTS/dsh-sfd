@@ -20,8 +20,8 @@ function slug(value: string): string {
 function requestId(run: DevelopmentRun): string {
   const date = new Date(run.advisorCase?.raisedAt ?? run.createdAt);
   if (Number.isNaN(date.valueOf())) throw new Error('Invalid Advisor request date.');
-  const at = date.toISOString().replace(/[-:]/g, '').slice(0, 12);
-  return at + '_' + slug(run.id);
+  const at = date.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+  return at.slice(0, 8) + '-' + at.slice(8, 12) + '_' + slug(run.id);
 }
 function evidenceRequest(run: DevelopmentRun): string {
   const info = run.advisorCase;
