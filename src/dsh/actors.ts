@@ -107,8 +107,11 @@ export class NativeActorRunner implements ActorRunner {
     if (run === undefined || owner === undefined) throw new Error(`Unknown Run: ${task.runId}`);
     const sectionContract = task.kind === 'implementer' && task.sectionId
       ? run.plan?.sections.find((section) => section.id === task.sectionId) : undefined;
+    if (sectionContract?.implementation === 'large' && !run.policy.largeImplementerRoute) {
+      throw new Error('MODEL_CONFIGURATION_UNVERIFIED: impl_large has no explicitly authorized Host model route. No silent standard-model fallback.');
+    }
     const allowedRoute = sectionContract?.implementation === 'large'
-      ? run.policy.largeImplementerRoute ?? run.policy.routes[task.kind] : run.policy.routes[task.kind];
+      ? run.policy.largeImplementerRoute : run.policy.routes[task.kind];
     validateActorRoute(task, allowedRoute);
     const route = task.route ?? allowedRoute ?? { preset: ROLE_PRESETS[task.kind] };
     const requestedOptions = nativeAgentOptions(owner, route);
