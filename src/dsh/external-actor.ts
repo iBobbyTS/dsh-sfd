@@ -67,6 +67,7 @@ const REQUIRED_KNOWLEDGE: Record<ActorTask['kind'], readonly string[]> = {
   'closure-reviewer': ['review/delegated-pass.md', 'workflow/reviewer-orchestration.md'],
   'feature-verifier': ['workflow/integration-and-testing.md'],
   diagnostician: ['workflow/recovery-and-migration.md'],
+  'advisor-notice': [],
 };
 
 /** External runtimes cannot call DSH's sfd_knowledge tool. Bundle role-relevant originals verbatim. */
