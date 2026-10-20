@@ -103,7 +103,7 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
   }
 
   @Remote({ resources: { session: (request: CreateRequest) => SessionId(request.sessionId) } })
-  async create(request: CreateRequest): Promise<DevelopmentRun> {
+  async create(request: CreateRequest, automaticActivation = false): Promise<DevelopmentRun> {
     request = createRequestSchema.parse(request);
     const agent = await this.requireLiveOwner(request.sessionId);
     const sandbox = this.ctx.sandboxPolicy.resolve({ session: agent.session });
@@ -138,7 +138,7 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
           ...(this.config.largeImplementerEffort ? { effort: this.config.largeImplementerEffort } : {}) },
       } : {}),
     };
-    return this.store.withOwner(owner, () => this.controller.create({ goal: request.goal, workspacePath, policy }));
+    return this.store.withOwner(owner, () => this.controller.create({ goal: request.goal, workspacePath, policy, requireInitialPlanApproval: automaticActivation }));
   }
 
   @Remote({ resources: { session: (request: RunRequest) => SessionId(request.sessionId) } })
@@ -252,7 +252,7 @@ function installEntries(ctx: Context, service: DevelopmentWorkflowService): void
       if (exec.agent === undefined || ctx.agents.get(exec.agent.id) !== exec.agent || exec.agent.session.header.origin === 'subagent') throw new Error('SFD control requires the exact live owning chat Agent.');
       const sessionId = String(exec.agent.id);
       if (args.action === 'list') return JSON.stringify(await service.list({ sessionId }));
-      if (args.action === 'create') return JSON.stringify(await service.create({ sessionId, goal: args.goal ?? '' }));
+      if (args.action === 'create') return JSON.stringify(await service.create({ sessionId, goal: args.goal ?? '' }, true));
       const request = { sessionId, runId: args.run_id ?? '' };
       switch (args.action) {
         case 'start': return JSON.stringify(await service.start(request));

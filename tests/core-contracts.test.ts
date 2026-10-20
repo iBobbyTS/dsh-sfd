@@ -28,3 +28,14 @@ test('clean review and code A lens selection have meaningful bounded contracts',
   assert.throws(() => parseActorOutput('review-selector', { lenses: [{ id: 'R02', name: 'Structure', focus: 'Simplification' }], rationale: 'Small change' }), /R01/);
   assert.throws(() => createPolicy({ maxRepairWaves: 6 }), /maxRepairWaves/);
 });
+
+test('one parent Section has exactly one owning Feature, with cross-Feature reuse via dependency', () => {
+  const shared = plan();
+  shared.features.push({ id: 'F2', title: 'Second feature', outcome: 'Use producer', acceptanceCriteria: ['Consumer journey'], sectionIds: ['S2'], checks: [] });
+  shared.sections[1].featureIds = ['F2'];
+  shared.features[0].sectionIds = ['S1'];
+  validatePlan(shared);
+  shared.sections[0].featureIds = ['F1', 'F2'];
+  shared.features[1].sectionIds = ['S1', 'S2'];
+  assert.throws(() => validatePlan(shared), /exactly one owning Feature/);
+});

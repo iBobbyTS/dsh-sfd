@@ -146,7 +146,7 @@ export class GitWorkspace implements WorkspacePort {
         if (manifest.version !== 1 || manifest.runId !== run.id || manifest.commonGitDir !== common) throw new Error('Workspace manifest identity does not match this Run.');
         const actual = await this.inspect(manifest.workspace.path);
         if (actual.branch !== manifest.workspace.branch) throw new Error('Prepared worktree branch changed; reconcile before continuing.');
-        return manifest.workspace;
+        return { ...manifest.workspace, initialTreeHash: manifest.initialTree };
       }
       const source = await this.inspect(run.workspace.path);
       if (source.baseCommit !== run.workspace.baseCommit) throw new Error('Source HEAD changed since the Run was created; revise or recreate the Run from current inputs.');
@@ -154,7 +154,7 @@ export class GitWorkspace implements WorkspacePort {
       if (await exists(path)) throw new Error('An unrecorded worktree exists from interrupted preparation; reconcile it before retrying.');
       const branch = `sfd/${safeId(run.id)}`;
       const initialTree = await this.tree(source.path, root);
-      const workspace: WorkspaceInfo = { path, branch, baseCommit: source.baseCommit, prepared: true };
+      const workspace: WorkspaceInfo = { path, branch, baseCommit: source.baseCommit, initialTreeHash: initialTree, prepared: true };
       const manifest: Manifest = { version: 1, runId: run.id, source: source.path, commonGitDir: common, workspace, initialTree };
       await this.writeJson(join(root, 'prepare-intent.json'), manifest);
       await this.git(source.path, ['worktree', 'add', '-b', branch, path, source.baseCommit]);
@@ -236,7 +236,15 @@ export class GitWorkspace implements WorkspacePort {
     }
     const diff = await this.git(run.workspace.path, ['diff', '--binary', run.workspace.baseCommit, treeHash, '--']);
     const changedFiles = (await this.git(run.workspace.path, ['diff', '--name-only', '-z', run.workspace.baseCommit, treeHash, '--'])).split('\0').filter(Boolean);
-    const candidate: Candidate = { id, capturedAt: now(), workspacePath, head, treeHash, diff, changedFiles };
+    const sectionBase = section?.sectionBaseTreeHash ?? (sectionId ? run.workspace.initialTreeHash : undefined);
+    if (sectionId && !sectionBase) throw new Error(`Parent Section ${sectionId} has no frozen starting tree; refusing a cumulative Feature diff as Section coverage.`);
+    const sectionDelta = sectionBase && sectionId ? {
+      sectionId, baseTreeHash: sectionBase,
+      diff: await this.git(run.workspace.path, ['diff', '--binary', sectionBase, treeHash, '--']),
+      changedFiles: (await this.git(run.workspace.path, ['diff', '--name-only', '-z', sectionBase, treeHash, '--'])).split('\0').filter(Boolean),
+    } : undefined;
+    const candidate: Candidate = { id, capturedAt: now(), workspacePath, head, treeHash, diff, changedFiles,
+      ...(sectionDelta ? { sectionDelta } : {}) };
     await this.writeJson(join(candidateDirectory, `${id}.json`), candidate);
     return candidate;
   }

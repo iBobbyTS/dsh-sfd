@@ -48,6 +48,10 @@ export declare class WorkflowController {
     private driveSections;
     /** A Subsection is an actual gated increment inside one parent lineage, never a child Feature. */
     private subsection;
+    /** A fresh native checkpoint must receive the predecessor R01 reports, not just opaque IDs. */
+    private checkpointEvidence;
+    /** Partial work is not a failed review wave; diagnose only repeated absence of progress. */
+    private continueUnfinished;
     private driveSubsectionImplementation;
     private advanceSubsection;
     private driveSubsectionReview;

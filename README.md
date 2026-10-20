@@ -42,6 +42,8 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 2. 点击 **New run**，填写完整目标、约束和验收要求。
 3. 创建后点击 **Start**。创建与启动分开，便于先检查任务目标和交付选项。
 
+**自动激活与显式调用的区别：** Agent 通过 `sfd_run` 工具创建的 Run 在产生第一份 PLAN 后暂停，等待你在 Development 面板中核对并批准，再进入独立 PLAN A/B。用户直接在 UI 或 `/sfd` 命令中显式启动不增加这一暂停；这与原 SKILL 的激活边界一致。
+
 与原 SFD 的 `EXECUTE_WITH_COMMIT` 一致，任务验收后会在独立的 `sfd/<run-id>` 非 main 分支提交精确候选。不会自动 push、合并到默认分支或删除原有工作。显式 no-commit 执行请求会被拒绝，而不会悄悄改变原工作流的交付模式。
 
 同样的操作可以通过命令完成：
@@ -78,9 +80,9 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 
 | 阶段 | Host 控制的行为 |
 | --- | --- |
-| 规划 | Planner 提出 Feature/Section DAG；PLAN A、PLAN B 串行独立；修订用有界的原审核槽 PLAN_DELTA，只有原规范的条件满足时才退役静默 PLAN A |
+| 规划 | Planner 提出 Feature/Section DAG；PLAN A、PLAN B 串行独立；material PLAN finding 必须由独立的 Main 语义裁决角色核实后才能形成计划修订；修订用有界的原审核槽 PLAN_DELTA |
 | 实施 | 一个任务工作区同时只有一个实施者；非空 Subsection 列表按顺序执行、检查和独立 R01 checkpoint；只有 Parent Section 正式验收才释放外部依赖 |
-| 候选 | 捕获包含源码、测试、配置、暂存/未暂存修改和非忽略未跟踪文件的完整 Git tree |
+| 候选 | 捕获完整 Git tree，并为当前父 Section 另提供其启动时的冻结 tree → 当前候选的精确审查 Delta；完整 Feature Diff 只提供整体上下文 |
 | Code A | 始终包含 R01 完整行为基线，并按实际风险选择独立审查视角；有界并行 |
 | 裁决与修复 | 逐条裁决 finding；R02 可提出有独立 SIMP-### ID 的非阻断简化动作，只有与已确认材料缺陷成批修复时才执行并验证保存性；真实检查、覆盖与适用性决定门禁 |
 | Code B | B1 完整盲审当前候选；B2 在同一候选上协调 B1 与 A/closure 证据 |
@@ -95,9 +97,9 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 - **目标独立保存。** 原始目标、后续需求版本和用户决定不依赖聊天上下文。明确撤销的目标可以退役，其原有修复历史仍然保存。
 - **状态只有一个来源。** 原生 storage domain 保存 Run 聚合；界面是该状态的投影，不维护另一个 Markdown 状态机。
 - **模型按需工作。** Host 持有真实、通常空闲的 anchor Agent；使用原生 `spawn` 和 `delivery: caller` 收集角色结果，不靠反复唤醒主聊天维持调度。
-- **版本区分用途。** 聚合 revision、任务输入版本、控制 epoch 分开。一个 A 报告写入不会让同批其他报告过期；暂停或修订后的旧结果不能自动推进新阶段。
+- **长任务部分完成不等于失败。** Implementer 可在有真实进展时跨越三个以上连续激活；只有源码和剩余工作多次都没有进展，才进入有界诊断。\n- **版本区分用途。** 聚合 revision、任务输入版本、控制 epoch 分开.一个 A 报告写入不会让同批其他报告过期；暂停或修订后的旧结果不能自动推进新阶段。
 - **输入有边界。** 长历史和大 diff 转为只读证据文件与索引，角色可以精确读取；盲审输入在写入文件前就完成过滤。原始目标不会被静默截断，目标本身过大时会明确停止并要求拆分。
-- **预算归属于原始 Section。** 五轮常规材料修复；达到硬上限后只允许一次有据可查的恢复分类（非结构性至多再一轮；真实结构性替换共享原 lineage、继承恢复已使用状态）。第二次收敛失败进入 ADV-01 的外部人工裁决，绝不重新命名清零。基础设施失败有独立的有限重试规则。
+- **预算归属于原始 Section。** 五轮常规已准入的实际修复（不因模型标记 nonmaterial 就免费）；达到硬上限后只允许一次有据可查的恢复分类（非结构性至多再一轮；真实结构性替换共享原 lineage、继承恢复已使用状态）。第二次收敛失败进入 ADV-01 的外部人工裁决，绝不重新命名清零。基础设施失败有独立的有限重试规则。
 - **暂停等待真实停止。** 若执行器不能及时确认退出，任务保持暂停中/待核对并保留工作区占用，不会宣称写入已停止后继续派发新写者。
 
 ## 工作区、检查与恢复
@@ -148,7 +150,7 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
     # largeImplementerEffort: high
 ```
 
-路由固定在 Run policy 中，actor 结果不能更改模型或角色 preset。执行记录区分请求路由与实际请求头观察到的路由，缺失观察时不会伪造模型身份。`standard/large` 使用同一个原生实施者 preset，但可按 Section 等级选择不同的 Host 授权模型路由。未指定 large 专用模型时沿用标准 implementer 路由。
+路由固定在 Run policy 中，actor 结果不能更改模型或角色 preset。执行记录区分请求路由与实际请求头观察到的路由，缺失观察时不会伪造模型身份。`standard/large` 使用同一个原生实施者 preset，但可按 Section 等级选择不同的 Host 授权模型路由。**若 PLAN 选择 `large` 而 Host 未配置 `largeImplementerProvider` 与 `largeImplementerModel`，对应执行将阻塞并报告模型配置缺失，不静默降级到 standard。** 为严格复刻旧版的独立 A/B 模型路由，仍需在 `modelRoutes` 中明确配置这些角色；默认继承会话模型不构成原路由的等价证明。
 
 ## 开发与验证
 

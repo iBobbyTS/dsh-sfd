@@ -70,6 +70,11 @@ class FakeActors implements ActorRunner {
       return { summary: 'Implemented required behavior.', completedCriteria: ['Export respects account ownership.'], remainingWork: [], changedInterfaces: [] };
     }
     if (task.kind === 'review-selector') return { lenses: [{ id: 'R01', name: 'Full behavior baseline', focus: 'Complete business behavior' }], rationale: 'One bounded risk.' };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'plan-admission') {
+      const findings = task.input.findings as { id: string }[];
+      return accept({ resolution: 'repair', repairInstructions: 'Correct confirmed requirement coverage.',
+        dispositions: findings.map((finding) => ({ findingId: finding.id, decision: 'fix', reason: 'Verified against current business contract.' })) });
+    }
     if (task.kind === 'adjudicator') {
       const reviews = task.input.reviews as ReviewEvidence[];
       return accept({ evidenceReuse: task.input.purpose === 'closure-admission' ? reviews.filter((review) => review.stage === 'a').map((review) => ({ evidenceId: review.id, reason: 'The direct repair is covered by the current closure; the unaffected baseline remains applicable.' })) : [] });
@@ -439,6 +444,8 @@ test('explicit revised scope can retire a repaired Section while keeping its ori
   assert.equal(done.sections.S2, undefined);
   assert.equal(done.retiredSections?.S2.state.materialRepairWaves, 2);
   assert.equal(done.retiredSections?.S2.state.lineageId, `${id}:S2`);
+  assert.equal(actors.calls.filter((task) => task.kind === 'implementer' && task.sectionId === 'S1').length, 1,
+    'Revised scope must not reimplement an unchanged integrated parent');
   await controller.dispose();
 });
 
@@ -592,6 +599,11 @@ test('native Subsections enforce serial R01 checkpoints before consumer and pare
   const parentR01 = actors.calls.find((call) => call.kind === 'reviewer-a' &&
     call.input.checkpointMode === 'PARENT_RECONCILIATION');
   assert.equal((parentR01?.input.previousCheckpoints as unknown[])?.length, 2);
+  const secondChild = actors.calls.find((call) => call.kind === 'reviewer-a' &&
+    call.input.checkpointMode === 'SUBSECTION_DELTA' && (call.input.subsection as { id: string } | undefined)?.id === 'S1b');
+  const history = secondChild?.input.previousCheckpoints as { review?: ReviewEvidence; checks?: { status: string }[] }[] | undefined;
+  assert.equal(history?.[0]?.review?.output.verdict, 'clean', 'A fresh checkpoint needs the prior authored R01 report');
+  assert.equal(history?.[0]?.checks?.[0]?.status, 'passed');
   await controller.dispose();
 });
 
@@ -662,6 +674,11 @@ test('PLAN_NIT alone is not another correction wave and OWNER_DECISION requires 
   const { controller, actors } = rig();
   let asked = false;
   actors.responder = (task) => {
+    if (task.kind === 'adjudicator' && task.input.purpose === 'plan-admission') {
+      const findings = task.input.findings as { id: string }[];
+      return accept({ resolution: 'needs-user', question: 'Choose an externally supported compatibility format.',
+        dispositions: findings.map((finding) => ({ findingId: finding.id, decision: 'needs-user', reason: 'Only the actual owner can choose this format.' })) });
+    }
     if (task.kind === 'plan-review-a' && !asked) {
       asked = true;
       return { ...clean, verdict: 'findings', findings: [{ id: 'OWNER1', title: 'Compatibility semantics',
@@ -897,5 +914,129 @@ test('SPLIT_REMAINING requires two real descendants and inherits one exhausted p
   assert.equal(done.sections.S1b.materialRepairWaves, 5);
   assert.equal(done.sections.S1a.recovery?.classification, 'SPLIT_REMAINING');
   assert.equal(done.sections.S1b.recovery?.extraWaveLimit, 10);
+  await controller.dispose();
+});
+
+
+test('automatic native activation pauses before PLAN reviewers until owner approves the first plan', async () => {
+  const { controller, actors } = rig();
+  const run = await controller.create({ goal: 'Users can export their own records.', workspacePath: '/project',
+    policy: { commit: true }, requireInitialPlanApproval: true });
+  await controller.start(run.id);
+  const waiting = await waitFor(controller, run.id, (value) => value.status === 'waiting-user');
+  assert.equal(waiting.stage, 'plan-review-a');
+  assert.equal(waiting.initialPlanApprovalObtained, undefined);
+  assert.equal(actors.calls.some((call) => call.kind === 'plan-review-a' || call.kind === 'implementer'), false);
+  await controller.decide(run.id, { decisionId: waiting.pendingDecision!.id, action: 'continue', answer: 'Approve this bounded first plan.' });
+  const done = await waitFor(controller, run.id, (value) => value.status === 'completed');
+  assert.equal(done.initialPlanApprovalObtained, true);
+  assert.ok(actors.calls.some((call) => call.kind === 'plan-review-b'));
+  await controller.dispose();
+});
+
+test('unsupported PLAN reviewer scope suggestions do not consume a correction wave', async () => {
+  const { controller, actors } = rig();
+  let proposed = false;
+  actors.responder = (task) => {
+    if (task.kind === 'plan-review-a' && !proposed) {
+      proposed = true;
+      return { ...clean, verdict: 'findings', findings: [{ id: 'UNSUPPORTED',
+        title: 'Unrequested generalized registry', body: 'Would create extra product surface',
+        invariant: 'Only approved requirements count', severity: 'major',
+        classification: 'PLAN_BLOCKER' }] };
+    }
+    if (task.kind === 'adjudicator' && task.input.purpose === 'plan-admission') {
+      return accept({ dispositions: [{ findingId: 'UNSUPPORTED', decision: 'reject',
+        reason: 'No user intent or existing product contract requires the registry.' }] });
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed', 'blocked', 'waiting-user'].includes(run.status));
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.planRepairs, 0);
+  assert.equal(actors.calls.filter((call) => call.kind === 'plan-review-a').length, 1);
+  assert.equal(actors.calls.filter((call) => call.kind === 'adjudicator' && call.input.purpose === 'plan-admission').length, 1);
+  await controller.dispose();
+});
+
+test('forward-progress implementation may continue beyond three bounded activations', async () => {
+  const { controller, actors, workspace } = rig();
+  let calls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'implementer') {
+      workspace.version++;
+      calls++;
+      return { summary: 'A real additional interface increment was written.',
+        completedCriteria: [], remainingWork: calls <= 4 ? ['Continue next reachable increment'] : [], changedInterfaces: [] };
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed', 'blocked', 'waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(calls, 5);
+  assert.equal(done.sections.S1.diagnosticCount, 0);
+  await controller.dispose();
+});
+
+test('identical unfinished handoffs without source progress are diagnosed and then blocked', async () => {
+  const { controller, actors } = rig();
+  actors.responder = (task) => task.kind === 'implementer'
+    ? { summary: 'No new file changed.', completedCriteria: [],
+      remainingWork: ['Same outstanding work'], changedInterfaces: [] }
+    : actors.defaultResult(task);
+  const id = await launch(controller);
+  const stopped = await waitFor(controller, id, (run) => run.status === 'waiting-user' || run.status === 'blocked', 9000);
+  assert.match(stopped.blockedReason ?? '', /no observable progress|no progress/i);
+  assert.equal(stopped.sections.S1.diagnosticCount, 1);
+  assert.ok(actors.calls.filter((call) => call.kind === 'implementer').length >= 3);
+  await controller.dispose();
+});
+
+
+test('an admitted source repair consumes an original wave even when classified nonmaterial', async () => {
+  const { controller, actors, workspace } = rig();
+  let bCalls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'reviewer-b' && ++bCalls === 1) return {
+      ...clean, verdict: 'findings',
+      findings: [{ id: 'BUG', title: 'Required behavior missing',
+        body: 'A real reachable case fails.', severity: 'major', invariant: 'User export works' }],
+    };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'b-admission' && workspace.version === 1) {
+      return accept({ resolution: 'repair', material: false,
+        dispositions: [{ findingId: (task.input.findings as { id: string }[])[0].id,
+          decision: 'fix', reason: 'Reproduced required behavior.' }],
+        repairInstructions: 'Restore required export response on the exact route.' });
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed', 'blocked', 'waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(done.sections.S1.materialRepairWaves, 1);
+  assert.equal(actors.calls.filter((task) => task.kind === 'implementer').length, 2);
+  await controller.dispose();
+});
+
+test('an incomplete historical PLAN slot is not offered as reusable PLAN_DELTA authority', async () => {
+  const { controller, actors } = rig();
+  let bCalls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'plan-review-b' && ++bCalls === 1) {
+      return { ...clean, verdict: 'incomplete', coverage: [], limitations: ['Repository evidence temporarily unavailable'] };
+    }
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const waiting = await waitFor(controller, id, (run) => run.status === 'waiting-user');
+  await controller.decide(id, { decisionId: waiting.pendingDecision!.id, action: 'replan', answer: 'Retry reviewed plan with available source.' });
+  const done = await waitFor(controller, id, (run) => ['completed', 'blocked', 'waiting-user'].includes(run.status), 9000);
+  assert.equal(done.status, 'completed', done.blockedReason);
+  const b = actors.calls.filter((call) => call.kind === 'plan-review-b');
+  assert.equal(b.length, 2);
+  assert.equal(b[1]?.input.reviewMode, 'FULL');
+  assert.equal(b[1]?.input.previousSlot, undefined);
   await controller.dispose();
 });

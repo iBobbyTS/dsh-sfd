@@ -140,6 +140,8 @@ export function validatePlan(plan: DevelopmentPlan): void {
   const children = plan.sections.flatMap((section) => section.subsections.map((child) => child.id));
   assertUnique([...sections.keys(), ...children], 'Section/Subsection');
   for (const section of plan.sections) {
+    // Original SFD: one parent Section has one Feature owner; other Features may depend on it.
+    if (section.featureIds.length !== 1) throw new Error(`Section ${section.id} must have exactly one owning Feature.`);
     assertUnique(section.acceptanceCriteria, `acceptance criterion in ${section.id}`);
     assertUnique(section.dependencies, 'dependency');
     assertUnique(section.featureIds, 'Feature membership');

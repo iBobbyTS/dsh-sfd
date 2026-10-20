@@ -57,6 +57,7 @@ export class WorkflowController {
       id: this.id(), schemaVersion: 1, workflowVersion: CORE_VERSION,
       revision: 0, controlEpoch: 0, inputContractVersion: 1, createdAt: at, updatedAt: at,
       goal: input.goal.trim(), requirementsHistory: [{ version: 1, goal: input.goal.trim(), at }],
+      ...(input.requireInitialPlanApproval ? { initialPlanApprovalRequired: true } : {}),
       workspace, policy: createPolicy(input.policy), status: 'draft', stage: 'planning',
       planRevision: 0, planRepairs: 0, planFeedback: [], sections: {}, candidates: {},
       attempts: [], operations: [], reviews: [], decisions: [], featureChecks: [],
@@ -145,10 +146,9 @@ export class WorkflowController {
       run.requirementsHistory.push({ version: run.inputContractVersion, goal: run.goal, at: this.now() });
       run.stage = 'planning'; run.planFeedback.push('The user revised the requirements. Reassess obligations and reuse only still-applicable work; preserve Section identity and repair lineage.');
       delete run.pendingDecision; delete run.diagnostic; delete run.activeSectionId; delete run.planSilentRetirement;
-      for (const section of Object.values(run.sections)) {
-        section.stage = 'pending'; section.inputContractVersion++;
-        delete section.acceptedCandidateId; delete section.integratedCandidateId; delete section.aAcceptedCandidateId;
-      }
+      // Preserve completed Section evidence until the new reviewed plan determines the
+      // actual invalidation cone. Erasing integrated states here defeats safe reuse.
+      for (const section of Object.values(run.sections)) section.inputContractVersion++;
       this.event(run, 'requirements-revised', 'User requirements changed; a new planning contract is required.');
     });
     return this.resume(id);
@@ -179,6 +179,10 @@ export class WorkflowController {
         });
       }
     }
+    const approvingInitialPlan = current.initialPlanApprovalRequired && !current.initialPlanApprovalObtained && current.stage === 'plan-review-a';
+    if (approvingInitialPlan && input.action !== 'continue' && input.action !== 'replan') {
+      throw new Error('Explicitly approve this first plan or request replanning before independent PLAN reviews.');
+    }
     if (decision.kind === 'budget' && input.action !== 'replan') {
       throw new Error('An exhausted repair budget cannot be reset by retry. Revise the plan or cancel; existing Section lineage is preserved.');
     }
@@ -201,6 +205,10 @@ export class WorkflowController {
         ...(decision.kind === 'advisor' ? { advisorResult: input.advisorResult!.trim(), advisorAdoption: input.advisorAdoption! } : {}) });
       if (decision.kind === 'advisor' && run.advisorCase) run.advisorCase.status = 'adopted';
       delete run.pendingDecision; delete run.blockedReason;
+      if (approvingInitialPlan && input.action === 'continue') {
+        run.initialPlanApprovalObtained = true;
+        this.event(run, 'first-plan-approved', 'Owner explicitly approved the automatically activated first plan for independent review.');
+      }
       run.status = 'paused';
       if (decision.kind === 'recovery') {
         if (recovery?.workspace) run.workspace = { ...recovery.workspace, prepared: true };
@@ -438,6 +446,10 @@ export class WorkflowController {
         ? 'Current plan uses the recorded PLAN-only silent A retirement; independent B still reviews the full current plan.'
         : 'A structured plan was proposed; independent plan review A starts next.');
     });
+    if (run.initialPlanApprovalRequired && !run.initialPlanApprovalObtained) {
+      await this.block(run.id, 'Review the proposed first PLAN and its scope in the Development panel. Explicit approval is required before PLAN A/B and implementation.', 'semantic');
+      return false;
+    }
     return true;
   }
 
@@ -448,7 +460,10 @@ export class WorkflowController {
     // never sees A feedback; an owner-approved scope change starts new authority.
     const previous = [...run.attempts].reverse().find((entry) => entry.task.kind === kind &&
       entry.state === 'admitted' && entry.task.input.planRevision !== run.planRevision &&
-      entry.task.input.requirementsVersion === run.planRequirementsVersion);
+      entry.task.input.requirementsVersion === run.planRequirementsVersion &&
+      (entry.admittedOutput as ReviewOutput).verdict !== 'incomplete' &&
+      !(entry.admittedOutput as ReviewOutput).limitations.length &&
+      Boolean((entry.admittedOutput as ReviewOutput).coverage.length));
     const reviewMode = previous ? 'PLAN_DELTA' : 'FULL';
     if (!attempt) return this.queueActor(run, kind, {
       goal: run.goal, phase: run.stage, plan: run.plan, planRevision: run.planRevision,
@@ -471,35 +486,75 @@ export class WorkflowController {
       await this.block(run.id, `${kind} cannot verify the executable plan: ${output.summary}; ${output.limitations.join('; ')}`, 'semantic');
       return false;
     }
-    const decision = output.findings.find((finding) => finding.classification === 'OWNER_DECISION');
-    if (decision) {
-      await this.block(run.id, `PLAN owner decision required: ${decision.title}; ${decision.body}`, 'semantic');
-      return false;
+    // A reviewer proposes PLAN findings; the original Main role verifies and admits
+    // them before a proposed scope expansion can consume a PLAN correction wave.
+    const materialFindings = output.findings.filter((finding) => finding.classification !== 'PLAN_NIT');
+    let admittedCorrections: typeof materialFindings = [];
+    let correctionInstructions = '';
+    if (materialFindings.length) {
+      const adjudication = this.latest(run, 'adjudicator');
+      if (!adjudication) return this.queueActor(run, 'adjudicator', {
+        goal: run.goal, phase: run.stage, purpose: 'plan-admission', reviewSlot: kind,
+        plan: run.plan, planRevision: run.planRevision, reviewAttemptId: attempt.id,
+        findings: materialFindings, originalReview: output,
+        userDecisions: run.decisionHistory.map((decision) => ({ question: decision.question, answer: decision.answer })),
+        obligation: 'Independently verify each review claim against original requirements, existing repository contracts and real source. PLAN_NIT is not a correction. Reject unanchored reviewer suggestions. Refer actual OWNER_DECISION to the user before adopting anything.',
+      });
+      if (adjudication.state !== 'admitted') return false;
+      const judgment = adjudication.admittedOutput as AdjudicationOutput;
+      if (judgment.advisorTrigger && !this.advisorAdopted(run, adjudication.id, judgment.advisorTrigger)) {
+        await this.block(run.id, `PLAN adjudication requires external Advisor: ${judgment.summary}`, 'advisor', undefined, judgment.advisorTrigger, adjudication.id);
+        return false;
+      }
+      const decisions = new Map(judgment.dispositions.map((entry) => [entry.findingId, entry]));
+      if (decisions.size !== materialFindings.length || judgment.dispositions.length !== materialFindings.length ||
+        materialFindings.some((finding) => !decisions.has(finding.id))) {
+        throw new Error('PLAN admission must resolve every actual material reviewer finding, without additional IDs.');
+      }
+      if (materialFindings.some((finding) => finding.classification === 'OWNER_DECISION' && decisions.get(finding.id)!.decision === 'fix')) {
+        throw new Error('A PLAN OWNER_DECISION cannot be silently converted into an agent-authorized repair.');
+      }
+      if (judgment.resolution === 'needs-user' || judgment.dispositions.some((entry) => entry.decision === 'needs-user')) {
+        await this.block(run.id, judgment.question ?? judgment.summary, 'semantic');
+        return false;
+      }
+      if (judgment.resolution === 'more-review' || !judgment.coverageSufficient || judgment.missingCoverage.length) {
+        await this.block(run.id, `PLAN finding verification is incomplete: ${judgment.summary}; ${judgment.missingCoverage.join('; ')}`, 'semantic');
+        return false;
+      }
+      admittedCorrections = materialFindings.filter((finding) => decisions.get(finding.id)!.decision === 'fix');
+      if (admittedCorrections.length && (judgment.resolution !== 'repair' || !judgment.repairInstructions.trim())) {
+        throw new Error('Confirmed PLAN correction requires concrete admitted repair instructions.');
+      }
+      if (!admittedCorrections.length && judgment.resolution !== 'accept') {
+        throw new Error('Rejected PLAN findings cannot become a material PLAN correction.');
+      }
+      correctionInstructions = judgment.repairInstructions;
     }
-    if (reviewMode === 'PLAN_DELTA' && (output.verdict === 'clean' ||
-      (output.verdict === 'findings' && output.findings.every((finding) => finding.classification === 'PLAN_NIT')))) {
+    // A bounded PLAN_DELTA must genuinely reconcile its own earlier authored
+    // slot even when the new findings were all refuted by independent admission.
+    if (reviewMode === 'PLAN_DELTA' && !admittedCorrections.length) {
       const reuse = output.planEvidenceReuse ?? [];
       if (reuse.length !== 1 || reuse[0]?.attemptId !== previous?.id || !reuse[0]?.reason.trim()) {
-        await this.block(run.id, 'PLAN_DELTA must explicitly reconcile its own preceding authored coverage and current invalidation cone, not silently claim a new full review.', 'semantic');
+        await this.block(run.id, 'PLAN_DELTA requires source-qualified reuse of its earlier complete slot, not an invented new full review.', 'semantic');
         return false;
       }
     }
-    const onlyNits = output.verdict === 'findings' && output.findings.length > 0 &&
-      output.findings.every((finding) => finding.classification === 'PLAN_NIT');
-    if ((output.verdict === 'clean' || onlyNits) && !output.limitations.length && output.coverage.length) {
+    if (!admittedCorrections.length && !output.limitations.length && output.coverage.length) {
       await this.change(run.id, (draft) => {
         draft.stage = kind === 'plan-review-a' ? 'plan-review-b' : 'sections';
-        this.event(draft, 'plan-review-accepted', `${kind} completed valid independent coverage.`);
+        this.event(draft, 'plan-review-accepted', `${kind}: current independent coverage and admitted PLAN finding dispositions are complete.`);
       });
     } else if (run.planRepairs >= run.policy.maxPlanRepairs) {
       await this.change(run.id, (draft) => {
-        draft.diagnostic = { reason: 'Plan review remains unresolved after the bounded plan repair budget.', requestedAt: this.now() };
+        draft.diagnostic = { reason: 'Confirmed PLAN corrections remain after the bounded plan repair budget.', requestedAt: this.now() };
       });
     } else {
       await this.change(run.id, (draft) => {
         draft.planRepairs++; draft.inputContractVersion++; draft.stage = 'planning';
-        draft.planFeedback.push(JSON.stringify(output));
-        this.event(draft, 'plan-repair-required', `${kind} requires a material plan repair; both logical plan coverages must apply to the final plan.`);
+        draft.planFeedback.push(JSON.stringify({ source: attempt.id, admittedFindings: admittedCorrections,
+          instructions: correctionInstructions, coverageLimitations: output.limitations }));
+        this.event(draft, 'plan-repair-required', `${kind}: confirmed PLAN correction admitted, scoped to existing requirements.`);
       });
     }
     return true;
@@ -527,6 +582,10 @@ export class WorkflowController {
           draft.activeSectionId = next.id;
           const section = draft.sections[next.id]!;
           if (section.stage === 'pending') {
+            // Freeze the actual source tree before this parent starts; reviews use
+            // this Section-specific base rather than the cumulative Run diff.
+            section.sectionBaseTreeHash = run.currentCandidateId
+              ? run.candidates[run.currentCandidateId]?.treeHash : run.workspace.initialTreeHash;
             const contract = draft.plan!.sections.find((entry) => entry.id === section.id)!;
             if (contract.subsections.length) {
               section.subsectionIndex = 0; section.subsectionCheckpoints = [];
@@ -575,13 +634,48 @@ export class WorkflowController {
     return child;
   }
 
+  /** A fresh native checkpoint must receive the predecessor R01 reports, not just opaque IDs. */
+  private checkpointEvidence(run: DevelopmentRun, section: SectionState) {
+    return (section.subsectionCheckpoints ?? []).map((checkpoint) => ({
+      ...checkpoint,
+      review: run.reviews.find((review) => review.id === checkpoint.reviewId),
+      checks: (section.subsectionChecks ?? []).filter((check) => checkpoint.checkIds.includes(check.id)),
+    }));
+  }
+
+  /** Partial work is not a failed review wave; diagnose only repeated absence of progress. */
+  private async continueUnfinished(run: DevelopmentRun, section: SectionState, output: ImplementationOutput,
+    candidate: Candidate, subsectionId?: string): Promise<boolean> {
+    const previous = section.unfinishedContinuation;
+    const remaining = JSON.stringify(output.remainingWork);
+    const phase = section.stage === 'subsection-implementing' ? 'subsection-implementing' : 'implementing';
+    const repeats = previous?.phase === phase && previous.subsectionId === subsectionId &&
+      previous.treeHash === candidate.treeHash && previous.remainingWork === remaining ? previous.repeats + 1 : 0;
+    await this.change(run.id, (draft) => {
+      const state = draft.sections[section.id]!;
+      state.inputContractVersion++;
+      state.unfinishedContinuation = { phase, ...(subsectionId ? { subsectionId } : {}),
+        treeHash: candidate.treeHash, remainingWork: remaining, repeats };
+      state.repairInstructions = `Continue the existing owned ${subsectionId ? `Subsection ${subsectionId}` : 'Section'} from the captured actual changes. Remaining: ${output.remainingWork.join('; ')}.`;
+      if (repeats >= 1 && state.diagnosticCount < draft.policy.maxDiagnostics) {
+        draft.diagnostic = { reason: `No observable implementation progress across repeated partial ${subsectionId ?? section.id} handoffs; identify a concrete obstacle and a bounded next action.`, sectionId: section.id, requestedAt: this.now() };
+      }
+      this.event(draft, 'owned-work-continued', repeats ? 'Repeated partial handoff has unchanged source and obligations.' : 'Partial authorized implementation retained; progress can continue.', { sectionId: state.id });
+    });
+    if (repeats >= 1 && section.diagnosticCount >= run.policy.maxDiagnostics) {
+      await this.block(run.id, 'Repeated incomplete handoffs made no observable progress after the bounded diagnosis.', 'semantic', section.id);
+      return false;
+    }
+    return true;
+  }
+
   private async driveSubsectionImplementation(run: DevelopmentRun, section: SectionState): Promise<boolean> {
     const child = this.subsection(run, section);
     const attempt = this.latest(run, 'implementer', section);
     if (!attempt) return this.queueActor(run, 'implementer', {
       ...this.contractInput(run, section), subsection: child,
       checkpointMode: section.subsectionFindingIds?.length ? 'REPAIR_DELTA' : 'SUBSECTION_DELTA',
-      previousCheckpoints: section.subsectionCheckpoints ?? [],
+      previousCheckpoints: this.checkpointEvidence(run, section),
       instructions: section.repairInstructions ?? child.objective,
       implementation: child.implementation ?? this.sectionPlan(run, section).implementation,
       obligation: 'Implement the exact current Subsection. Do not start its consumer or complete the parent; preserve the safe intermediate state and scoped oracle.',
@@ -596,20 +690,7 @@ export class WorkflowController {
           draft.candidates[value.id] = value; draft.currentCandidateId = value.id;
           draft.sections[section.id]!.candidateId = value.id;
         });
-      const repeats = run.attempts.filter((item) => item.task.sectionId === section.id &&
-        item.task.input.phase === 'subsection-implementing' && item.task.input.subsection &&
-        (item.task.input.subsection as { id: string }).id === child.id && item.state === 'admitted' &&
-        (item.admittedOutput as ImplementationOutput).remainingWork.length).length;
-      if (repeats > 3) {
-        await this.block(run.id, `Subsection ${child.id} remains unfinished after bounded continuation.`, 'semantic', section.id);
-        return false;
-      }
-      await this.change(run.id, (draft) => {
-        const state = draft.sections[section.id]!;
-        state.inputContractVersion++;
-        state.repairInstructions = `Continue the same Subsection ${child.id} from actual changes: ${result.remainingWork.join('; ')}`;
-      });
-      return true;
+      return this.continueUnfinished(run, section, result, this.candidate(run, section), child.id);
     }
     const captureKey = `subsection-capture:${attempt.id}`;
     if (!this.completedOperation(run, captureKey)) return this.operation(run, 'capture', captureKey, section.id,
@@ -660,7 +741,7 @@ export class WorkflowController {
       state.subsectionIndex = (state.subsectionIndex ?? 0) + 1;
       state.inputContractVersion++;
       state.stage = state.subsectionIndex < this.sectionPlan(draft, state).subsections.length ? 'subsection-implementing' : 'review-selection';
-      delete state.subsectionFindingIds; delete state.subsectionCurrentChecks; delete state.subsectionRiskLenses; delete state.repairInstructions;
+      delete state.subsectionFindingIds; delete state.subsectionCurrentChecks; delete state.subsectionRiskLenses; delete state.repairInstructions; delete state.unfinishedContinuation;
       delete state.repairOrigin; delete state.closureFindingIds; delete state.freshRepairLensIds;
       this.event(draft, 'subsection-checkpoint-verified', `Subsection ${child.id}: CHECKPOINT_VERIFIED, not parent ACCEPTED.`, { sectionId: state.id });
     });
@@ -673,7 +754,7 @@ export class WorkflowController {
       const selector = this.latest(run, 'review-selector', section);
       if (!selector) return this.queueActor(run, 'review-selector', {
         ...this.contractInput(run, section), subsection: child,
-        repairDelta: section.repairInstructions, previousCheckpoints: section.subsectionCheckpoints ?? [],
+        repairDelta: section.repairInstructions, previousCheckpoints: this.checkpointEvidence(run, section),
         requiredBaseline: 'R01',
         obligation: 'Re-route new or invalidated risks of the child repair against R01-R12. Return only genuinely new focused risks in addition to R01; no new Section A/B pair.',
       }, section);
@@ -700,7 +781,7 @@ export class WorkflowController {
       ...this.contractInput(run, section), subsection: child,
       checkpointMode: section.subsectionFindingIds?.length ? 'REPAIR_DELTA' : 'SUBSECTION_DELTA',
       targetFindingIds: section.subsectionFindingIds ?? [],
-      previousCheckpoints: section.subsectionCheckpoints ?? [],
+      previousCheckpoints: this.checkpointEvidence(run, section),
       checks: section.subsectionCurrentChecks ?? [],
       obligation: 'Independently inspect actual new child code, parent invariant, safe intermediate state, scoped oracle and current check results. Report per-ID closure on repair and do not infer parent acceptance.',
     }, section, lens);
@@ -737,7 +818,7 @@ export class WorkflowController {
     if (!attempt) return this.queueActor(run, 'adjudicator', {
       ...this.contractInput(run, section), purpose: 'subsection-checkpoint',
       subsection: child, findings, reviews: applicable, checks: section.subsectionCurrentChecks ?? [],
-      previousCheckpoints: section.subsectionCheckpoints ?? [],
+      previousCheckpoints: this.checkpointEvidence(run, section),
       obligation: 'Admit or refute actual R01 checkpoint findings. No next child if scoped checks failed or admitted findings remain open. Any repair shares the original parent five-wave budget.',
     }, section);
     if (attempt.state !== 'admitted') return false;
@@ -787,20 +868,10 @@ export class WorkflowController {
       if (!this.completedOperation(run, captureKey)) return this.operation(run, 'capture', captureKey, section.id,
         (snapshot) => this.workspace.capture(snapshot, section.id), (draft, value) => {
           const actual = value as Candidate;
-          draft.candidates[actual.id] = actual; draft.currentCandidateId = actual.id; draft.sections[section.id]!.candidateId = actual.id;
+          draft.candidates[actual.id] = actual; draft.currentCandidateId = actual.id;
+          draft.sections[section.id]!.candidateId = actual.id;
         });
-      const unfinished = run.attempts.filter((entry) => entry.state === 'admitted' && entry.task.sectionId === section.id && entry.task.kind === 'implementer' && (entry.admittedOutput as ImplementationOutput).remainingWork.length > 0).length;
-      if (unfinished > 3) {
-        await this.block(run.id, `Owned implementation remains unfinished after bounded continuation and diagnosis: ${result.remainingWork.join('; ')}`, 'semantic', section.id); return false;
-      }
-      await this.change(run.id, (draft) => {
-        const state = draft.sections[section.id]!;
-        state.inputContractVersion++;
-        state.repairInstructions = `Continue the existing owned task from the captured actual changes. Complete: ${result.remainingWork.join('; ')}. Do not propose a new scope for already authorized work.`;
-        if (unfinished === 2) draft.diagnostic = { reason: 'Repeated execution stopped with unfinished owned work; identify the obstacle and concrete continuation.', sectionId: section.id, requestedAt: this.now() };
-        this.event(draft, 'owned-work-continued', 'Unfinished authorized work retained in the same Section and continued from actual changes.', { sectionId: section.id });
-      });
-      return true;
+      return this.continueUnfinished(run, section, result, this.candidate(run, section));
     }
     const captureKey = `capture:${attempt.id}`;
     if (!this.completedOperation(run, captureKey)) {
@@ -819,6 +890,7 @@ export class WorkflowController {
     }
     await this.change(run.id, (draft) => {
       const next = draft.sections[section.id]!;
+      delete next.unfinishedContinuation;
       next.stage = section.stage === 'repairing' ? 'reroute' : 'review-selection';
       this.event(draft, 'implementation-captured', 'Actual implementation candidate and host-run checks recorded.', { sectionId: section.id, attemptId: attempt.id });
     });
@@ -881,11 +953,7 @@ export class WorkflowController {
     let capacity = run.policy.maxParallelReviews - inflight;
     for (let i = 0; i < section.lenses.length && capacity > 0; i++) {
       if (!attempts[i]) {
-        const checkpointEvidence = (section.subsectionCheckpoints ?? []).map((checkpoint) => ({
-          ...checkpoint,
-          review: run.reviews.find((review) => review.id === checkpoint.reviewId),
-          checks: (section.subsectionChecks ?? []).filter((check) => checkpoint.checkIds.includes(check.id)),
-        }));
+        const checkpointEvidence = this.checkpointEvidence(run, section);
         await this.queueActor(await this.status(run.id), 'reviewer-a', {
           ...this.contractInput(run, section), lens: section.lenses[i],
           ...(section.lenses[i]?.id === 'R01' && checkpointEvidence.length ? {
@@ -1082,11 +1150,9 @@ export class WorkflowController {
   private async requestRepair(run: DevelopmentRun, section: SectionState, instructions: string, material: boolean,
     origin: 'a' | 'b' | 'feature', invalidated: string[] = [], findingIds: string[] = [],
     simpDispositions: NonNullable<AdjudicationOutput['simplificationDispositions']> = []): Promise<boolean> {
-    const correctiveDecisions = run.events.filter((event) => event.type === 'repair-admitted' && event.sectionId === section.id).length;
-    if (correctiveDecisions >= run.policy.maxRepairWaves + 2) {
-      await this.block(run.id, `Section ${section.id} exhausted the bounded corrective workflow attempts, including non-material repairs. Diagnose or revise the contract without resetting its original lineage.`, 'budget', section.id); return false;
-    }
-    if (material && section.materialRepairWaves >= (section.recovery?.extraWaveLimit ?? run.policy.maxRepairWaves)) {
+    // Every admitted implementation/test repair is one wave, regardless of a
+    // model's material boolean. NITs and read-only/tool retries are not repairs.
+    if (section.materialRepairWaves >= (section.recovery?.extraWaveLimit ?? run.policy.maxRepairWaves)) {
       if (section.recovery) {
         await this.block(run.id, `ADV-01 SECOND_CONVERGENCE_FAILURE: original lineage ${section.lineageId} used its one automatic recovery and needs another material repair. ${instructions}`,
           'advisor', section.id, 'ADV-01');
@@ -1101,10 +1167,8 @@ export class WorkflowController {
     }
     await this.change(run.id, (draft) => {
       const state = draft.sections[section.id]!;
-      if (material) {
-        for (const entry of Object.values(draft.sections)) if (entry.lineageId === state.lineageId) entry.materialRepairWaves++;
-        for (const entry of Object.values(draft.retiredSections ?? {})) if (entry.state.lineageId === state.lineageId) entry.state.materialRepairWaves++;
-      }
+      for (const entry of Object.values(draft.sections)) if (entry.lineageId === state.lineageId) entry.materialRepairWaves++;
+      for (const entry of Object.values(draft.retiredSections ?? {})) if (entry.state.lineageId === state.lineageId) entry.state.materialRepairWaves++;
       state.inputContractVersion++; state.stage = 'repairing'; state.repairInstructions = instructions; state.repairOrigin = origin;
       state.closureFindingIds = [...new Set(findingIds)]; delete state.freshRepairLensIds;
       state.activeSimplificationIds = simpDispositions.filter((entry) => entry.decision === 'batch').map((entry) => entry.actionId);
@@ -1127,7 +1191,7 @@ export class WorkflowController {
         // Its complete bounded contract is reviewed against the new final candidate after repair.
         delete other.candidateId;
       }
-      if ((material && state.materialRepairWaves === 3 || !material && correctiveDecisions >= 1) && state.diagnosticCount < draft.policy.maxDiagnostics) {
+      if (state.materialRepairWaves === 3 && state.diagnosticCount < draft.policy.maxDiagnostics) {
         draft.diagnostic = { reason: 'Third material repair wave: diagnose recurring root cause before further implementation.', sectionId: state.id, requestedAt: this.now() };
       }
       this.event(draft, 'repair-admitted', `Repair admitted to original Section lineage; ${state.materialRepairWaves} material waves used.`, { sectionId: section.id });
@@ -1209,7 +1273,7 @@ export class WorkflowController {
       });
       return true;
     }
-    if (result.recommendation === 'needs-user' || !section || !['repairing', 'implementing'].includes(section.stage)) {
+    if (result.recommendation === 'needs-user' || !section || !['repairing', 'implementing', 'subsection-implementing'].includes(section.stage)) {
       await this.block(run.id, result.question ?? `${result.summary}\n${result.instructions}`, !section ? 'budget' : 'semantic', section?.id);
       return false;
     }

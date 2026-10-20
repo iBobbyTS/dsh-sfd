@@ -69,13 +69,15 @@ export interface SectionPlan {
 }
 export interface DevelopmentPlan { title: string; features: FeaturePlan[]; sections: SectionPlan[]; assumptions: string[] }
 export interface WorkspaceInfo {
-  path: string; branch: string; baseCommit: string;
+  path: string; branch: string; baseCommit: string; initialTreeHash?: string;
   /** A prepared run must use a dedicated non-default branch. */
   prepared?: boolean;
 }
 export interface Candidate {
   id: string; capturedAt: string; workspacePath: string;
   head: string; treeHash: string; diff: string; changedFiles: string[];
+  /** Exact current parent Section delta, not the cumulative Feature diff. */
+  sectionDelta?: { sectionId: string; baseTreeHash: string; diff: string; changedFiles: string[] };
 }
 export interface CommitEvidence { commit: string; candidateId: string; branch: string; createdAt: string; message: string }
 export interface DeliveryEvidence { mode: 'worktree' | 'commit'; candidateId: string; path: string; branch: string; createdAt: string; commit?: string }
@@ -190,9 +192,12 @@ export interface DecisionEvidence {
 }
 export interface SectionState {
   id: string; stage: SectionStage; inputContractVersion: number;
-  /** Never reset by a candidate change, replan, or child subdivision. */
+  /** Cumulative admitted repair waves. Retain the historical field name for persisted compatibility. */
   lineageId: string; materialRepairWaves: number; diagnosticCount: number;
   candidateId?: string;
+  /** Frozen source just before this parent Section first became executable. */
+  sectionBaseTreeHash?: string;
+  unfinishedContinuation?: { phase: 'implementing' | 'subsection-implementing'; subsectionId?: string; treeHash: string; remainingWork: string; repeats: number };
   lenses: Lens[];
   checks: CheckEvidence[];
   reviewIds: string[];
@@ -246,6 +251,9 @@ export interface DevelopmentRun {
   workspace: WorkspaceInfo; policy: WorkflowPolicy;
   status: RunStatus; stage: RunStage;
   plan?: DevelopmentPlan;
+  /** Only automatic (agent-tool) activation requires owner approval of its first plan. */
+  initialPlanApprovalRequired?: boolean;
+  initialPlanApprovalObtained?: boolean;
   planRevision: number; planRepairs: number;
   planRequirementsVersion?: number;
   planSilentRetirement?: { slot: 'plan-review-a'; reportIds: string[]; rationale: string };
@@ -272,7 +280,7 @@ export interface DevelopmentRun {
   diagnostic?: { reason: string; sectionId?: string; requestedAt: string };
 }
 export type Run = DevelopmentRun;
-export interface CreateRunInput { goal: string; workspacePath: string; policy?: Partial<WorkflowPolicy> }
+export interface CreateRunInput { goal: string; workspacePath: string; policy?: Partial<WorkflowPolicy>; requireInitialPlanApproval?: boolean }
 export interface DecideInput { decisionId: string; answer: string;
   action?: 'continue' | 'retry' | 'replan' | 'cancel';
   advisorResult?: string; advisorAdoption?: 'accept' | 'reject' | 'clarify';

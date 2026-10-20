@@ -127,7 +127,7 @@ function SectionCards({ run }: { run: DevelopmentRun }): ReactNode {
         <div className="sfd-card">
           <p>{section.objective}</p>
           <dl><dt>Depends on</dt><dd>{section.dependencies.length ? section.dependencies.join(', ') : 'Ready from the start'}</dd>
-            <dt>Material repairs</dt><dd>{state.materialRepairWaves} / {run.policy.maxRepairWaves} · original lineage <code>{state.lineageId}</code></dd>
+            <dt>Admitted repair waves</dt><dd>{state.materialRepairWaves} / {run.policy.maxRepairWaves} · original lineage <code>{state.lineageId}</code></dd>
             <dt>Write scope</dt><dd>{section.writeScope.join(', ')}</dd>
             <dt>Candidate</dt><dd><code>{state.candidateId ?? 'Not captured yet'}</code></dd>
             {state.lenses.length > 0 && <><dt>A review lenses</dt><dd>{state.lenses.map((lens) => `${lens.id}: ${lens.name}`).join(' · ')}</dd></>}
