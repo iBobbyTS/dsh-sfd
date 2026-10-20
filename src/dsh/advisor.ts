@@ -74,7 +74,8 @@ function safeField(text: string, maximum: number): string {
 
 export class NativeAdvisorHandoff implements AdvisorPort {
   constructor(private readonly stateRoot?: string, private readonly python = 'python3',
-    private readonly secretFile = join(homedir(), '.config', 'feishu-message-sender', 'secret.json')) {}
+    private readonly secretFile = join(homedir(), '.config', 'feishu-message-sender', 'secret.json'),
+    private readonly post: typeof fetch = fetch) {}
 
   private async root(run: DevelopmentRun): Promise<string> {
     const process = await runProcess(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], {
@@ -202,7 +203,7 @@ export class NativeAdvisorHandoff implements AdvisorPort {
       const sign = createHmac('sha256', timestamp + '\n' + secret).digest('base64');
       const content = '项目：' + project + '\n正在实现的功能：' + feature +
         '\n需要 Advisor 的原因：' + reason;
-      const response = await fetch(url, {
+      const response = await this.post(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({ timestamp, sign, msg_type: 'text',
           content: { text: name + ' - ' + new Date().toLocaleString() + ' - ' + project + ':\n' + content } }),
