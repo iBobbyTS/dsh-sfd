@@ -1056,9 +1056,18 @@ export class WorkflowController {
       const output = decision.output as { dispositions?: { findingId: string }[] } | null;
       return output?.dispositions?.map(item => item.findingId) ?? [];
     }));
+    // Prior complete A lens coverage must remain visible for an explicit,
+    // semantic evidenceReuse decision after a material repair. Omitting clean
+    // old R01 reports wrongly turns valid closure into missing logical coverage.
+    const latestPriorLens = new Map<string, string>();
+    for (const review of allReviews) {
+      if (review.stage === 'a' && review.output.verdict !== 'incomplete')
+        latestPriorLens.set(review.lensId, review.id);
+    }
     const relevantReviews = allReviews.filter(review =>
       review.candidateId === candidate.id ||
       section.aCoverageEvidenceIds.includes(review.id) ||
+      (review.stage === 'a' && latestPriorLens.get(review.lensId) === review.id) ||
       review.output.findings.some(finding => !disposedIds.has(`${review.id}:${finding.id}`)));
     const priorEvidenceIndex = decisions.map(decision => {
       const output = decision.output as { resolution?: string; dispositions?: { findingId: string; decision: string }[] } | null;
