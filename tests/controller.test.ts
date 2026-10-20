@@ -71,8 +71,10 @@ class FakeActors implements ActorRunner {
       return accept({ evidenceReuse: task.input.purpose === 'closure-admission' ? reviews.filter((review) => review.stage === 'a').map((review) => ({ evidenceId: review.id, reason: 'The direct repair is covered by the current closure; the unaffected baseline remains applicable.' })) : [] });
     }
     if (task.kind === 'feature-verifier') {
-      const evidence = task.input.evidence as { id: string }[];
-      return { verdict: 'accepted', summary: 'The final business path is demonstrated.', criteria: this.configuredPlan.features.flatMap((feature) => feature.acceptanceCriteria.map((criterion) => ({ featureId: feature.id, criterion, evidenceIds: [evidence[0].id], satisfied: true }))), repairSectionIds: [], repairInstructions: '' } satisfies FeatureVerificationOutput;
+      const checks = task.input.checks as { id: string; status: string }[];
+      const passed = checks.find((check) => check.status === 'passed');
+      if (!passed) throw new Error('Fixture expected a real successful final Feature check.');
+      return { verdict: 'accepted', summary: 'The final business path is demonstrated.', criteria: this.configuredPlan.features.flatMap((feature) => feature.acceptanceCriteria.map((criterion) => ({ featureId: feature.id, criterion, evidenceIds: [passed.id], satisfied: true }))), repairSectionIds: [], repairInstructions: '' } satisfies FeatureVerificationOutput;
     }
     if (task.kind === 'closure-reviewer') return {
       ...clean, closures: ((task.input.targetFindingIds ?? []) as string[]).map((findingId) => ({
