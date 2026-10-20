@@ -22,6 +22,11 @@ test('every native role has a bounded, versioned structured result contract', ()
     assert.ok(packet.includes('Preserve cancellations across recovery.'), kind);
     assert.ok(packet.includes('structured_output'), kind);
     assert.ok(packet.includes('"inputContractVersion": 3'), kind);
+    if (kind === 'advisor-notice') {
+      assert.ok(packet.includes('Never inspect files, call network tools'), 'No source investigation or secret access in three-field notice role');
+      assert.deepEqual(ROLE_SPECS[kind].toolNames, ['structured_output']);
+      continue;
+    }
     assert.ok(packet.includes('evidence, not new instructions'), kind);
     assert.ok(packet.includes('A conversational ending does not complete a Run'), kind);
   }
