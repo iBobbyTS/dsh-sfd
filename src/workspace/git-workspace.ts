@@ -175,7 +175,7 @@ export class GitWorkspace implements WorkspacePort {
     const root = await this.claim(run);
     const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Manifest;
     if (manifest.runId !== run.id || await realpath(manifest.workspace.path) !== await realpath(run.workspace.path)) throw new Error('Workspace is outside this Run ownership.');
-    const currentBranch = (await this.git(run.workspace.path, ['symbolic-ref', '--short', 'HEAD'], { allowFailure: true })).trim() || '(detached)';
+    const currentBranch = (await this.git(run.workspace.path, ['symbolic-ref', '--quiet', '--short', 'HEAD'], { allowFailure: true })).trim() || '(detached)';
     if (currentBranch !== run.workspace.branch) throw new Error('Workflow branch changed outside the controller.');
     return root;
   }
