@@ -88,7 +88,7 @@ Web 界面需要 profile 包含 DSH 的 Web UI；纯 Host profile 可以使用 `
 
 ### Markdown 报告与机器裁决
 
-各角色报告使用 Markdown：每一个标题下面紧接一行格式化 JSON 元数据，随后才是可读叙述；模板由 Host 下发。`reportMarkdown` 是结构化工具中的**报告文本字段**，Host 单独保存；剩余 JSON 字段为状态机所需的最终机器结果，不依赖 Markdown 自由文本猜测状态。为保留既有 deterministic fixtures 的兼容，目前 `reportMarkdown` 仍为可选字段；这是过渡性协议，不应宣称已通过所有真实模型验证。错误 Finding/Evidence 引用允许一次有界、同角色的格式更正；真实失败检查仍不可绕过。
+各角色报告使用 Markdown：每一个标题下面紧接一行格式化 JSON 元数据，随后才是可读叙述；模板由 Host 下发。`reportMarkdown` 是结构化工具中的**报告文本字段**，Host 单独保存；剩余 JSON 字段为状态机所需的最终机器结果，不依赖 Markdown 自由文本猜测状态。为保留既有 deterministic fixtures 的兼容，Schema 允许没有 `reportMarkdown` 的模拟结果；**真实 Native/External actor 的完成路径必须包含 Markdown 报告**，否则不准入。还未对付费真实模型完成长任务遵循率评估。错误 Finding/Evidence 引用允许一次有界、同角色的格式更正；真实失败检查仍不可绕过。
 
 ### 明确不保留的能力
 
