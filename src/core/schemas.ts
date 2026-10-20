@@ -6,7 +6,7 @@ const text = z.string();
 const identity = z.string().min(1);
 const integer = z.number().int().nonnegative();
 const object = z.record(z.string(), z.unknown());
-const actorKind = z.enum(['planner', 'plan-review-a', 'plan-review-b', 'implementer', 'review-selector', 'reviewer-a', 'reviewer-b', 'adjudicator', 'closure-reviewer', 'feature-verifier', 'diagnostician']);
+const actorKind = z.enum(['planner', 'plan-review-a', 'plan-review-b', 'implementer', 'review-selector', 'reviewer-a', 'reviewer-b', 'adjudicator', 'closure-reviewer', 'feature-verifier', 'diagnostician', 'advisor-notice']);
 const route = z.strictObject({ preset: identity, model: text.optional(), provider: text.optional(), effort: text.optional(), transport: z.enum(['dsh-native', 'external-subagent/zcode', 'external-subagent/codex']).optional() });
 const workspace = z.strictObject({ path: identity, branch: text, baseCommit: identity, initialTreeHash: identity.optional(), prepared: z.boolean().optional() });
 const candidate = z.strictObject({ id: identity, capturedAt: identity, workspacePath: identity, head: identity, treeHash: identity, diff: text, changedFiles: z.array(text),
@@ -115,7 +115,11 @@ const persistedRunSchema = z.strictObject({
   pendingDecision: decision.optional(),
   advisorCase: z.strictObject({ trigger: advisorTrigger, sectionId: identity.optional(),
     candidateId: identity.optional(), sourceAttemptId: identity.optional(), raisedAt: identity, request: identity,
-    reportIds: z.array(identity), status: z.enum(['waiting-external','waiting-human-decision','adopted']) }).optional(),
+    reportIds: z.array(identity), status: z.enum(['waiting-external','waiting-human-decision','adopted']),
+    package: z.strictObject({ path: identity, sha256: identity, requestId: identity, requestPath: identity, responsePath: identity, exclusionsPath: identity, generatedAt: identity, bigFiles: integer }).optional(),
+    notice: z.strictObject({ project: identity, feature: identity, reason: identity }).optional(),
+    notification: z.strictObject({ status: z.enum(['sent','failed','unknown']), attemptedAt: identity, failure: text.optional() }).optional(),
+    packageError: text.optional() }).optional(),
   decisionHistory: z.array(decision),
   events: z.array(z.strictObject({ id: identity, at: identity, type: identity, message: text, attemptId: identity.optional(), sectionId: identity.optional() })),
   commit: z.strictObject({ commit: identity, candidateId: identity, branch: identity, createdAt: identity, message: text }).optional(),
