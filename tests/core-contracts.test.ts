@@ -39,3 +39,23 @@ test('one parent Section has exactly one owning Feature, with cross-Feature reus
   shared.features[1].sectionIds = ['S1', 'S2'];
   assert.throws(() => validatePlan(shared), /exactly one owning Feature/);
 });
+
+test('Markdown role report uses a JSON metadata line directly below every heading while machine output stays JSON', () => {
+  const reportMarkdown = [
+    '# SFD Role Report',
+    '{"role":"reviewer-a","taskId":"review-pass"}',
+    '## Evidence',
+    '{"status":"observed","sourceRefs":["src/a.ts:10"]}',
+    'The altered source branch was inspected; constraints are unchanged.',
+    '## Outcome',
+    '{"status":"complete","limitations":[]}',
+    'No material issue within the bounded risk lens.',
+  ].join('\n');
+  const decision = { verdict: 'clean', summary: 'Source evidence supports this lens',
+    coverage: ['src/a.ts behavior and dependent consumer'], limitations: [], findings: [] };
+  assert.deepEqual(parseActorOutput('reviewer-a', { ...decision, reportMarkdown }), decision);
+  assert.throws(() => parseActorOutput('reviewer-a', {
+    ...decision, reportMarkdown: reportMarkdown.replace('{"status":"observed"', 'status: "observed"'),
+  }), /first-line JSON|metadata/);
+  assert.throws(() => parseActorOutput('reviewer-b', { ...decision, reportMarkdown }), /role does not match/);
+});
