@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createPolicy } from '../src/core/policy.js';
 import { outputSchemaFor } from '../src/core/contracts.js';
+import { Context } from '@deepseek-ai/cordis';
+import { ModelFamilyActorRunner } from '../src/dsh/routing-runner.js';
 import type { ActorTask, ActorRoute, DevelopmentRun } from '../src/core/types.js';
 import { ExternalSubagentCli, ExternalSubagentRunner, externalActorPrompt, type ExternalSubagentClient, type ExternalCommand } from '../src/dsh/external-actor.js';
 import { externalTarget, freezeModelRoute, transportForModel } from '../src/dsh/model-routing.js';
@@ -156,4 +158,22 @@ process.stdin.on('end',()=>{
   const answer = await client.call('spawn', { repository: dir, prompt: 'A'.repeat(145_000) });
   assert.equal(answer.size, 145_000);
   assert.equal(answer.repository, dir);
+});
+
+test('Host-level model-family runner selects external execution without invoking native spawn', async () => {
+  const ctx = new Context();
+  const { task, store } = fixture('gpt-6.1-sol', 'openai', 'reviewer-b');
+  const cli = new FakeCli();
+  const runner = new ModelFamilyActorRunner(ctx, store, cli);
+  try {
+    const handle = await runner.start(task, new AbortController().signal);
+    const result = await handle.result;
+    assert.equal(result.status, 'completed', result.error);
+    assert.equal(result.identity.external?.subagent, 'codex');
+    assert.ok(cli.calls.some((entry) => entry.command === 'spawn'));
+    await handle.dispose();
+  } finally {
+    await runner.dispose();
+    await ctx.fiber.dispose();
+  }
 });
