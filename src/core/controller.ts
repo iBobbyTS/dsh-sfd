@@ -486,35 +486,75 @@ export class WorkflowController {
       await this.block(run.id, `${kind} cannot verify the executable plan: ${output.summary}; ${output.limitations.join('; ')}`, 'semantic');
       return false;
     }
-    const decision = output.findings.find((finding) => finding.classification === 'OWNER_DECISION');
-    if (decision) {
-      await this.block(run.id, `PLAN owner decision required: ${decision.title}; ${decision.body}`, 'semantic');
-      return false;
+    // A reviewer proposes PLAN findings; the original Main role verifies and admits
+    // them before a proposed scope expansion can consume a PLAN correction wave.
+    const materialFindings = output.findings.filter((finding) => finding.classification !== 'PLAN_NIT');
+    let admittedCorrections: typeof materialFindings = [];
+    let correctionInstructions = '';
+    if (materialFindings.length) {
+      const adjudication = this.latest(run, 'adjudicator');
+      if (!adjudication) return this.queueActor(run, 'adjudicator', {
+        goal: run.goal, phase: run.stage, purpose: 'plan-admission', reviewSlot: kind,
+        plan: run.plan, planRevision: run.planRevision, reviewAttemptId: attempt.id,
+        findings: materialFindings, originalReview: output,
+        userDecisions: run.decisionHistory.map((decision) => ({ question: decision.question, answer: decision.answer })),
+        obligation: 'Independently verify each review claim against original requirements, existing repository contracts and real source. PLAN_NIT is not a correction. Reject unanchored reviewer suggestions. Refer actual OWNER_DECISION to the user before adopting anything.',
+      });
+      if (adjudication.state !== 'admitted') return false;
+      const judgment = adjudication.admittedOutput as AdjudicationOutput;
+      if (judgment.advisorTrigger && !this.advisorAdopted(run, adjudication.id, judgment.advisorTrigger)) {
+        await this.block(run.id, `PLAN adjudication requires external Advisor: ${judgment.summary}`, 'advisor', undefined, judgment.advisorTrigger, adjudication.id);
+        return false;
+      }
+      const decisions = new Map(judgment.dispositions.map((entry) => [entry.findingId, entry]));
+      if (decisions.size !== materialFindings.length || judgment.dispositions.length !== materialFindings.length ||
+        materialFindings.some((finding) => !decisions.has(finding.id))) {
+        throw new Error('PLAN admission must resolve every actual material reviewer finding, without additional IDs.');
+      }
+      if (materialFindings.some((finding) => finding.classification === 'OWNER_DECISION' && decisions.get(finding.id)!.decision === 'fix')) {
+        throw new Error('A PLAN OWNER_DECISION cannot be silently converted into an agent-authorized repair.');
+      }
+      if (judgment.resolution === 'needs-user' || judgment.dispositions.some((entry) => entry.decision === 'needs-user')) {
+        await this.block(run.id, judgment.question ?? judgment.summary, 'semantic');
+        return false;
+      }
+      if (judgment.resolution === 'more-review' || !judgment.coverageSufficient || judgment.missingCoverage.length) {
+        await this.block(run.id, `PLAN finding verification is incomplete: ${judgment.summary}; ${judgment.missingCoverage.join('; ')}`, 'semantic');
+        return false;
+      }
+      admittedCorrections = materialFindings.filter((finding) => decisions.get(finding.id)!.decision === 'fix');
+      if (admittedCorrections.length && (judgment.resolution !== 'repair' || !judgment.repairInstructions.trim())) {
+        throw new Error('Confirmed PLAN correction requires concrete admitted repair instructions.');
+      }
+      if (!admittedCorrections.length && judgment.resolution !== 'accept') {
+        throw new Error('Rejected PLAN findings cannot become a material PLAN correction.');
+      }
+      correctionInstructions = judgment.repairInstructions;
     }
-    if (reviewMode === 'PLAN_DELTA' && (output.verdict === 'clean' ||
-      (output.verdict === 'findings' && output.findings.every((finding) => finding.classification === 'PLAN_NIT')))) {
+    // A bounded PLAN_DELTA must genuinely reconcile its own earlier authored
+    // slot even when the new findings were all refuted by independent admission.
+    if (reviewMode === 'PLAN_DELTA' && !admittedCorrections.length) {
       const reuse = output.planEvidenceReuse ?? [];
       if (reuse.length !== 1 || reuse[0]?.attemptId !== previous?.id || !reuse[0]?.reason.trim()) {
-        await this.block(run.id, 'PLAN_DELTA must explicitly reconcile its own preceding authored coverage and current invalidation cone, not silently claim a new full review.', 'semantic');
+        await this.block(run.id, 'PLAN_DELTA requires source-qualified reuse of its earlier complete slot, not an invented new full review.', 'semantic');
         return false;
       }
     }
-    const onlyNits = output.verdict === 'findings' && output.findings.length > 0 &&
-      output.findings.every((finding) => finding.classification === 'PLAN_NIT');
-    if ((output.verdict === 'clean' || onlyNits) && !output.limitations.length && output.coverage.length) {
+    if (!admittedCorrections.length && !output.limitations.length && output.coverage.length) {
       await this.change(run.id, (draft) => {
         draft.stage = kind === 'plan-review-a' ? 'plan-review-b' : 'sections';
-        this.event(draft, 'plan-review-accepted', `${kind} completed valid independent coverage.`);
+        this.event(draft, 'plan-review-accepted', `${kind}: current independent coverage and admitted PLAN finding dispositions are complete.`);
       });
     } else if (run.planRepairs >= run.policy.maxPlanRepairs) {
       await this.change(run.id, (draft) => {
-        draft.diagnostic = { reason: 'Plan review remains unresolved after the bounded plan repair budget.', requestedAt: this.now() };
+        draft.diagnostic = { reason: 'Confirmed PLAN corrections remain after the bounded plan repair budget.', requestedAt: this.now() };
       });
     } else {
       await this.change(run.id, (draft) => {
         draft.planRepairs++; draft.inputContractVersion++; draft.stage = 'planning';
-        draft.planFeedback.push(JSON.stringify(output));
-        this.event(draft, 'plan-repair-required', `${kind} requires a material plan repair; both logical plan coverages must apply to the final plan.`);
+        draft.planFeedback.push(JSON.stringify({ source: attempt.id, admittedFindings: admittedCorrections,
+          instructions: correctionInstructions, coverageLimitations: output.limitations }));
+        this.event(draft, 'plan-repair-required', `${kind}: confirmed PLAN correction admitted, scoped to existing requirements.`);
       });
     }
     return true;
