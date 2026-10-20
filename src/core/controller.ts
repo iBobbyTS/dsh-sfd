@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { outputSchemaFor, parseActorOutput, validatePlan } from './contracts.js';
 import { createPolicy } from './policy.js';
-import type { ActorHandle, ActorRunner, RunStore, WorkspacePort } from './ports.js';
+import type { ActorHandle, ActorRunner, RunStore, WorkspacePort, AdvisorPort } from './ports.js';
 import {
-  CORE_VERSION, type ActorKind, type ActorOutcome, type ActorTask, type AdjudicationOutput, type AdvisorTrigger,
+  CORE_VERSION, type ActorKind, type ActorOutcome, type ActorTask, type AdjudicationOutput, type AdvisorTrigger, type AdvisorNotice,
   type Attempt, type Candidate, type CheckEvidence, type CreateRunInput, type DecideInput,
   type DevelopmentPlan, type DevelopmentRun, type DiagnosticOutput, type FeatureVerificationOutput,
   type ImplementationOutput, type Lens, type Operation, type PlanOutput, type ReviewEvidence,
@@ -11,7 +11,7 @@ import {
 } from './types.js';
 
 export interface ControllerOptions {
-  store: RunStore; actors: ActorRunner; workspace: WorkspacePort;
+  store: RunStore; actors: ActorRunner; workspace: WorkspacePort; advisor?: AdvisorPort;
   now?: () => string; id?: () => string;
   /** Public stop calls remain bounded; unconfirmed execution keeps its workspace reservation. */
   cleanupTimeoutMs?: number;
@@ -25,6 +25,8 @@ export class WorkflowController {
   private readonly store: RunStore;
   private readonly actors: ActorRunner;
   private readonly workspace: WorkspacePort;
+  private readonly advisor?: AdvisorPort;
+  private readonly preparingAdvisors = new Set<string>();
   private readonly now: () => string;
   private readonly id: () => string;
   private readonly cleanupTimeoutMs: number;
@@ -35,7 +37,7 @@ export class WorkflowController {
   private disposed = false;
 
   constructor(options: ControllerOptions) {
-    this.store = options.store; this.actors = options.actors; this.workspace = options.workspace;
+    this.store = options.store; this.actors = options.actors; this.workspace = options.workspace; this.advisor = options.advisor;
     this.now = options.now ?? (() => new Date().toISOString());
     this.id = options.id ?? randomUUID;
     this.cleanupTimeoutMs = Math.max(10, Math.min(options.cleanupTimeoutMs ?? 5000, 60_000));
@@ -166,6 +168,9 @@ export class WorkflowController {
     if (!input.answer.trim()) throw new Error('Record the user decision before continuing.');
     if (input.action === 'cancel') return this.cancel(id);
     if (decision.kind === 'advisor') {
+      if (this.advisor && (!current.advisorCase?.package || current.advisorCase.status === 'preparing')) {
+        throw new Error('Advisor evidence ZIP has not been verified; do not adopt advice before the package is ready.');
+      }
       if (!input.advisorResult?.trim() || !input.advisorAdoption) {
         throw new Error('External Advisor decisions require the actual advisor result and separate explicit human adoption.');
       }
@@ -277,6 +282,9 @@ export class WorkflowController {
   async recover(): Promise<void> {
     this.assertOpen();
     for (const run of await this.store.list()) {
+      if (run.advisorCase && run.status === 'waiting-user' && run.advisorCase.status !== 'adopted') {
+        await this.prepareAdvisor(run.id); continue;
+      }
       if (!['running', 'pausing'].includes(run.status)) continue;
       await this.change(run.id, (draft) => {
         draft.controlEpoch++;
@@ -1789,14 +1797,108 @@ export class WorkflowController {
           ...(sourceAttemptId ? { sourceAttemptId } : {}),
           ...(candidate ? { candidateId: candidate.id } : {}), raisedAt: this.now(), request,
           reportIds: run.reviews.filter((review) => !sectionId || review.sectionId === sectionId).map((review) => review.id),
-          status: 'waiting-external' };
+          status: this.advisor ? 'preparing' : 'waiting-external' };
       }
       run.pendingDecision = { id: this.id(), question: reason,
         context: `Run ${run.id}, ${sectionId ? `Section ${sectionId}` : run.stage}`, kind,
         ...(sectionId ? { sectionId } : {}), ...(advisorTrigger ? { advisorTrigger } : {}),
         createdAt: this.now() };
       this.event(run, 'blocked', reason, sectionId ? { sectionId } : {});
+
     });
+    if (kind === 'advisor' && this.advisor) await this.prepareAdvisor(id);
+  }
+
+  /** Advisor escalation is a durable Host side effect, not a Skill instruction to a chat agent. */
+  private async prepareAdvisor(id: string): Promise<void> {
+    if (!this.advisor || this.preparingAdvisors.has(id)) return;
+    this.preparingAdvisors.add(id);
+    try {
+      const before = await this.status(id);
+      if (!before.advisorCase || before.advisorCase.status === 'adopted' || before.advisorCase.notification) return;
+      // Stop all actual writers/readers first. A timeout leaves a frozen hold without a misleading ZIP.
+      if (!await this.stopLocal(id)) {
+        await this.change(id, draft => {
+          if (draft.advisorCase) draft.advisorCase.packageError = 'Advisor evidence is waiting for actual actor termination; no ZIP was declared ready.';
+        });
+        return;
+      }
+      let packed = before.advisorCase.package;
+      if (!packed) {
+        try { packed = await this.advisor.pack(await this.status(id)); }
+        catch (error) {
+          await this.change(id, draft => {
+            if (draft.advisorCase) draft.advisorCase.packageError = message(error);
+            this.event(draft, 'advisor-pack-failed', 'Advisor ZIP export is not verified; the Run remains blocked.');
+          });
+          return;
+        }
+        await this.change(id, draft => {
+          if (!draft.advisorCase || draft.advisorCase.status === 'adopted') return;
+          draft.advisorCase.package = packed;
+          draft.advisorCase.status = 'waiting-external';
+          delete draft.advisorCase.packageError;
+          this.event(draft, 'advisor-pack-ready', 'Host-verified local Advisor ZIP is ready for human sensitive-data review.');
+        });
+      }
+      const run = await this.status(id);
+      if (!run.advisorCase?.package || run.advisorCase.notification) return;
+      const origin = run.advisorCase;
+      const section = origin.sectionId ? run.plan?.sections.find(entry => entry.id === origin.sectionId) : undefined;
+      const defaults: AdvisorNotice = {
+        project: (run.plan?.title ?? run.id).slice(0, 90),
+        feature: (section?.title ?? run.plan?.title ?? run.id).slice(0, 150),
+        reason: (origin.trigger + ': ' + (run.blockedReason ?? 'Independent human Advisor decision required'))
+          .replace(/https?:\/\/\S+/g, '[link]').replace(/[<>\r\n]/g, ' ').slice(0, 480),
+      };
+      let notice = defaults;
+      try {
+        const actorTask: ActorTask = {
+          id: this.id(), runId: run.id, kind: 'advisor-notice',
+          inputContractVersion: run.inputContractVersion, controlEpoch: run.controlEpoch,
+          workspace: run.workspace, timeoutMs: Math.min(run.policy.actorTimeoutMs, 90_000),
+          outputSchema: outputSchemaFor('advisor-notice'),
+          input: { phase: 'advisor-notice', trigger: origin.trigger,
+            project: defaults.project, feature: defaults.feature, reason: defaults.reason,
+            instruction: 'The verified ZIP exists. Return only three brief notification fields; do not send the ZIP.' },
+          ...(run.policy.routes['advisor-notice'] ? { route: run.policy.routes['advisor-notice'] } : {}),
+        };
+        const controller = new AbortController();
+        const handle = await this.actors.start(actorTask, controller.signal);
+        try {
+          const outcome = await handle.result;
+          if (outcome.status !== 'completed') throw new Error('No completed Advisor notice result.');
+          const fields = parseActorOutput('advisor-notice', outcome.output) as AdvisorNotice;
+          if ([fields.project, fields.feature, fields.reason].some(value =>
+            /[\r\n<>]|https?:\/\/|(?:secret|token|password)\s*[:=]/i.test(value))) {
+            throw new Error('Invalid user-visible Feishu notification fields.');
+          }
+          notice = fields;
+        } finally { await handle.dispose(); }
+      } catch {
+        // A missing or malformed notice must not silently skip the required notification.
+        // The Host has sufficient verified trigger facts for a safe deterministic fallback.
+        this.event(await this.status(id), 'advisor-notice-fallback', 'Host is using its bounded trigger-only notification fields.');
+      }
+      await this.change(id, draft => {
+        if (draft.advisorCase) draft.advisorCase.notice = notice;
+      });
+      try {
+        const notification = await this.advisor.notify(await this.status(id), run.advisorCase.package, notice);
+        await this.change(id, draft => {
+          if (!draft.advisorCase) return;
+          draft.advisorCase.notification = notification;
+          this.event(draft, notification.status === 'sent' ? 'advisor-feishu-sent' : 'advisor-feishu-unavailable',
+            notification.status === 'sent' ? 'Advisor three-field Feishu notification delivered.' :
+              'Feishu unavailable or uncertain; show the three fields and ZIP receipt in the owning DSH conversation.');
+        });
+      } catch (error) {
+        await this.change(id, draft => {
+          if (draft.advisorCase) draft.advisorCase.packageError = 'Notification error: ' + message(error);
+          this.event(draft, 'advisor-feishu-unavailable', 'Feishu notification could not be confirmed; the Advisor hold remains.');
+        });
+      }
+    } finally { this.preparingAdvisors.delete(id); }
   }
 
   private async stopLocal(runId: string): Promise<boolean> {
