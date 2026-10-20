@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   regenerate:
-    if: startsWith(github.event.head_commit.message, 'chore: regenerate native distributable')
+    if: "startsWith(github.event.head_commit.message, 'chore: regenerate native distributable')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
