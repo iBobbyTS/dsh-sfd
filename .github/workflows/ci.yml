@@ -2,11 +2,11 @@ name: Verify plugin
 
 on:
   push:
-    branches: [main, work/sfd-native-parity-20261019]
+    branches: [main]
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -19,16 +19,6 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - name: Synchronize built distributable on migration branch
-        if: github.ref_name == 'work/sfd-native-parity-20261019'
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add lib
-          if ! git diff --cached --quiet; then
-            git commit -m 'build: synchronize bundled plugin distribution'
-            git push origin HEAD:work/sfd-native-parity-20261019
-          fi
       - name: Verify committed distributable matches source
         run: git diff --exit-code -- lib
       - name: Verify package contents

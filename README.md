@@ -4,7 +4,7 @@
 
 任务目标、Section 依赖、审查证据、修复预算和恢复状态由 Host 服务持久保存。模型以有边界的 planner、implementer、reviewer、adjudicator 等角色参与；聊天结束或页面关闭不会代表开发任务完成。
 
-当前版本 **0.1.0**，针对 **DSH 0.2.1-rc.2** 构建和验证。方法来自 [sectioned-feature-development](https://github.com/iBobbyTS/sectioned-feature-development)，角色协议已内置于本仓库，不依赖安装或继续维护原 Skill。
+当前版本 **0.1.0**，针对 **DSH 0.2.1-rc.2** 构建和验证。方法来自 [sectioned-feature-development](https://github.com/iBobbyTS/sectioned-feature-development)，角色协议已内置于本仓库，不依赖安装或继续维护原 Skill。原 Skill 的规划、代码审查和工作流参考文件作为插件的只读知识资源，供原生角色通过 `sfd_knowledge` 按需读取；旧的 Codex/ZCode 路由表不参与 DSH 调度。
 
 ## 安装
 
@@ -153,9 +153,9 @@ npm pack --ignore-scripts
 node scripts/verify-package.mjs
 ```
 
-测试包括纯状态机回归、真实临时 Git 仓库与检查进程、组合工作流、真实 Cordis/DSH 服务与原生 spawn/结构化输出、UI 控制器与服务端渲染。模型判断使用确定性的测试提供方；这些测试不代表已对真实付费模型的规划与审查质量做基准测评。CI 使用 Node 24，并验证提交的 `lib/` 与源码一致。
+测试包括纯状态机回归、逐 finding 修复关闭、修复增量风险路由、Section 变更范围、standard/large Host 模型路由、真实临时 Git 仓库与检查进程、组合工作流、真实 Cordis/DSH 服务与原生 spawn/结构化输出、插件知识资源只读访问、UI 控制器与服务端渲染。模型判断使用确定性的测试提供方；这些测试不代表已对真实付费模型的规划与审查质量做基准测评。CI 使用 Node 24，并验证提交的 `lib/` 与源码一致。
 
-参见 [实施计划](docs/IMPLEMENTATION-PLAN.md)、[架构与不变量](docs/ARCHITECTURE.md)、[验证记录](docs/VALIDATION.md)。
+参见 [实施计划](docs/IMPLEMENTATION-PLAN.md)、[架构与不变量](docs/ARCHITECTURE.md)、[原 Skill 迁移映射](docs/SKILL-NATIVE-PARITY.md)、[验证记录](docs/VALIDATION.md)。
 
 ## 当前支持边界
 

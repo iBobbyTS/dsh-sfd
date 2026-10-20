@@ -15,7 +15,7 @@ npm pack --ignore-scripts
 node scripts/verify-package.mjs
 ```
 
-The implementation verification passed TypeScript checking, **65 named tests with zero failures or skips**, and JavaScript/declaration builds. The package verifier checks required files, every declared export, compiled Host/role/core/client imports, and the absence of installation-time build hooks. GitHub CI repeats these checks on Node 24 and checks that committed `lib/` matches a fresh build.
+The implementation verification passed TypeScript checking, **69 named tests with zero failures or skips**, and JavaScript/declaration builds. The package verifier checks required files, every declared export, compiled Host/role/core/client imports, and the absence of installation-time build hooks. GitHub CI repeats these checks on Node 24 and checks that committed `lib/` matches a fresh build.
 
 ## What the tests establish
 
