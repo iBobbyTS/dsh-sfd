@@ -74,6 +74,11 @@ class FakeActors implements ActorRunner {
       const evidence = task.input.evidence as { id: string }[];
       return { verdict: 'accepted', summary: 'The final business path is demonstrated.', criteria: this.configuredPlan.features.flatMap((feature) => feature.acceptanceCriteria.map((criterion) => ({ featureId: feature.id, criterion, evidenceIds: [evidence[0].id], satisfied: true }))), repairSectionIds: [], repairInstructions: '' } satisfies FeatureVerificationOutput;
     }
+    if (task.kind === 'closure-reviewer') return {
+      ...clean, closures: ((task.input.targetFindingIds ?? []) as string[]).map((findingId) => ({
+        findingId, status: 'verified-closed', evidence: 'Verified the exact repaired invariant on the current candidate.',
+      })),
+    };
     if (task.kind === 'diagnostician') return { summary: 'An independent diagnosis was completed.', recommendation: 'retry', instructions: 'Repair the demonstrated root cause and preserve the contract.' };
     return clean;
   }
@@ -479,5 +484,57 @@ test('actual delivery receipt closes a commit admission gap without replay or fa
   assert.equal(done.status, 'completed'); assert.equal(workspace.commitCalls, 1);
   assert.equal(done.commit?.commit, 'delivered');
   assert.equal(done.currentCandidateId, workspace.receipt?.candidateId);
+  await controller.dispose();
+});
+
+test('closure cannot accept an unresolved admitted finding just because a targeted reviewer says clean', async () => {
+  const { controller, actors, workspace } = rig();
+  let bCalls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'reviewer-b' && ++bCalls === 1)
+      return { ...clean, verdict: 'findings', findings: [{ id: 'BUG1', title: 'Ownership', body: 'Export leaks across accounts.', severity: 'major', invariant: 'Account isolation' }] };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'b-admission' && workspace.version === 1) {
+      const findings = task.input.findings as { id: string }[];
+      return accept({ resolution: 'repair', dispositions: findings.map((finding) => ({ findingId: finding.id, decision: 'fix', reason: 'Reproducible leak.' })),
+        repairInstructions: 'Fix account isolation.', material: true });
+    }
+    if (task.kind === 'closure-reviewer') return { ...clean, closures: ((task.input.targetFindingIds ?? []) as string[]).map((findingId) => ({
+      findingId, status: 'insufficient-evidence', evidence: 'No successful counterexample test.',
+    })) };
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const stopped = await waitFor(controller, id, (run) => ['blocked', 'waiting-user', 'completed'].includes(run.status));
+  assert.notEqual(stopped.status, 'completed');
+  assert.match(stopped.blockedReason ?? '', /VERIFIED_CLOSED|closure|finding/);
+  assert.equal(stopped.sections.S1.materialRepairWaves, 1);
+  await controller.dispose();
+});
+
+test('repair delta can reroute one new independent lens without repeating the unaffected full R01 pass', async () => {
+  const { controller, actors, workspace } = rig();
+  let bCalls = 0;
+  actors.responder = (task) => {
+    if (task.kind === 'reviewer-b' && ++bCalls === 1) return {
+      ...clean, verdict: 'findings',
+      findings: [{ id: 'FIX', title: 'Missing state guard', body: 'Fix the persisted guard.', severity: 'major', invariant: 'State safety' }],
+    };
+    if (task.kind === 'adjudicator' && task.input.purpose === 'b-admission' && workspace.version === 1) {
+      const findings = task.input.findings as { id: string }[];
+      return accept({ resolution: 'repair', dispositions: findings.map(({ id }) => ({ findingId: id, decision: 'fix', reason: 'Confirmed.' })),
+        repairInstructions: 'Repair the guard.', material: true });
+    }
+    if (task.kind === 'review-selector' && task.input.phase === 'reroute') return {
+      lenses: [{ id: 'R01', name: 'Behavior', focus: 'Existing baseline' }, { id: 'R03', name: 'State', focus: 'New persistence risk' }],
+      rationale: 'The repaired state guard creates a previously unchecked persistence path.',
+    };
+    return actors.defaultResult(task);
+  };
+  const id = await launch(controller);
+  const done = await waitFor(controller, id, (run) => ['completed', 'blocked', 'waiting-user'].includes(run.status));
+  assert.equal(done.status, 'completed', done.blockedReason);
+  assert.equal(actors.calls.filter((call) => call.kind === 'reviewer-a' && call.lens?.id === 'R01').length, 1);
+  assert.equal(actors.calls.filter((call) => call.kind === 'reviewer-a' && call.lens?.id === 'R03').length, 1);
+  assert.equal(actors.calls.filter((call) => call.kind === 'review-selector').length, 2);
   await controller.dispose();
 });
