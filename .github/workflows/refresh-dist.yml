@@ -1,0 +1,32 @@
+name: Regenerate distributable on explicit request
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: startsWith(github.event.head_commit.message, 'chore: regenerate native distributable')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: Commit exact source-built distribution
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib
+          if ! git diff --cached --quiet; then
+            git commit -m "build: sync checked native distribution [dist-sync]"
+            git push origin HEAD:main
+          fi
