@@ -2,6 +2,7 @@
 export declare const CORE_VERSION: "1.1.0";
 export declare const POLICY_VERSION: "sfd-native-2";
 export type ActorKind = 'planner' | 'plan-review-a' | 'plan-review-b' | 'implementer' | 'review-selector' | 'reviewer-a' | 'reviewer-b' | 'adjudicator' | 'closure-reviewer' | 'feature-verifier' | 'diagnostician';
+export type WorkflowIntent = 'execute' | 'plan-handoff';
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
 export type RunStage = 'planning' | 'plan-review-a' | 'plan-review-b' | 'sections' | 'feature-verification' | 'delivery' | 'done';
 export type SectionStage = 'pending' | 'subsection-implementing' | 'subsection-review' | 'subsection-adjudicating' | 'implementing' | 'reroute' | 'review-selection' | 'review-a' | 'adjudicating-a' | 'repairing' | 'closure' | 'review-b' | 'adjudicating-b' | 'accepted' | 'integrated';
@@ -289,6 +290,8 @@ export interface ExecutionIdentity {
     sessionId?: string;
 }
 export interface ActorTask {
+    /** Effective writer tier frozen at dispatch: a Subsection can override its parent. */
+    implementationTier?: 'standard' | 'large';
     id: string;
     runId: string;
     kind: ActorKind;
@@ -438,6 +441,8 @@ export interface DevelopmentRun {
     id: string;
     schemaVersion: 1;
     workflowVersion: string;
+    /** Omitted in existing persisted Runs; execute remains the historical default. */
+    intent?: WorkflowIntent;
     revision: number;
     controlEpoch: number;
     inputContractVersion: number;
@@ -517,6 +522,7 @@ export type Run = DevelopmentRun;
 export interface CreateRunInput {
     goal: string;
     workspacePath: string;
+    intent?: WorkflowIntent;
     policy?: Partial<WorkflowPolicy>;
     requireInitialPlanApproval?: boolean;
 }
