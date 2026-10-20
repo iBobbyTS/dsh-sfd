@@ -86,6 +86,7 @@ export const actorOutputSchemas = {
   'closure-reviewer': reviewSchema.extend({ closures: reviewSchema.shape.closures.unwrap() }),
   'feature-verifier': featureVerificationSchema,
   diagnostician: diagnosticSchema,
+  'advisor-notice': z.strictObject({ project: z.string().trim().min(1).max(100), feature: z.string().trim().min(1).max(160), reason: z.string().trim().min(1).max(500) }),
 } satisfies Record<ActorKind, z.ZodType>;
 
 export function outputSchemaFor(kind: ActorKind): Record<string, unknown> {
