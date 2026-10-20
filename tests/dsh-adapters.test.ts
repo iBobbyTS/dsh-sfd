@@ -154,7 +154,13 @@ class StructuredFixtureAdapter extends LlmAdapter {
       if (options.signal?.aborted) abort();
     });
     const id = ToolCallId(`fixture-${this.requests.length}`);
-    const argumentsJson = JSON.stringify(this.output);
+    const role = 'verdict' in this.output ? 'reviewer-a' : 'implementer';
+    const reportMarkdown = '# SFD Role Report\\n' +
+      JSON.stringify({ role, taskId: 'native-fixture' }) + '\\n' +
+      '## Evidence\\n' + JSON.stringify({ status: 'observed', sourceRefs: ['fixture'] }) + '\\n' +
+      'Validated fixture model response.\\n## Outcome\\n' +
+      JSON.stringify({ status: 'complete', limitations: [] }) + '\\n';
+    const argumentsJson = JSON.stringify({ ...this.output, reportMarkdown });
     yield { type: 'block-start', index: 0, blockType: 'tool-call' };
     yield { type: 'tool-call-delta', index: 0, id, name: 'structured_output', argumentsDelta: argumentsJson };
     yield { type: 'block-end', index: 0, block: { type: 'tool-call', id, name: 'structured_output', arguments: argumentsJson } };
