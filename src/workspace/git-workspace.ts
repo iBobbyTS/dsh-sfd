@@ -152,12 +152,14 @@ export class GitWorkspace implements WorkspacePort {
       if (source.baseCommit !== run.workspace.baseCommit) throw new Error('Source HEAD changed since the Run was created; revise or recreate the Run from current inputs.');
       const path = join(root, 'worktree');
       if (await exists(path)) throw new Error('An unrecorded worktree exists from interrupted preparation; reconcile it before retrying.');
-      const branch = `sfd/${safeId(run.id)}`;
+      const branch = run.intent === 'review-only' ? '(detached)' : `sfd/${safeId(run.id)}`;
       const initialTree = await this.tree(source.path, root);
       const workspace: WorkspaceInfo = { path, branch, baseCommit: source.baseCommit, initialTreeHash: initialTree, prepared: true };
       const manifest: Manifest = { version: 1, runId: run.id, source: source.path, commonGitDir: common, workspace, initialTree };
       await this.writeJson(join(root, 'prepare-intent.json'), manifest);
-      await this.git(source.path, ['worktree', 'add', '-b', branch, path, source.baseCommit]);
+      await this.git(source.path, run.intent === 'review-only'
+        ? ['worktree', 'add', '--detach', path, source.baseCommit]
+        : ['worktree', 'add', '-b', branch, path, source.baseCommit]);
       // Apply the complete starting tree without changing the original branch/index.
       const patch = await this.git(source.path, ['diff', '--binary', source.baseCommit, initialTree, '--']);
       if (patch) await this.git(path, ['apply', '--binary', '--whitespace=nowarn', '-'], { input: patch });
@@ -172,7 +174,7 @@ export class GitWorkspace implements WorkspacePort {
     const root = await this.claim(run);
     const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Manifest;
     if (manifest.runId !== run.id || await realpath(manifest.workspace.path) !== await realpath(run.workspace.path)) throw new Error('Workspace is outside this Run ownership.');
-    const currentBranch = (await this.git(run.workspace.path, ['symbolic-ref', '--short', 'HEAD'])).trim();
+    const currentBranch = (await this.git(run.workspace.path, ['symbolic-ref', '--short', 'HEAD'], { allowFailure: true })).trim() || '(detached)';
     if (currentBranch !== run.workspace.branch) throw new Error('Workflow branch changed outside the controller.');
     return root;
   }
