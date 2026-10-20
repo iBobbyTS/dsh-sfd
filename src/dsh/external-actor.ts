@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { ActorHandle, ActorRunner } from '../core/ports.js';
 import type { ActorOutcome, ActorTask, ExecutionIdentity } from '../core/types.js';
 import { ROLE_SPECS } from '../roles/specs.js';
+import { buildActorPrompt } from '../roles/prompts.js';
 import { prepareActorPrompt } from '../workspace/actor-context.js';
 import { runProcess } from '../workspace/process.js';
 import type { DomainRunStore } from './store.js';
@@ -138,8 +139,19 @@ export class ExternalSubagentRunner implements ActorRunner {
     validateActorRoute(task, expected);
     const route = task.route ?? expected ?? { preset: ROLE_PRESETS[task.kind] };
     const target = externalTarget(route, ROLE_SPECS[task.kind].access, owner.sandboxMode);
-    const prepared = await prepareActorPrompt(task, { directory: join(dirname(run.workspace.path), 'actor-context', task.id) });
-    const prompt = await externalActorPrompt(task, prepared.prompt);
+    // External-subagent's public prompt ceiling is much larger than native
+    // DSH's 64k presentation budget. Keep the exact task inline whenever it fits
+    // so sandboxed external readers need not resolve out-of-worktree artifacts.
+    let artifactRefs: string[] = [];
+    let prompt: string;
+    try {
+      prompt = await externalActorPrompt(task, buildActorPrompt(task));
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('262144-byte prompt limit')) throw error;
+      const indexed = await prepareActorPrompt(task, { directory: join(dirname(run.workspace.path), 'actor-context', task.id) });
+      prompt = await externalActorPrompt(task, indexed.prompt);
+      artifactRefs = indexed.artifactRefs;
+    }
     if (signal.aborted || this.disposed) throw new Error('External actor was cancelled before spawn.');
     // A shared frozen candidate can be read by many independent reviewers, but
     // external-subagent reserves that workspace for one active task at a time.
@@ -196,19 +208,19 @@ export class ExternalSubagentRunner implements ActorRunner {
         for (;;) {
           if (signal.aborted || this.disposed) {
             await stop();
-            return { status: 'cancelled', error: 'External SFD actor stopped by Host control.', identity, artifactRefs: prepared.artifactRefs };
+            return { status: 'cancelled', error: 'External SFD actor stopped by Host control.', identity, artifactRefs: artifactRefs };
           }
           const next = await this.client.call('wait', { agent_id: id, wait_time: 2 });
           const status = str(record(next.task, 'external task status').status);
           const pending = next.pending_requests;
           if (Array.isArray(pending) && pending.length) {
             await stop();
-            return { status: 'failed', error: 'External SFD actor requires an unresolved user/permission request; no approval was fabricated.', identity, artifactRefs: prepared.artifactRefs };
+            return { status: 'failed', error: 'External SFD actor requires an unresolved user/permission request; no approval was fabricated.', identity, artifactRefs: artifactRefs };
           }
           if (!status || !TERMINAL.has(status)) continue;
           const terminal = await this.readTerminal(id, target, identity);
           await close();
-          return { ...terminal, identity, artifactRefs: prepared.artifactRefs };
+          return { ...terminal, identity, artifactRefs: artifactRefs };
         }
       } catch (error) {
         const original = error instanceof Error ? error.message : String(error);
@@ -217,10 +229,10 @@ export class ExternalSubagentRunner implements ActorRunner {
         } catch (stoppingError) {
           return { status: 'failed',
             error: `EXTERNAL_SUBAGENT_LIFECYCLE_UNCERTAIN: ${original}; cancellation/close: ${String(stoppingError)}`,
-            identity, artifactRefs: prepared.artifactRefs };
+            identity, artifactRefs: artifactRefs };
         }
         return { status: signal.aborted ? 'cancelled' : 'failed',
-          error: original, identity, artifactRefs: prepared.artifactRefs };
+          error: original, identity, artifactRefs: artifactRefs };
       }
     })();
     const handle: ActorHandle = {
