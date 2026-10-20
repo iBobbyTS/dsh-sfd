@@ -211,9 +211,16 @@ export class ExternalSubagentRunner implements ActorRunner {
           return { ...terminal, identity, artifactRefs: prepared.artifactRefs };
         }
       } catch (error) {
+        const original = error instanceof Error ? error.message : String(error);
+        try {
+          if (!stopped) await stop();
+        } catch (stoppingError) {
+          return { status: 'failed',
+            error: `EXTERNAL_SUBAGENT_LIFECYCLE_UNCERTAIN: ${original}; cancellation/close: ${String(stoppingError)}`,
+            identity, artifactRefs: prepared.artifactRefs };
+        }
         return { status: signal.aborted ? 'cancelled' : 'failed',
-          error: error instanceof Error ? error.message : String(error),
-          identity, artifactRefs: prepared.artifactRefs };
+          error: original, identity, artifactRefs: prepared.artifactRefs };
       }
     })();
     const handle: ActorHandle = {
