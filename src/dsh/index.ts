@@ -112,7 +112,8 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
     request = createRequestSchema.parse(request);
     const agent = await this.requireLiveOwner(request.sessionId);
     const sandbox = this.ctx.sandboxPolicy.resolve({ session: agent.session });
-    if (sandbox.mode === 'read-only') throw new RemoteError('development-workflow/forbidden', 'Development requires a writable native Session permission scope.', { sessionId: request.sessionId });
+    const intent = request.intent ?? 'execute';
+    if (sandbox.mode === 'read-only' && intent === 'execute') throw new RemoteError('development-workflow/forbidden', 'Development requires a writable native Session permission scope.', { sessionId: request.sessionId });
     const sourceRoot = agent.session.header.cwd ?? this.ctx.workingDirectory.get(agent.session);
     const workspacePath = await containedWorkspace(sourceRoot, request.workspacePath ?? this.ctx.workingDirectory.get(agent.session));
     const repository = await this.workspace.inspect(workspacePath);
@@ -128,15 +129,16 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
       ...(route.reasoningEffort === undefined ? {} : { effort: route.reasoningEffort }),
       ...(permissionPreset === undefined ? {} : { permissionPreset }),
     };
-    if (request.commit === false) throw new RemoteError('development-workflow/forbidden', 'EXECUTE_WITH_COMMIT requires an accepted commit on the isolated run branch; choose a separately authorized plan-only workflow for no-commit work.', { sessionId: request.sessionId });
-    if (this.config.allowCommits === false) throw new RemoteError('development-workflow/forbidden', 'This deployment disables workflow commits.', { sessionId: request.sessionId });
+    if (intent === 'execute' && request.commit === false) throw new RemoteError('development-workflow/forbidden', 'EXECUTE_WITH_COMMIT requires an accepted commit on the isolated run branch; choose PLAN_HANDOFF for no-commit planning.', { sessionId: request.sessionId });
+    if (intent === 'plan-handoff' && request.commit === true) throw new RemoteError('development-workflow/forbidden', 'PLAN_HANDOFF never creates a product commit.', { sessionId: request.sessionId });
+    if (intent === 'execute' && this.config.allowCommits === false) throw new RemoteError('development-workflow/forbidden', 'This deployment disables workflow commits.', { sessionId: request.sessionId });
     const routes: Partial<Record<ActorKind, ActorRoute>> = {};
     for (const kind of Object.keys(ROLE_PRESETS) as ActorKind[]) routes[kind] = freezeModelRoute(ROLE_PRESETS[kind], owner, this.config.modelRoutes?.[kind]);
     const policy: Partial<WorkflowPolicy> = {
       actorTimeoutMs: this.config.actorTimeoutMs ?? 1_800_000,
       maxParallelReviews: this.config.maxParallelReviews ?? 3,
       maxInfrastructureRetries: this.config.maxInfrastructureRetries ?? 1,
-      commit: true, routes,
+      commit: intent === 'execute', routes,
       ...(this.config.largeImplementerProvider && this.config.largeImplementerModel ? {
         largeImplementerRoute: freezeModelRoute(ROLE_PRESETS.implementer, owner, {
           provider: this.config.largeImplementerProvider, model: this.config.largeImplementerModel,
@@ -144,7 +146,7 @@ export class DevelopmentWorkflowService extends TypertRemoteService {
         }),
       } : {}),
     };
-    return this.store.withOwner(owner, () => this.controller.create({ goal: request.goal, workspacePath, policy, requireInitialPlanApproval: automaticActivation }));
+    return this.store.withOwner(owner, () => this.controller.create({ goal: request.goal, intent, workspacePath, policy, requireInitialPlanApproval: automaticActivation }));
   }
 
   @Remote({ resources: { session: (request: RunRequest) => SessionId(request.sessionId) } })
@@ -203,9 +205,13 @@ export async function executeCommand(service: DevelopmentWorkflowService, agent:
   const action = split?.[1] ?? 'list';
   const tail = split?.[2] ?? '';
   const sessionId = String(agent.id);
-  if (action === 'help') return '/sfd create <goal> | list | status/start/pause/resume/cancel/recover <run-id> | revise <run-id> <goal> | decide <run-id> <decision-id> <continue|retry|replan|cancel> <answer> | advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>';
+  if (action === 'help') return '/sfd create <goal> | plan <goal> | list | status/start/pause/resume/cancel/recover <run-id> | revise <run-id> <goal> | decide <run-id> <decision-id> <continue|retry|replan|cancel> <answer> | advisor <run-id> <decision-id> <accept|reject|clarify> <continue|replan|cancel> <verbatim-advice>';
   if (action === 'list') return JSON.stringify(await service.list({ sessionId }), null, 2);
   if (action === 'create') return JSON.stringify(await service.create({ sessionId, goal: tail }), null, 2);
+  if (action === 'plan') {
+    const created = await service.create({ sessionId, goal: tail, intent: 'plan-handoff' });
+    return JSON.stringify(await service.start({ sessionId, runId: created.id }), null, 2);
+  }
   const parts = /^(\S+)(?:\s+([\s\S]*))?$/.exec(tail);
   if (!parts) throw new Error('A Run id is required. Use /sfd help.');
   const runId = parts[1];
@@ -237,7 +243,7 @@ export async function executeCommand(service: DevelopmentWorkflowService, agent:
 
 function installEntries(ctx: Context, service: DevelopmentWorkflowService): void {
   ctx.commands.register({
-    name: 'sfd', description: 'Manage native sectioned development Runs.', input: { hint: 'create <goal>, list, status/start/pause/resume/cancel/recover <run-id>, decide, revise' },
+    name: 'sfd', description: 'Manage native sectioned development Runs.', input: { hint: 'create <goal>, plan <goal>, list, status/start/pause/resume/cancel/recover <run-id>, decide, revise' },
     recordInput: false,
     handler: async ({ agent, rawInput, signal }) => {
       signal.throwIfAborted();
@@ -251,6 +257,7 @@ function installEntries(ctx: Context, service: DevelopmentWorkflowService): void
     parameters: {
       action: { type: 'string', required: true, enum: ['create', 'start', 'list', 'status', 'pause', 'resume', 'cancel'] },
       goal: { type: 'string', description: 'Authorized user goal, required only when creating.' },
+      intent: { type: 'string', enum: ['execute', 'plan-handoff'], description: 'Choose full execution or PLAN_HANDOFF without code changes.' },
       run_id: { type: 'string', description: 'This Session’s existing Run id.' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
@@ -258,7 +265,7 @@ function installEntries(ctx: Context, service: DevelopmentWorkflowService): void
       if (exec.agent === undefined || ctx.agents.get(exec.agent.id) !== exec.agent || exec.agent.session.header.origin === 'subagent') throw new Error('SFD control requires the exact live owning chat Agent.');
       const sessionId = String(exec.agent.id);
       if (args.action === 'list') return JSON.stringify(await service.list({ sessionId }));
-      if (args.action === 'create') return JSON.stringify(await service.create({ sessionId, goal: args.goal ?? '' }, true));
+      if (args.action === 'create') return JSON.stringify(await service.create({ sessionId, goal: args.goal ?? '', intent: args.intent ?? 'execute' }, true));
       const request = { sessionId, runId: args.run_id ?? '' };
       switch (args.action) {
         case 'start': return JSON.stringify(await service.start(request));

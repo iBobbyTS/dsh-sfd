@@ -19,6 +19,7 @@ export const ROLE_LABELS: Record<ActorKind, string> = {
 };
 
 export function phaseLabel(run: DevelopmentRun): string {
+  if (run.stage === 'done' && run.intent === 'plan-handoff') return 'Reviewed plan ready (no code changes)';
   if (run.stage === 'sections') {
     const section = run.activeSectionId && run.sections[run.activeSectionId];
     return section ? `${section.id} · ${SECTION_LABELS[section.stage]}` : 'Section scheduling';
