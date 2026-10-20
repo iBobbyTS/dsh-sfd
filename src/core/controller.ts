@@ -1062,6 +1062,10 @@ export class WorkflowController {
     }
     try { this.validateAdjudication(run, section, output, attempt.id); }
     catch (error) {
+      // Correct malformed references only. Real failed checks or missing actual
+      // coverage remain blocking evidence and must never be "fixed" as JSON.
+      if (!/^(Duplicate finding disposition|Disposition references unknown finding|Finding .* has no disposition|Unknown invalidated Section|Every proposed SAFE_SIMPLIFICATION action|Coverage reuse requires an existing complete report|Invalidated A lens cannot reuse)/.test(message(error)))
+        throw error;
       // A mistaken finding/evidence ID is an actor output error, not a broken Run.
       // Retry this decision once with bounded, exact valid IDs. Never redo reviews,
       // consume a product repair wave, or enter an unbounded validator loop.
