@@ -157,8 +157,11 @@ export class NativeAdvisorHandoff implements AdvisorPort {
     const pack = run.advisorCase?.package;
     if (!pack) throw new Error('An external response cannot be recorded without a verified Advisor request ZIP.');
     await mkdir(dirname(pack.responsePath), { recursive: true, mode: 0o700 });
-    await writeStable(pack.responsePath, advice);
-    await writeStable(join(dirname(pack.responsePath), 'ADVISOR-DECISION.json'), JSON.stringify({
+    const version = createHash('sha256').update(JSON.stringify({ advice, adoption, humanAnswer, action })).digest('hex').slice(0, 16);
+    try { await writeStable(pack.responsePath, advice); }
+    catch { /* Keep the first Advisor reply verbatim; clarifications are versioned below. */ }
+    await writeStable(join(dirname(pack.responsePath), 'ADVISOR-RESULT-' + version + '.md'), advice);
+    await writeStable(join(dirname(pack.responsePath), 'ADVISOR-DECISION-' + version + '.json'), JSON.stringify({
       requestId: pack.requestId, source: 'human', adoption, humanAnswer, action: action ?? null,
       packageSha256: pack.sha256,
     }, null, 2) + '\n');
