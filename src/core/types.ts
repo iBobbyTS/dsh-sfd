@@ -282,7 +282,7 @@ export interface DevelopmentRun {
   featureVerificationAttemptId?: string;
   pendingDecision?: UserDecision;
   advisorCase?: { trigger: AdvisorTrigger; sectionId?: string; candidateId?: string; sourceAttemptId?: string; raisedAt: string;
-    request: string; reportIds: string[]; status: 'waiting-external' | 'waiting-human-decision' | 'adopted';
+    request: string; reportIds: string[]; status: 'preparing' | 'waiting-external' | 'waiting-human-decision' | 'adopted';
     package?: AdvisorPackage; notice?: AdvisorNotice; notification?: AdvisorNotification; packageError?: string };
   decisionHistory: UserDecision[];
   events: RunEvent[];
