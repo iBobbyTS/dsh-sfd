@@ -5,7 +5,7 @@ export const POLICY_VERSION = 'sfd-native-2' as const;
 export type ActorKind =
   | 'planner' | 'plan-review-a' | 'plan-review-b' | 'implementer'
   | 'review-selector' | 'reviewer-a' | 'reviewer-b' | 'adjudicator'
-  | 'closure-reviewer' | 'feature-verifier' | 'diagnostician';
+  | 'closure-reviewer' | 'feature-verifier' | 'diagnostician' | 'advisor-notice';
 
 export type WorkflowIntent = 'execute' | 'plan-handoff';
 export type RunStatus = 'draft' | 'running' | 'pausing' | 'paused' | 'blocked' | 'waiting-user' | 'cancelled' | 'completed';
@@ -92,6 +92,9 @@ export interface Finding {
   classification?: 'PLAN_BLOCKER' | 'PLAN_SCOPE_EXPANSION' | 'OWNER_DECISION' | 'PLAN_NIT';
 }
 export interface ClosureFinding { findingId: string; status: 'verified-closed' | 'still-open' | 'regression' | 'insufficient-evidence'; evidence: string }
+export interface AdvisorNotice { project: string; feature: string; reason: string }
+export interface AdvisorPackage { path: string; sha256: string; requestId: string; requestPath: string; responsePath: string; exclusionsPath: string; generatedAt: string; bigFiles: number }
+export interface AdvisorNotification { status: 'sent' | 'failed' | 'unknown'; attemptedAt: string; failure?: string }
 export type AdvisorTrigger = 'ADV-01' | 'ADV-02' | 'ADV-03' | 'ADV-04' | 'ADV-05' | 'ADV-06';
 export type RecoveryClassification = 'CONTINUE_CURRENT' | 'SIMPLIFY_CURRENT' | 'REPAIR_EVIDENCE' |
   'SPLIT_REMAINING' | 'REBOUND_OWNER' | 'RESTART_FROM_BASE';
@@ -279,7 +282,8 @@ export interface DevelopmentRun {
   featureVerificationAttemptId?: string;
   pendingDecision?: UserDecision;
   advisorCase?: { trigger: AdvisorTrigger; sectionId?: string; candidateId?: string; sourceAttemptId?: string; raisedAt: string;
-    request: string; reportIds: string[]; status: 'waiting-external' | 'waiting-human-decision' | 'adopted' };
+    request: string; reportIds: string[]; status: 'waiting-external' | 'waiting-human-decision' | 'adopted';
+    package?: AdvisorPackage; notice?: AdvisorNotice; notification?: AdvisorNotification; packageError?: string };
   decisionHistory: UserDecision[];
   events: RunEvent[];
   commit?: CommitEvidence;
