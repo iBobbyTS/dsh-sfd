@@ -15,7 +15,7 @@ export const ROLE_LABELS: Record<ActorKind, string> = {
   planner: 'Planner', 'plan-review-a': 'Plan A', 'plan-review-b': 'Plan B', implementer: 'Implementation',
   'review-selector': 'Risk selection', 'reviewer-a': 'Code A', 'reviewer-b': 'Blind Code B',
   adjudicator: 'Evidence adjudication', 'closure-reviewer': 'Repair closure',
-  'feature-verifier': 'Feature acceptance', diagnostician: 'Diagnosis',
+  'feature-verifier': 'Feature acceptance', diagnostician: 'Diagnosis', 'advisor-notice': 'Advisor notice fields',
 };
 
 export function phaseLabel(run: DevelopmentRun): string {
