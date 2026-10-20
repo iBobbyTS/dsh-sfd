@@ -26,6 +26,7 @@ export const ROLE_SPECS = {
   'closure-reviewer': { presetId: 'sfd-closure-reviewer', title: 'Repair closure', access: 'reader', toolNames: READ_TOOLS },
   'feature-verifier': { presetId: 'sfd-feature-verifier', title: 'Feature acceptance', access: 'reader', toolNames: READ_TOOLS },
   diagnostician: { presetId: 'sfd-diagnostician', title: 'Diagnosis', access: 'reader', toolNames: READ_TOOLS },
+  'advisor-notice': { presetId: 'sfd-advisor-notice', title: 'Advisor Notification Fields', access: 'reader', toolNames: ['structured_output'] },
 } as const satisfies Record<ActorKind, RoleSpec>;
 
 export const ROLE_PRESETS = Object.fromEntries(
