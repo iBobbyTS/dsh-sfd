@@ -142,7 +142,7 @@ export interface DiagnosticOutput {
   recoveryClass?: RecoveryClassification;
   advisorTrigger?: AdvisorTrigger;
 }
-export type ActorOutput = PlanOutput | ReviewOutput | ImplementationOutput | ReviewSelectionOutput | AdjudicationOutput | FeatureVerificationOutput | DiagnosticOutput;
+export type ActorOutput = PlanOutput | ReviewOutput | ImplementationOutput | ReviewSelectionOutput | AdjudicationOutput | FeatureVerificationOutput | DiagnosticOutput | AdvisorNotice;
 
 export interface ExecutionIdentity {
   requested?: ActorRoute;
