@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep, matchesGlob } from 'node:path';
 import type { WorkspacePort } from '../core/ports.js';
 import type { Candidate, CheckEvidence, CheckSpec, CommitEvidence, DevelopmentRun, WorkspaceInfo, WorkspaceRecovery } from '../core/types.js';
 import { runProcess, type ProcessResult } from './process.js';
@@ -177,6 +177,16 @@ export class GitWorkspace implements WorkspacePort {
     return root;
   }
 
+  private sectionPlanScope(run: DevelopmentRun, sectionId: string): string[] {
+    const section = run.plan?.sections.find((entry) => entry.id === sectionId);
+    if (!section) throw new Error(`Section ${sectionId} has no admitted writeScope.`);
+    for (const scope of section.writeScope) {
+      const clean = scope.replaceAll('\\', '/');
+      if (!clean.trim() || isAbsolute(clean) || clean.split('/').includes('..') || clean.includes('\0')) throw new Error('Invalid or escaping Section writeScope.');
+    }
+    return section.writeScope;
+  }
+
   private async freeze(path: string): Promise<void> {
     for (const entry of await readdir(path, { withFileTypes: true })) {
       const full = join(path, entry.name);
@@ -187,10 +197,26 @@ export class GitWorkspace implements WorkspacePort {
     await chmod(path, 0o555);
   }
 
-  async capture(run: DevelopmentRun, _sectionId?: string): Promise<Candidate> {
+  async capture(run: DevelopmentRun, sectionId?: string): Promise<Candidate> {
     const root = await this.assertPrepared(run);
     const head = (await this.git(run.workspace.path, ['rev-parse', 'HEAD'])).trim();
     const treeHash = await this.tree(run.workspace.path, root);
+    // The original SFD assigns each writer an explicit Section edit boundary.
+    // Compare only the newly authored delta, not previously integrated Sections
+    // or dirty user input copied into the worktree before implementation.
+    const section = sectionId ? run.sections[sectionId] : undefined;
+    if (section && ['implementing', 'repairing'].includes(section.stage)) {
+      const previous = run.currentCandidateId ? run.candidates[run.currentCandidateId] : undefined;
+      const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Manifest;
+      const beforeTree = previous?.treeHash ?? manifest.initialTree;
+      const changed = (await this.git(run.workspace.path, ['diff', '--name-only', '-z', beforeTree, treeHash, '--'])).split('\0').filter(Boolean);
+      const allowed = this.sectionPlanScope(run, sectionId!);
+      const outOfScope = changed.filter((file) => !allowed.some((entry) => {
+        const pattern = entry.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '');
+        return pattern === file || file.startsWith(`${pattern}/`) || matchesGlob(file, pattern);
+      }));
+      if (outOfScope.length) throw new Error(`Section ${sectionId} changed paths outside its admitted writeScope: ${outOfScope.join(', ')}. Replan the authorized ownership before accepting these edits.`);
+    }
     const id = `candidate-${createHash('sha256').update(`${head}\0${treeHash}`).digest('hex').slice(0, 32)}`;
     const candidateDirectory = join(root, 'candidates');
     await mkdir(candidateDirectory, { recursive: true, mode: 0o700 });
