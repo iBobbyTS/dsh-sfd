@@ -35,7 +35,7 @@ const attempt = z.strictObject({
   id: identity, task, state: z.enum(['intent', 'started', 'terminal', 'admitted', 'unknown']),
   createdAt: identity, startedAt: identity.optional(), endedAt: identity.optional(), actorId: identity.optional(),
   outcome: z.strictObject({ status: z.enum(['completed', 'failed', 'cancelled']), output: z.unknown().optional(), error: text.optional(), identity: actorIdentity, artifactRefs: z.array(text).optional() }).optional(),
-  admittedOutput: z.unknown().optional(), rejection: text.optional(), infrastructureRetries: integer,
+  admittedOutput: z.unknown().optional(), reportMarkdown: text.optional(), rejection: text.optional(), infrastructureRetries: integer,
   recoveryDecisionId: identity.optional(), reconciledAt: identity.optional(),
 });
 const section = z.strictObject({
