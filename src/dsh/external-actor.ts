@@ -213,7 +213,7 @@ export class ExternalSubagentRunner implements ActorRunner {
             return { status: 'failed', error: 'External SFD actor requires an unresolved user/permission request; no approval was fabricated.', identity, artifactRefs: artifactRefs };
           }
           if (!status || !TERMINAL.has(status)) continue;
-          const terminal = await this.readTerminal(id, target, identity);
+          const terminal = await this.readTerminal(id, target, identity, task.kind);
           await close();
           return { ...terminal, identity, artifactRefs: artifactRefs };
         }
@@ -244,7 +244,7 @@ export class ExternalSubagentRunner implements ActorRunner {
   }
 
   private async readTerminal(id: number, target: ReturnType<typeof externalTarget>,
-    identity: ExecutionIdentity): Promise<Pick<ActorOutcome, 'status' | 'output' | 'error'>> {
+    identity: ExecutionIdentity, kind: ActorTask['kind']): Promise<Pick<ActorOutcome, 'status' | 'output' | 'error'>> {
     let offset = 0;
     const chunks: string[] = [];
     let terminalStatus: string | undefined;
@@ -282,6 +282,10 @@ export class ExternalSubagentRunner implements ActorRunner {
     let json: unknown;
     try { json = JSON.parse(chunks.join('')); }
     catch { return { status: 'failed', error: 'External actor final answer is not the required structured JSON object.' }; }
+    if (kind !== 'advisor-notice' && (!json || typeof json !== 'object' ||
+        typeof (json as Record<string, unknown>).reportMarkdown !== 'string')) {
+      return { status: 'failed', error: 'SFD_REPORT_MISSING: External actor did not supply its required Markdown evidence report.' };
+    }
     return { status: 'completed', output: json };
   }
 
