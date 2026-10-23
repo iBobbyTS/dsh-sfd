@@ -17,7 +17,8 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
-    "lib/*.js"
+    "lib/*.js",
+    "skills/"
   ],
   "dsh": {
     "bundle": {

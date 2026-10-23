@@ -13,11 +13,17 @@ import { preflight } from './lib/es.js';
 import { inspect } from './lib/cleanup.js';
 import { makeT } from './lib/i18n.js';
 import { registerSfdTools } from './lib/tools.js';
+import { sfdSkillProvider } from './lib/skill-provider.js';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
-export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory', 'tools'];
+export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory', 'tools', 'skills'];
 
 export function apply(ctx) {
+  // Serve the flow skill from this package's skills/ directory so it
+  // installs/upgrades/uninstalls together with the plugin.
+  try {
+    ctx.skills?.registerProvider?.(() => sfdSkillProvider);
+  } catch { /* skills service absent or provider rejected: cards still work */ }
   // Host plugins have no ctx.locale (a browser-client service). lib/i18n.js
   // resolves the GUI language on the host side; the promise resolves before
   // any card is shown, and a rejection would surface as a command error.
