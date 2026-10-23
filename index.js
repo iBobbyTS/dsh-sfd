@@ -8,12 +8,13 @@
  * The command injects its result into the conversation for the main agent;
  * program flow beyond this gate stays with the state machine in later phases.
  */
-import { loadState, detectWork, initialState, transition, renderBrief } from './lib/state.js';
+import { loadState, detectWork, renderBrief } from './lib/state.js';
 import { preflight } from './lib/es.js';
-import { runCleanup, inspect } from './lib/cleanup.js';
+import { inspect } from './lib/cleanup.js';
 import { makeT } from './lib/i18n.js';
+import { registerSfdTools } from './lib/tools.js';
 
-export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory'];
+export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory', 'tools'];
 
 export function apply(ctx) {
   // Host plugins have no ctx.locale (a browser-client service). lib/i18n.js
@@ -87,48 +88,19 @@ export function apply(ctx) {
         };
       }
 
-      // 3. Fresh run: cleanup decision table
-      const result = await runCleanup({
-        cwd: root,
-        inspect,
-        aheadBehind: (r, base) => import('./lib/cleanup.js').then((m) => m.aheadBehind(r, base)),
-        git: (r, args) => import('./lib/cleanup.js').then((m) => m.git(r, args)),
-        gitCommit: ctx.gitCommit,
-        ask: (question) => askCard(agent, signal, question),
-        t,
-        slug: 'request', // P1: derive from the actual request/feature slug
-      });
-
-      if (result.error) {
-        return { kind: 'error', text: `${result.message ?? result.error}` };
-      }
-      if (result.stopped) {
-        return { kind: 'success', text: t('state.stopped') };
-      }
-
-      // 4. Persist initial state and hand the planning phase to the agent
-      let state = initialState(root);
-      state = await transition(state, 'start', {
-        phase: 'PLAN',
-        git: { authority: { ...result.state } },
-        es: { version: es.install.version ?? null, checkedAt: new Date().toISOString() },
-      }, `cleanup done: startBranch=${result.state.startBranch}`);
-      if (result.agentMerge) {
-        state = await transition(state, 'hold', {
-          hold: { kind: 'WAITING_USER', reason: 'Diverged branch: agent must merge and resolve conflicts before planning starts.', since: new Date().toISOString() },
-        }, 'agent merge pending');
-        return { kind: 'success', text: `${t('state.fresh')}\n\n${t('state.agentMergeHold')}` };
-      }
+      // 3. Fresh run: hand the flow to the agent. `/sfd` never starts the
+      // cleanup gate or writes state itself — the agent must first know the
+      // task (it asks the user when the session has no context) and then
+      // call sfd_start, which runs cleanup and creates the real branch.
       return {
         kind: 'success',
-        text: [
-          t('state.fresh'),
-          '',
-          t('state.cleanupDone', { branch: result.state.startBranch, base: result.state.base }),
-          '',
-          t('state.nextPlan'),
-        ].join('\n'),
+        text: [t('state.fresh'), '', t('state.handoff')].join('\n'),
       };
     },
+  });
+
+  registerSfdTools(ctx, {
+    askCard,
+    t: () => tReady,
   });
 }

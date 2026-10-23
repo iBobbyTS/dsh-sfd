@@ -41,7 +41,8 @@
     "esMissing": "需要 external-subagent 但未检测到。请先安装：brew install external-subagent（或见其 README），然后执行 `external-subagent agents enable zcode codex`。",
     "esProfileMissing": "缺少必需的 external-subagent profile：{names}。请创建，或使用面板里的 profile 安装器。",
     "resume": "检测到既有 SFD 状态——接手简报如下。",
-    "fresh": "未发现 SFD 状态——从 Git 清理门禁开始全新流程。",
+    "fresh": "仓库中未发现 SFD 状态。",
+    "handoff": "现在由你（主 agent）驱动启动：先阅读 sectioned-feature-development 技能，再确定要做的任务。若本会话还没有任务上下文，先询问用户想做什么，不要自行推进。任务明确后，调用 sfd_start 工具并给出一句话 taskSummary——它会自动执行工作区清理并创建 feature 分支。不要自己执行 git branch/checkout。",
     "stopped": "SFD 启动已被用户停止。状态机未被改动。",
     "agentMergeHold": "挂起（HOLD）：请先将当前分支与 main 合并并解决冲突，然后再次运行 /sfd 继续。",
     "cleanupDone": "分支：{branch}（基线 {base}）",
@@ -49,5 +50,9 @@
     "legacyTitle": "发现既有 SFD 工作标记（无插件状态）：",
     "legacyBody": "这可能是未清理的上一轮 run，或插件化之前的手动 run。请决定：归档后重新开始、手动继续、或停止。插件无法接手一个它没有记录的 run。",
     "readSkillFirst": "请先阅读 sectioned-feature-development 技能，再从上述阶段继续。"
+  },
+  "tool": {
+    "existingRun": "本仓库已存在 SFD run；请按上面的简报接手，不要重新开始。",
+    "agentMergeTask": "交给你的任务（主 agent）：将当前分支与 main 合并、解决全部冲突、提交 merge，然后再次调用 sfd_start 进入规划。"
   }
 }

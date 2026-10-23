@@ -1,2 +1,8 @@
+# OS Junk
 *.DS_Store
+
+# reference projects
 reference/
+
+# dependencies
+node_modules/
