@@ -84,6 +84,8 @@
 
 B 侧路由=维持原 skill（ES codex）；提交=程序经 dsh-git-commit（重试1次→降级主 agent）；首次计划批准=仅自动激活要批；5 条自采假设（queue-continue、返工新鲜上下文、面板自动展开、agent_id↔unit 对账、飞书三行模板）全部确认；impl_std 改 ES zcode deepseek/deepseek-flash。
 
+跨仓 section（2026-10-23 裁决，替代更重的"卫星仓"模型）：PLAN-FULL 的 section 契约增加可选 `- Repository:` 字段，缺省=当前仓库；填了则该 section 的实现/提交/验收落在该仓库。SFD 状态与全部工件只存主仓库 `.agent-work/`，外部仓库不创建 `.agent-work/`。程序改动仅限：plan 结构校验接受该字段并校验路径为存在的 git worktree、TASK extract 原样携带；清理门/漂移对账仍只针对主仓库。发布链（外部仓提交→发版→主仓消费真实新版本）属于该 section 自身的验收契约。
+
 ## Planner discretion
 
 reviewer 只读的具体实现（ES plan 权限模式 vs prompt 约定）；状态文件 schema；面板视觉；profile 安装按钮的交互细节；gitCommit 调用参数。

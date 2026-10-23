@@ -62,6 +62,11 @@ what a tool does; if a tool rejects a call, a gate is speaking.
 - Human may direct re-dispatch with route override parameters.
 - The old manual flow is retired: never follow narratives from pre-plugin SFD
   documents if you encounter them.
+- Cross-repo sections: a section contract may declare `- Repository:` (omitted
+  = current repo). All state and artifacts stay in the primary repo's
+  `.agent-work/`; an external repo never gets `.agent-work/`. You create
+  branches and commits there by the same naming rules, and the section is not
+  accepted until the primary repo consumes the actually released version.
 
 ## Knowledge base (read on demand, by stage)
 
