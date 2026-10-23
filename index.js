@@ -46,8 +46,12 @@ export function apply(ctx) {
     description: 'Start or resume a sectioned-feature-development run in this repository.',
     recordInput: false,
     handler: async ({ agent, signal }) => {
+      // Diagnostic beacon: proves whether the handler runs at all when a
+      // fresh-session /sfd appears to do nothing.
+      try { ctx.logger?.info?.('sfd: /sfd handler entered'); } catch { /* logger absent */ }
       signal.throwIfAborted();
       const t = await tReady;
+      try { ctx.logger?.info?.('sfd: root-agent check', { id: agent?.id }); } catch { /* noop */ }
       if (ctx.agents.get(agent.id) !== agent || !ctx.agents.roots().includes(agent)) {
         return { kind: 'error', text: t('state.notRootAgent') };
       }
@@ -57,6 +61,7 @@ export function apply(ctx) {
       try {
         cwd = await ctx.workingDirectory?.ensure(agent);
       } catch { cwd = undefined; }
+      try { ctx.logger?.info?.('sfd: cwd resolved', { cwd: cwd ?? null }); } catch { /* noop */ }
       if (!cwd) return { kind: 'error', text: t('state.noCwd') };
 
       let facts;
@@ -82,7 +87,11 @@ export function apply(ctx) {
       const deliver = (text) => {
         try {
           agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }));
-        } catch { /* followup unavailable: the log-only card still shows */ }
+          try { ctx.logger?.info?.('sfd: followup delivered'); } catch { /* noop */ }
+        } catch (error) {
+          // followup unavailable: the log-only card still shows
+          try { ctx.logger?.warn?.('sfd: followup failed', { error: String(error) }); } catch { /* noop */ }
+        }
         return { kind: 'success', text };
       };
 
