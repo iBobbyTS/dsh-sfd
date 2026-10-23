@@ -13,6 +13,7 @@ import { preflight } from './lib/es.js';
 import { inspect } from './lib/cleanup.js';
 import { makeT } from './lib/i18n.js';
 import { registerSfdTools } from './lib/tools.js';
+import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
 export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory', 'tools'];
 
@@ -69,33 +70,36 @@ export function apply(ctx) {
         return { kind: 'error', text };
       }
 
+      // Every success result must ALSO reach the model: command results are
+      // log-only, so deliver the text as a followup user message that wakes
+      // the agent (the /goal command pattern).
+      const deliver = (text) => {
+        try {
+          agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }));
+        } catch { /* followup unavailable: the log-only card still shows */ }
+        return { kind: 'success', text };
+      };
+
       // 2. Detect existing SFD work
       const detection = await detectWork(root);
 
       if (detection.present && detection.kind === 'state') {
-        const brief = renderBrief(detection.state, t);
-        return { kind: 'success', text: brief };
+        return deliver(renderBrief(detection.state, t));
       }
       if (detection.present && detection.kind === 'legacy-markers') {
-        return {
-          kind: 'success',
-          text: [
-            t('state.legacyTitle'),
-            `- ${detection.markers.join('\n- ')}`,
-            '',
-            t('state.legacyBody'),
-          ].join('\n'),
-        };
+        return deliver([
+          t('state.legacyTitle'),
+          `- ${detection.markers.join('\n- ')}`,
+          '',
+          t('state.legacyBody'),
+        ].join('\n'));
       }
 
       // 3. Fresh run: hand the flow to the agent. `/sfd` never starts the
       // cleanup gate or writes state itself — the agent must first know the
       // task (it asks the user when the session has no context) and then
       // call sfd_start, which runs cleanup and creates the real branch.
-      return {
-        kind: 'success',
-        text: [t('state.fresh'), '', t('state.handoff')].join('\n'),
-      };
+      return deliver([t('state.fresh'), '', t('state.handoff')].join('\n'));
     },
   });
 
