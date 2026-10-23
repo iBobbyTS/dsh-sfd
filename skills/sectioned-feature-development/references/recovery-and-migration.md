@@ -136,9 +136,9 @@ Record the starting branch, selected base, explicit authority, and any late-adop
 
 ## Lifetime budget projection
 
-`waves_used` and the parent's repair count are lifetime attempt counters. Do not lower them for a child or a replacement. A genuine structural replacement records exactly one `structural_recovery` on the original lineage with classification, `boundary_changed=true`, original lineage ID, replacement parent section ID, generation, `waves_at_boundary_change`, and a hashed diagnosis/admission artifact. The new five-wave window is an offset from that lifetime counter, not a reset. A model/child change cannot create that record.
+`waves_used` and the parent's repair count are lifetime attempt counters. Do not lower them for a child or a replacement. A genuine structural replacement records exactly one `structural_recovery` on the original lineage with classification, `boundary_changed=true`, original lineage ID, replacement parent section ID, generation, `waves_at_boundary_change`, and the named diagnosis/admission artifact path. The new five-wave window is an offset from that lifetime counter, not a reset. A model/child change cannot create that record.
 
-One non-structural extra attempt references one named request/decision artifact and its hash. After that (or exhaustion of the structural window), ordinary automation stops. Further action needs the external Advisor or explicit owner decision under the existing escalation policy, not a new automatically fabricated allowance. Main checks the projection against these records; no script enforces it.
+One non-structural extra attempt references one named request/decision artifact path. After that (or exhaustion of the structural window), ordinary automation stops. Further action needs the external Advisor or explicit owner decision under the existing escalation policy, not a new automatically fabricated allowance. Main checks the projection against these records; no script enforces it.
 
 ## Local state continuation
 

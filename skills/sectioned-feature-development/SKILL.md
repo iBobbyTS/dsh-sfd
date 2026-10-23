@@ -29,8 +29,12 @@ what a tool does; if a tool rejects a call, a gate is speaking.
   decision back to you.
 - Resume: the brief states phase, open findings, budgets, pending decisions,
   and ES actor reconciliation. Reconcile listed actors (result/close), then
-  continue from the stated phase. State drift (plan hash / branch / HEAD
-  mismatch) blocks; offer the user options.
+  continue from the stated phase. State drift (branch / HEAD mismatch, or the
+  recorded plan file missing) blocks; offer the user options.
+- No hash accounting anywhere: never record, recompute or check content
+  hashes (sha256 etc.) of plans, advisor requests/results or any artifact.
+  Identity is path + git state + the user's explicit disposition, never a
+  digest.
 - Only on **self-activation** must the first proportional plan be approved by
   the user card before plan review; explicit `/sfd` skips that pause.
 

@@ -39,9 +39,9 @@ Do not mutate Git, reset, clean or upload.
 4. Before the request snapshot, allow active actors to stop and persist their final partial work; if HEAD changes afterwards, packaging blocks and the request must be explicitly refreshed rather than silently using a stale decision packet.
 5. Main records ADVISOR_REQUIRED and sets WAITING_EXTERNAL only after real actors stop and the export verifies.
 No workflow approval script is used.
-Notify the user with `$feishu-message-sender` using the three lines of [ADVISOR-NOTICE.template.md](../assets/ADVISOR-NOTICE.template.md) — project, feature in progress, one-sentence reason; the paused state and the request path/hash go in the main reply, not the notification.
+Notify the user with `$feishu-message-sender` using the three lines of [ADVISOR-NOTICE.template.md](../assets/ADVISOR-NOTICE.template.md) — project, feature in progress, one-sentence reason; the paused state and the request path go in the main reply, not the notification.
 If Feishu is unavailable or delivery fails, deliver those same three lines plus
-the paused state and necessary request path/hash only in the current authorized
+the paused state and necessary request path only in the current authorized
 user conversation. Record the actual delivery limitation; do not switch to email
 or another third party. This fallback never releases WAITING_EXTERNAL or
 WAITING_HUMAN_DECISION and never resumes development without human disposition.
@@ -71,4 +71,4 @@ Apply only the accepted bounded action; preserve accepted sections, history and 
 
 ## Records
 
-Capture the trigger facts, request path/hash, frozen code identity, recorded exclusions, raw returned result, human adoption, applied action and resumed outcome in the advisor request/response directories; an optional [efficiency note](efficiency-checkpoints.md) may reference these facts, but neither cost commentary nor its absence changes the Advisor hold or human-adoption requirement.
+Capture the trigger facts, request path, frozen code identity, recorded exclusions, raw returned result, human adoption, applied action and resumed outcome in the advisor request/response directories; an optional [efficiency note](efficiency-checkpoints.md) may reference these facts, but neither cost commentary nor its absence changes the Advisor hold or human-adoption requirement. No content hashes: identity is the path plus git state plus the user's explicit disposition.

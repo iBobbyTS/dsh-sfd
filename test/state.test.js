@@ -77,9 +77,10 @@ test('gate: DONE and holds block, otherwise allowed', () => {
 
 test('renderBrief: status snapshot, no flow narrative', () => {
   const s = initialState('/repo');
-  const brief = renderBrief({ ...s, phase: 'IMPL', plan: { file: '.agent-work/PLAN-FULL.md', sha256: 'a'.repeat(64), review: { A: { state: 'clean', report: '.agent-work/reviews/plan-A.md' } }, materialWaves: 1 }, units: { S01: { status: 'in-impl', wavesUsed: 2 } } }, (k) => `[${k}]`);
+  const brief = renderBrief({ ...s, phase: 'IMPL', plan: { file: '.agent-work/PLAN-FULL.md', review: { A: { state: 'clean', report: '.agent-work/reviews/plan-A.md' } }, materialWaves: 1 }, units: { S01: { status: 'in-impl', wavesUsed: 2 } } }, (k) => `[${k}]`);
   assert.match(brief, /Phase: IMPL/);
   assert.match(brief, /S01/);
   assert.match(brief, /waves 2\/5/);
   assert.match(brief, /state\.readSkillFirst/); // t() stub: the skill-reference line goes through i18n
+  assert.doesNotMatch(brief, /sha256/i); // no hash accounting anywhere
 });
