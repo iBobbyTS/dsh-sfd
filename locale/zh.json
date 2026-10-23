@@ -36,7 +36,7 @@
     "esProfileMissing": "缺少必需的 external-subagent profile：{names}。请创建，或使用面板里的 profile 安装器。",
     "resume": "检测到既有 SFD 状态——接手简报如下。",
     "fresh": "仓库中未发现 SFD 状态。",
-    "handoff": "现在由你驱动启动：先阅读 sectioned-feature-development 技能，再确定要做的任务。若本会话还没有任务上下文，先询问用户想做什么，不要自行推进。任务明确后，调用 sfd_start 工具并给出一句话 taskSummary——它会执行工作区清理（脏工作区处理、必要时切回 main）并把分支基线决策的结果交还给你。feature 分支由你命名并创建（注意处理重名）；在它把基线决定交还给你之前，不要自行切换分支。",
+    "handoff": "现在由你启动：先阅读 sectioned-feature-development 技能，再确定要做的任务。若本会话还没有任务上下文，先询问用户想做什么，不要自行推进。任务明确后，调用 sfd_start 工具并给出一句话 taskSummary——它会执行工作区清理（脏工作区处理、必要时切回 main）并把分支基线决策的结果交还给你。feature 分支由你命名并创建（注意处理重名）；在它把基线决定交还给你之前，不要自行切换分支。",
     "stopped": "SFD 启动已被用户停止。状态机未被改动。",
     "agentMergeHold": "挂起（HOLD）：请先将当前分支与 main 合并并解决冲突，然后再次运行 /sfd 继续。",
     "cleanupDone": "分支：{branch}（基线 {base}）",
