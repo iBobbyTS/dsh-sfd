@@ -64,9 +64,9 @@ what a tool does; if a tool rejects a call, a gate is speaking.
   documents if you encounter them.
 - Cross-repo sections: a section contract may declare `- Repository:` (omitted
   = current repo). All state and artifacts stay in the primary repo's
-  `.agent-work/`; an external repo never gets `.agent-work/`. You create
-  branches and commits there by the same naming rules, and the section is not
-  accepted until the primary repo consumes the actually released version.
+  `.agent-work/`; an external repo never gets `.agent-work/`. The plugin does
+  not manage git state there — you manage its branches and commits yourself
+  (no extra user authorization needed), under the same naming rules.
 
 ## Knowledge base (read on demand, by stage)
 
