@@ -42,8 +42,12 @@ test('translator: zh overlay with interpolation, unknown key renders key', async
 
 test('translator: en base resolves the keys used by cleanup cards', async () => {
   const t = await translator('en');
-  for (const key of ['cleanup.dirtyTitle', 'cleanup.dirtyQuestion', 'cleanup.autoCommit', 'cleanup.customCommit', 'cleanup.stop',
-    'cleanup.autoCommitDesc', 'cleanup.customCommitDesc', 'cleanup.stopDesc']) {
+  for (const key of ['cleanup.dirtyTitle', 'cleanup.dirtyQuestion', 'cleanup.autoCommit', 'cleanup.stop',
+    'cleanup.autoCommitDesc', 'cleanup.stopDesc',
+    'tool.stoppedShort', 'tool.userNote', 'tool.createBranchFromMain', 'tool.createBranchFromCurrent',
+    'tool.intent.create-from-main', 'tool.intent.new-from-main', 'tool.intent.new-from-current',
+    'tool.intent.stay-current', 'tool.intent.ff-main-to-current', 'tool.intent.ff-to-main',
+    'tool.intent.agent-merge', 'tool.intent.note-only']) {
     assert.equal(t(key) === key, false, `${key} rendered raw`);
   }
 });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runCleanup } from '../lib/cleanup.js';
 
-const t = (key) => ({ 'state.notGit': 'not git', 'cleanup.dirtyTitle': 'dirty', 'cleanup.dirtyQuestion': 'dirty?', 'cleanup.stop': 'Stop', 'cleanup.autoCommit': 'Auto', 'cleanup.customCommit': 'Custom', 'cleanup.branchTitle': 'branch', 'cleanup.branchName': 'name', 'cleanup.branchNameQuestion': 'name?', 'cleanup.onMain': 'on main', 'cleanup.stayCurrent': 'stay', 'cleanup.newFromCurrent': 'new-cur', 'cleanup.newFromMain': 'new-main', 'cleanup.ffToCurrent': 'ff-main', 'cleanup.ffToMain': 'ff-self', 'cleanup.customMerge': 'custom-merge', 'cleanup.agentMerge': 'agent-merge', 'cleanup.inSync': 'sync', 'cleanup.sameBehind': 'sb', 'cleanup.sameAhead': 'sa', 'cleanup.diverged': 'dv', 'cleanup.noMainQuestion': 'base?', 'cleanup.stopLabel': 'Stop', 'state.resume': 'resume' })[key] ?? key;
+const t = (key) => ({ 'state.notGit': 'not git', 'cleanup.dirtyTitle': 'dirty', 'cleanup.dirtyQuestion': 'dirty?', 'cleanup.stop': 'Stop', 'cleanup.autoCommit': 'Auto', 'cleanup.branchTitle': 'branch', 'cleanup.stayCurrent': 'stay', 'cleanup.newFromCurrent': 'new-cur', 'cleanup.newFromMain': 'new-main', 'cleanup.ffToCurrent': 'ff-main', 'cleanup.ffToMain': 'ff-self', 'cleanup.agentMerge': 'agent-merge', 'cleanup.inSync': 'sync', 'cleanup.sameBehind': 'sb', 'cleanup.sameAhead': 'sa', 'cleanup.diverged': 'dv', 'cleanup.noMainQuestion': 'base?', 'cleanup.stopLabel': 'Stop', 'state.resume': 'resume' })[key] ?? key;
 
 const makeDeps = ({ facts, ab = null, answers = [], commits = [], gitCalls = [] } = {}) => ({
   cwd: '/repo',
@@ -17,7 +17,6 @@ const makeDeps = ({ facts, ab = null, answers = [], commits = [], gitCalls = [] 
     return { answers: [{ id: q.id, selected: [] }] };
   },
   t,
-  slug: 'test-feature',
 });
 
 const facts = (over = {}) => ({ root: '/repo', branch: 'main', detached: false, dirty: false, midMerge: false, ...over });
@@ -48,7 +47,7 @@ test('dirty: auto commit once then clean', async () => {
   assert.ok(r.stopped || r.ok === undefined);
 });
 
-test('dirty then clean: auto commit path eventually completes on main', async () => {
+test('dirty then clean on main: no card, branch creation delegated to agent', async () => {
   let dirty = true;
   const deps = makeDeps({
     answers: [{ answers: [{ id: 'sfd-dirty', selected: ['Auto'] }] }],
@@ -57,7 +56,21 @@ test('dirty then clean: auto commit path eventually completes on main', async ()
   deps.gitCommit = { commit: async () => { dirty = false; return { success: true, hash: 'abc1234' }; } };
   const r = await runCleanup(deps);
   assert.equal(r.ok, true);
-  assert.equal(r.state.startBranch, 'feature/test-feature');
+  assert.equal(r.intent, 'create-from-main');
+  assert.equal(r.state.branch, 'main');
+  assert.equal(r.agentTask, 'createBranchFromMain');
+  // no git ops: branch creation is the agent's job
+});
+
+test('dirty: typed text becomes a user note for the agent, no commit', async () => {
+  const deps = makeDeps({
+    facts: facts({ dirty: true }),
+    answers: [{ answers: [{ id: 'sfd-dirty', selected: [], custom: 'keep my WIP, ask me later' }] }],
+  });
+  const r = await runCleanup(deps);
+  assert.equal(r.ok, true);
+  assert.equal(r.intent, 'note-only');
+  assert.equal(r.userNote, 'keep my WIP, ask me later');
 });
 
 test('dirty: auto commit fails twice -> error', async () => {
@@ -69,27 +82,16 @@ test('dirty: auto commit fails twice -> error', async () => {
   assert.equal(r.error, 'commit-failed');
 });
 
-test('dirty: custom message commits once', async () => {
-  let dirty = true;
-  const deps = makeDeps({
-    answers: [{ answers: [{ id: 'sfd-dirty', selected: ['Custom'], custom: 'my message' }] }],
-  });
-  deps.inspect = async () => ({ root: '/repo', branch: 'main', detached: false, dirty, midMerge: false });
-  deps.gitCommit = { commit: async (req) => { if (req?.message) dirty = false; return { success: !!req?.message, hash: 'def5678' }; } };
+test('on main: no card at all, no git ops', async () => {
+  const gitCalls = [];
+  const asked = [];
+  const deps = makeDeps({ facts: facts(), gitCalls });
+  deps.ask = async (q) => { asked.push(q.id); return { answers: [{ id: q.id, selected: [] }] }; };
   const r = await runCleanup(deps);
   assert.equal(r.ok, true);
-  assert.ok(r.state.decisions.some((d) => d.choice === 'custom-commit' && d.detail.includes('my message')));
-});
-
-test('on main: suggested branch name used', async () => {
-  const gitCalls = [];
-  const r = await runCleanup(makeDeps({
-    facts: facts(),
-    gitCalls,
-    answers: [{ answers: [{ id: 'sfd-branch-name', selected: ['feature/test-feature'] }] }],
-  }));
-  assert.equal(r.ok, true);
-  assert.deepEqual(gitCalls[0], ['switch', '-c', 'feature/test-feature']);
+  assert.equal(r.intent, 'create-from-main');
+  assert.equal(asked.length, 0, 'no card expected on main');
+  assert.equal(gitCalls.length, 0);
 });
 
 test('detached HEAD -> stop card', async () => {
@@ -106,7 +108,9 @@ test('off main in sync: stay current', async () => {
     answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['stay'] }] }],
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.state.startBranch, 'dev');
+  assert.equal(r.intent, 'stay-current');
+  assert.equal(r.state.branch, 'dev');
+  assert.equal(r.agentTask, 'createBranchFromCurrent');
 });
 
 test('off main ahead only: ff main to current', async () => {
@@ -119,18 +123,36 @@ test('off main ahead only: ff main to current', async () => {
   }));
   assert.equal(r.ok, true);
   assert.deepEqual(gitCalls[0], ['branch', '-f', 'main', 'HEAD']);
+  assert.equal(r.intent, 'ff-main-to-current');
+  assert.equal(r.agentTask, 'createBranchFromCurrent');
 });
 
-test('off main behind only: custom merge message', async () => {
+test('off main behind only: ff to main switches base to main (agent branches)', async () => {
   const gitCalls = [];
   const r = await runCleanup(makeDeps({
     facts: facts({ branch: 'dev' }),
     ab: { ahead: 0, behind: 2 },
     gitCalls,
-    answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['custom-merge'], custom: 'merge main in' }] }],
+    answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['ff-self'] }] }],
   }));
   assert.equal(r.ok, true);
-  assert.deepEqual(gitCalls[0], ['merge', 'main', '-m', 'merge main in']);
+  assert.deepEqual(gitCalls[0], ['merge', '--ff-only', 'main']);
+  assert.equal(r.intent, 'ff-to-main');
+  assert.equal(r.agentTask, 'createBranchFromMain');
+});
+
+test('new from main: program switches to main, agent creates branch', async () => {
+  const gitCalls = [];
+  const r = await runCleanup(makeDeps({
+    facts: facts({ branch: 'dev' }),
+    ab: { ahead: 1, behind: 1 },
+    gitCalls,
+    answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['new-main'] }] }],
+  }));
+  assert.equal(r.ok, true);
+  assert.deepEqual(gitCalls[0], ['switch', 'main']);
+  assert.equal(r.intent, 'new-from-main');
+  assert.equal(r.agentTask, 'createBranchFromMain');
 });
 
 test('diverged: agent merge delegates without git ops', async () => {
@@ -144,6 +166,16 @@ test('diverged: agent merge delegates without git ops', async () => {
   assert.equal(r.ok, true);
   assert.equal(r.agentMerge, true);
   assert.equal(gitCalls.length, 0);
+});
+
+test('branch-base card typed text becomes userNote', async () => {
+  const r = await runCleanup(makeDeps({
+    facts: facts({ branch: 'dev' }),
+    ab: { ahead: 0, behind: 0 },
+    answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['stay'], custom: 'name it after ticket-42' }] }],
+  }));
+  assert.equal(r.ok, true);
+  assert.equal(r.state.userNote ?? r.userNote, 'name it after ticket-42');
 });
 
 test('no main ref: stay current', async () => {

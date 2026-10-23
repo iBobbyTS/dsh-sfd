@@ -70,13 +70,13 @@ test('sfd_start runs cleanup, derives branch from taskSummary, writes state', as
     registerSfdTools(c.getCtx(), { askCard: async () => ({ answers: [{ selected: [] }] }), t: async () => t });
     const r = await c.call({ taskSummary: 'Add dark mode toggle support' });
     assert.equal(r.ok, true);
-    assert.match(r.state.branch, /^feature\//);
-    assert.notEqual(r.state.branch, 'feature/request');
+    // on a clean main repo: no card, no branch — creation delegated to the agent
+    assert.equal(r.intent ?? r.state?.intent, 'create-from-main');
     const branch = (await run('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
-    assert.equal(branch, r.state.branch);
+    assert.equal(branch, 'main');
     const st = await loadState(dir);
     assert.equal(st.phase, 'PLAN');
-    assert.equal(st.task.slug, r.state.branch.replace('feature/', ''));
+    assert.equal(st.git.authority.intent, 'create-from-main');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

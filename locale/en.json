@@ -10,12 +10,7 @@
     "stopDesc": "Abort SFD start",
     "autoCommit": "Auto commit (AI message)",
     "autoCommitDesc": "dsh-git-commit AI commit message",
-    "customCommit": "Write a commit message",
-    "customCommitDesc": "Free text",
     "branchTitle": "Branch base",
-    "onMain": "On main. A feature branch will be created.",
-    "branchName": "Feature branch name",
-    "branchNameQuestion": "Confirm the feature branch name (from the feature slug):",
     "sameBehind": "main is strictly behind this branch (ahead>0, behind=0).",
     "sameAhead": "main is strictly ahead of this branch (ahead=0, behind>0).",
     "diverged": "This branch and main have diverged (ahead>0, behind>0).",
@@ -25,7 +20,6 @@
     "newFromMain": "New branch from main",
     "ffToCurrent": "Fast-forward main to this branch first",
     "ffToMain": "Fast-forward this branch to main",
-    "customMerge": "Write a merge commit message",
     "agentMerge": "Agent merges and resolves conflicts",
     "detachedHead": "Detached HEAD at {branch}.",
     "midMerge": "A merge is in progress.",
@@ -42,7 +36,7 @@
     "esProfileMissing": "Required external-subagent profile(s) missing: {names}. Create them or use the panel's profile installer.",
     "resume": "Existing SFD state detected — resuming handoff briefing follows.",
     "fresh": "No SFD state found in this repository.",
-    "handoff": "You (the main agent) now drive the start: first read the sectioned-feature-development skill, then determine the task to build. If this conversation has no task context yet, ask the user what they want before doing anything else. Once the task is known, call the sfd_start tool with a one-line taskSummary — it runs the workspace cleanup gate and creates the feature branch automatically. Do not run git branch/checkout yourself.",
+    "handoff": "You now drive the start: first read the sectioned-feature-development skill, then determine the task to build. If this conversation has no task context yet, ask the user what they want before doing anything else. Once the task is known, call the sfd_start tool with a one-line taskSummary — it runs the workspace cleanup (dirty-workspace handling, switching back to main when needed) and hands you the branch-base decision outcome. You name and create the feature branch (handle duplicate names); do not switch branches yourself before it hands the base decision back to you.",
     "stopped": "SFD start stopped by user. Nothing was changed in the repository state machine.",
     "agentMergeHold": "HOLD: merge the current branch with main and resolve conflicts first, then run /sfd again to resume.",
     "cleanupDone": "Branch: {branch} (base {base})",
@@ -53,6 +47,20 @@
   },
   "tool": {
     "existingRun": "An SFD run already exists in this repository; use its brief above instead of starting a new one.",
-    "agentMergeTask": "Task for you (the main agent): merge the current branch with main, resolve all conflicts, commit the merge, then call sfd_start again to proceed to planning."
+    "agentMergeTask": "Task for you: merge the current branch with main, resolve all conflicts, commit the merge, then call sfd_start again to proceed to planning.",
+    "stoppedShort": "The user stopped the SFD start. Do not continue the SFD flow.",
+    "userNote": "Text the user typed into a cleanup card (not a commit message): {note}\nUse it to decide the next step.",
+    "createBranchFromMain": "You now create the feature branch: name it and create it from main (handle duplicate names, ask the user when needed), then proceed to planning.",
+    "createBranchFromCurrent": "You now create the feature branch: name it and create it from the current branch {branch} (handle duplicate names, ask the user when needed), then proceed to planning.",
+    "intent": {
+      "create-from-main": "Base decision: start from main; the workspace is on main.",
+      "new-from-main": "Base decision: start from main; the workspace has been switched back to main.",
+      "new-from-current": "Base decision: start from the current branch.",
+      "stay-current": "Base decision: stay on the current branch.",
+      "ff-main-to-current": "main was fast-forwarded to the current branch; staying here.",
+      "ff-to-main": "Fast-forwarded to main.",
+      "agent-merge": "The current branch and main have diverged.",
+      "note-only": "The cleanup gate did not complete a base decision."
+    }
   }
 }
