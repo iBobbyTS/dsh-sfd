@@ -45,6 +45,8 @@ test('translator: en base resolves the keys used by cleanup cards', async () => 
   for (const key of ['cleanup.dirtyTitle', 'cleanup.dirtyQuestion', 'cleanup.autoCommit', 'cleanup.stop',
     'cleanup.autoCommitDesc', 'cleanup.stopDesc',
     'tool.stoppedShort', 'tool.userNote', 'tool.createBranchFromMain', 'tool.createBranchFromCurrent',
+    'tool.performedPrefix', 'tool.performedOk', 'tool.performedFailed', 'tool.performedAutoCommit',
+    'tool.performedDespiteStop', 'tool.gitFailed', 'tool.gitFailedAdvice',
     'tool.intent.create-from-main', 'tool.intent.new-from-main', 'tool.intent.new-from-current',
     'tool.intent.stay-current', 'tool.intent.ff-main-to-current', 'tool.intent.ff-to-main',
     'tool.intent.agent-merge', 'tool.intent.note-only']) {

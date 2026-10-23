@@ -50,6 +50,13 @@
     "agentMergeTask": "Task for you: merge the current branch with main, resolve all conflicts, commit the merge, then call sfd_start again to proceed to planning.",
     "stoppedShort": "The user stopped the SFD start. Do not continue the SFD flow.",
     "userNote": "Text the user typed into a cleanup card (not a commit message): {note}\nUse it to decide the next step.",
+    "performedPrefix": "Programmatic git operation:",
+    "performedOk": "succeeded.",
+    "performedFailed": "FAILED.",
+    "performedAutoCommit": "Auto commit succeeded: {hash}",
+    "performedDespiteStop": "Before the stop, these operations already ran and changed the repository (for awareness only — do not continue the SFD flow):",
+    "gitFailed": "A programmatic git operation failed during cleanup. Full output follows.",
+    "gitFailedAdvice": "Read the error above, fix the cause (e.g. uncommitted changes blocking the switch), then call sfd_start again. Nothing has been persisted.",
     "createBranchFromMain": "You now create the feature branch: name it and create it from main (handle duplicate names, ask the user when needed), then proceed to planning.",
     "createBranchFromCurrent": "You now create the feature branch: name it and create it from the current branch {branch} (handle duplicate names, ask the user when needed), then proceed to planning.",
     "intent": {

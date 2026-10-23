@@ -50,6 +50,13 @@
     "agentMergeTask": "交给你的任务：将当前分支与 main 合并、解决全部冲突、提交 merge，然后再次调用 sfd_start 进入规划。",
     "stoppedShort": "用户已停止 SFD 启动。不要继续 SFD 流程。",
     "userNote": "用户在清理卡片里输入的文字（不是提交消息）：{note}\n请结合它决定下一步。",
+    "performedPrefix": "程序化 git 操作：",
+    "performedOk": "成功。",
+    "performedFailed": "失败。",
+    "performedAutoCommit": "自动提交成功：{hash}",
+    "performedDespiteStop": "在停止之前，以下操作已经执行并改变了仓库（仅作告知——不要继续 SFD 流程）：",
+    "gitFailed": "清理过程中一个程序化 git 操作失败了。完整输出如下。",
+    "gitFailedAdvice": "阅读上面的错误，修复原因（例如未提交改动阻止了切换），然后再次调用 sfd_start。状态未落盘。",
     "createBranchFromMain": "现在由你创建 feature 分支：基于 main 命名并创建分支（注意处理重名，必要时询问用户），然后进入规划。",
     "createBranchFromCurrent": "现在由你创建 feature 分支：基于当前分支 {branch} 命名并创建分支（注意处理重名，必要时询问用户），然后进入规划。",
     "intent": {

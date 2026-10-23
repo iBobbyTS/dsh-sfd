@@ -19,6 +19,30 @@ const makeDeps = ({ facts, ab = null, answers = [], commits = [], gitCalls = [] 
   t,
 });
 
+// deps whose deps.git REJECTS for the given args (emulates git refusing to
+// switch over conflicting uncommitted changes)
+const makeFailingGitDeps = ({ facts, ab, answers, failArgs } = {}) => ({
+  cwd: '/repo',
+  inspect: async () => facts,
+  aheadBehind: async () => ab,
+  git: async (root, args) => {
+    if (failArgs.some((f) => f.every((v, i) => args[i] === v))) {
+      const error = new Error('git switch failed');
+      error.stderr = 'error: Your local changes to the following files would be overwritten by checkout:\n\tlib/a.js\nPlease commit your changes or stash them before you switch branches.\nAborting';
+      error.stdout = '';
+      throw error;
+    }
+    return '';
+  },
+  gitCommit: { commit: async () => ({ success: true, hash: 'abc1234' }) },
+  ask: async (q) => {
+    const next = answers.shift();
+    if (next) return next;
+    return { answers: [{ id: q.id, selected: [] }] };
+  },
+  t,
+});
+
 const facts = (over = {}) => ({ root: '/repo', branch: 'main', detached: false, dirty: false, midMerge: false, ...over });
 
 test('not a git repo -> error', async () => {
@@ -186,4 +210,71 @@ test('no main ref: stay current', async () => {
   }));
   assert.equal(r.ok, true);
   assert.equal(r.state.base, 'none');
+});
+
+test('performed: successful switch records the op for the agent', async () => {
+  const r = await runCleanup(makeDeps({
+    facts: facts({ branch: 'dev' }),
+    ab: { ahead: 1, behind: 1 },
+    answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['new-main'] }] }],
+  }));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.performed, [{ op: 'switch-to-main', args: ['switch', 'main'] }]);
+});
+
+test('git switch failure: captured with full stderr, not thrown, state unwritten', async () => {
+  const r = await runCleanup(makeFailingGitDeps({
+    facts: facts({ branch: 'dev' }),
+    ab: { ahead: 1, behind: 1 },
+    answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['new-main'] }] }],
+    failArgs: [['switch', 'main']],
+  }));
+  assert.equal(r.ok, false);
+  assert.equal(r.error, 'git-switch-failed');
+  assert.equal(r.gitError.op, 'switch-to-main');
+  assert.match(r.gitError.stderr, /would be overwritten by checkout/);
+  assert.match(r.gitError.stderr, /lib\/a\.js/);
+  assert.deepEqual(r.performed, []);
+  // decision journal carries the failure entry
+  assert.ok(r.decisions.some((d) => d.choice === 'switch-to-main-failed'));
+});
+
+test('git ff failure: captured with full stderr', async () => {
+  const r = await runCleanup(makeFailingGitDeps({
+    facts: facts({ branch: 'dev' }),
+    ab: { ahead: 0, behind: 2 },
+    answers: [{ answers: [{ id: 'sfd-branch-base', selected: ['ff-self'] }] }],
+    failArgs: [['merge', '--ff-only', 'main']],
+  }));
+  assert.equal(r.ok, false);
+  assert.equal(r.error, 'git-ff-failed');
+  assert.equal(r.gitError.op, 'ff-to-main');
+  assert.match(r.gitError.stderr, /Aborting/);
+});
+
+test('auto commit failure: recorded in performed with full error', async () => {
+  const r = await runCleanup(makeDeps({
+    facts: facts({ dirty: true }),
+    answers: [
+      { answers: [{ id: 'sfd-dirty', selected: ['Auto'] }] },
+      { answers: [{ id: 'sfd-dirty', selected: ['Auto'] }] },
+    ],
+    commits: [{ success: false, error: 'hook rejected' }, { success: false, error: 'hook rejected again: pre-commit exit 1' }],
+  }));
+  assert.equal(r.error, 'commit-failed');
+  assert.equal(r.performed.length, 1);
+  assert.equal(r.performed[0].op, 'auto-commit');
+  assert.match(r.performed[0].message, /hook rejected again/);
+});
+
+test('auto commit success: hash recorded in performed', async () => {
+  let dirty = true;
+  const deps = makeDeps({
+    answers: [{ answers: [{ id: 'sfd-dirty', selected: ['Auto'] }] }],
+  });
+  deps.inspect = async () => ({ root: '/repo', branch: 'main', detached: false, dirty, midMerge: false });
+  deps.gitCommit = { commit: async () => { dirty = false; return { success: true, hash: 'deadbee' }; } };
+  const r = await runCleanup(deps);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.performed, [{ op: 'auto-commit', hash: 'deadbee' }]);
 });
