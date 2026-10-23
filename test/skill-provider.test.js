@@ -12,6 +12,8 @@ test('provider lists the flow skill with frontmatter parsed', async () => {
   assert.ok(c.description.length > 20);
   assert.equal(c.provider, 'dsh-sfd');
   assert.equal(c.resourceBase.kind, 'directory');
+  // invocation MUST be the policy object; a string poisons the whole catalog
+  assert.deepEqual(c.invocation, { modelInvocable: true, userInvocable: true });
 });
 
 test('provider get() returns the body without frontmatter', async () => {
@@ -20,6 +22,7 @@ test('provider get() returns the body without frontmatter', async () => {
   assert.equal(def.name, 'sectioned-feature-development');
   assert.ok(!def.content.startsWith('---'), 'frontmatter must be stripped from body');
   assert.ok(def.content.includes('# Sectioned Feature Development'));
+  assert.deepEqual(def.invocation, { modelInvocable: true, userInvocable: true });
 });
 
 test('references directory ships next to the skill', async () => {
