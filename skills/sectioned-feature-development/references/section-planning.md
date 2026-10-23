@@ -41,7 +41,7 @@ Use one PLAN-FULL. Legacy single-Feature plans with a `- Feature: slug` preamble
 
 A section executes in the repository hosting the SFD run (the one holding `.agent-work/`) unless its contract adds a `- Repository: path` line — an absolute local path, or one relative to that primary repo root. Omitted means the current repository. Use it when the section's changes genuinely belong in another local repository (typically a dependency that must change for this feature to land). Rules:
 
-- One plan, many repos: the PLAN, TASK, ledger and all SFD state stay in the primary repo's `.agent-work/`; an external repository never gets `.agent-work/` or SFD state files.
+- One plan, many repos: the PLAN, TASK, ledger and all SFD state stay in the primary repo's `.agent-work/`; SFD does not write `.agent-work/` or state files into an external repository. An existing `.agent-work/` there is not this run's — leave it untouched.
 - The path must name an existing git worktree the main agent can enter.
 - Declaring `- Repository:` opts that repository out of program git management: the plugin runs no cleanup gate, drift reconciliation or programmatic commits there. The main agent manages the external repository's branches and commits itself — creating branches and committing there needs no additional user authorization.
 - Branch and commit naming rules apply unchanged in the external repository.

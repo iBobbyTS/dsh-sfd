@@ -64,7 +64,8 @@ what a tool does; if a tool rejects a call, a gate is speaking.
   documents if you encounter them.
 - Cross-repo sections: a section contract may declare `- Repository:` (omitted
   = current repo). All state and artifacts stay in the primary repo's
-  `.agent-work/`; an external repo never gets `.agent-work/`. The plugin does
+  `.agent-work/`; SFD does not write into an external repo's `.agent-work/`
+  (an existing one there is left untouched). The plugin does
   not manage git state there — you manage its branches and commits yourself
   (no extra user authorization needed), under the same naming rules.
 
