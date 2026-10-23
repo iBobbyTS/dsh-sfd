@@ -1,0 +1,5 @@
+# Host plugin activated by this DSH bundle.
+- insert:
+    - id: dsh-sfd
+      name: '@ibobbyts/dsh-sfd'
+      config: {}

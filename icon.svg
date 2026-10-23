@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Sectioned feature development: stacked section bands building one feature column -->
+  <rect x="12" y="8" width="40" height="10" rx="3" fill="#247bbf"/>
+  <rect x="12" y="22" width="40" height="10" rx="3" fill="#5aa1d8"/>
+  <rect x="12" y="36" width="40" height="10" rx="3" fill="#8fc0e8"/>
+  <path d="M24 52h16v4a4 4 0 0 1-4 4h-8a4 4 0 0 1-4-4z" fill="#247bbf"/>
+  <circle cx="32" cy="13" r="2.6" fill="#ffffff"/>
+  <circle cx="32" cy="27" r="2.6" fill="#ffffff"/>
+  <circle cx="32" cy="41" r="2.6" fill="#ffffff"/>
+</svg>

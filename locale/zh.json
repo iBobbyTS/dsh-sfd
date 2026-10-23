@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "title": "Sectioned Feature Development",
+    "description": "分区特性开发编排：工作区清理与分支门禁、计划评审记账、ES actor 派发、修复波次预算、advisor 升级与侧栏进度。"
+  },
+  "cleanup": {
+    "dirtyTitle": "工作区不干净",
+    "dirtyQuestion": "工作区存在未提交改动，SFD 应如何继续？",
+    "stop": "停止",
+    "autoCommit": "自动提交（AI 提交消息）",
+    "customCommit": "手动输入提交消息",
+    "branchTitle": "分支基选择",
+    "onMain": "当前在 main，将自动创建 feature 分支。",
+    "branchName": "Feature 分支名",
+    "branchNameQuestion": "确认 feature 分支名（来自 feature slug）：",
+    "sameBehind": "main 严格落后当前分支（ahead>0, behind=0）。",
+    "sameAhead": "main 严格领先当前分支（ahead=0, behind>0）。",
+    "diverged": "当前分支与 main 已分叉（ahead>0, behind>0）。",
+    "inSync": "当前分支与 main 同步（ahead=0, behind=0）。",
+    "stayCurrent": "在当前分支继续工作",
+    "newFromCurrent": "从当前分支开新分支",
+    "newFromMain": "从 main 开新分支",
+    "ffToCurrent": "先把 main fast-forward 到当前分支",
+    "ffToMain": "fast-forward 到 main",
+    "customMerge": "手动输入 merge commit 消息",
+    "agentMerge": "由 agent 合并并解决冲突",
+    "noMain": "未找到 main 类引用。",
+    "noMainQuestion": "SFD 应以哪个基线继续？",
+    "baseRef": "基线引用",
+    "stopLabel": "停止"
+  },
+  "state": {
+    "notGit": "当前目录不是 Git 仓库。",
+    "esMissing": "需要 external-subagent 但未检测到。请先安装：brew install external-subagent（或见其 README），然后执行 `external-subagent agents enable zcode codex`。",
+    "esProfileMissing": "缺少必需的 external-subagent profile：{names}。请创建，或使用面板里的 profile 安装器。",
+    "resume": "检测到既有 SFD 状态——接手简报如下。",
+    "fresh": "未发现 SFD 状态——从 Git 清理门禁开始全新流程。"
+  }
+}

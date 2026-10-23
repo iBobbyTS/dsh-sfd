@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "title": "Sectioned Feature Development",
+    "description": "Orchestrates sectioned feature development: cleanup and branch gating, plan review accounting, ES actor dispatch, wave budgets, advisor escalation, and side-panel progress."
+  },
+  "cleanup": {
+    "dirtyTitle": "Workspace is dirty",
+    "dirtyQuestion": "The workspace has uncommitted changes. How should SFD proceed?",
+    "stop": "Stop",
+    "autoCommit": "Auto commit (AI message)",
+    "customCommit": "Write a commit message",
+    "branchTitle": "Branch base",
+    "onMain": "On main. A feature branch will be created.",
+    "branchName": "Feature branch name",
+    "branchNameQuestion": "Confirm the feature branch name (from the feature slug):",
+    "sameBehind": "main is strictly behind this branch (ahead>0, behind=0).",
+    "sameAhead": "main is strictly ahead of this branch (ahead=0, behind>0).",
+    "diverged": "This branch and main have diverged (ahead>0, behind>0).",
+    "inSync": "This branch is in sync with main (ahead=0, behind=0).",
+    "stayCurrent": "Work on the current branch",
+    "newFromCurrent": "New branch from the current branch",
+    "newFromMain": "New branch from main",
+    "ffToCurrent": "Fast-forward main to this branch first",
+    "ffToMain": "Fast-forward this branch to main",
+    "customMerge": "Write a merge commit message",
+    "agentMerge": "Agent merges and resolves conflicts",
+    "noMain": "No main-like reference found.",
+    "noMainQuestion": "Which base should SFD use?",
+    "baseRef": "Base reference",
+    "stopLabel": "Stop"
+  },
+  "state": {
+    "notGit": "The working directory is not a Git repository.",
+    "esMissing": "external-subagent is required but not detected. Install it first: brew install external-subagent (or see its README), then run `external-subagent agents enable zcode codex`.",
+    "esProfileMissing": "Required external-subagent profile(s) missing: {names}. Create them or use the panel's profile installer.",
+    "resume": "Existing SFD state detected — resuming handoff briefing follows.",
+    "fresh": "No SFD state found — starting a fresh run from the Git cleanup gate."
+  }
+}
