@@ -7,8 +7,11 @@
     "dirtyTitle": "工作区不干净",
     "dirtyQuestion": "工作区存在未提交改动，SFD 应如何继续？",
     "stop": "停止",
+    "stopDesc": "中止 SFD 启动",
     "autoCommit": "自动提交（AI 提交消息）",
+    "autoCommitDesc": "dsh-git-commit 生成 AI 提交消息",
     "customCommit": "手动输入提交消息",
+    "customCommitDesc": "自由输入",
     "branchTitle": "分支基选择",
     "onMain": "当前在 main，将自动创建 feature 分支。",
     "branchName": "Feature 分支名",
@@ -24,6 +27,8 @@
     "ffToMain": "fast-forward 到 main",
     "customMerge": "手动输入 merge commit 消息",
     "agentMerge": "由 agent 合并并解决冲突",
+    "detachedHead": "处于分离 HEAD 状态（{branch}）。",
+    "midMerge": "存在进行中的 merge。",
     "noMain": "未找到 main 类引用。",
     "noMainQuestion": "SFD 应以哪个基线继续？",
     "baseRef": "基线引用",
@@ -31,9 +36,18 @@
   },
   "state": {
     "notGit": "当前目录不是 Git 仓库。",
+    "notRootAgent": "/sfd 需要在当前活跃的根会话 agent 中执行。",
+    "noCwd": "本会话没有工作目录。",
     "esMissing": "需要 external-subagent 但未检测到。请先安装：brew install external-subagent（或见其 README），然后执行 `external-subagent agents enable zcode codex`。",
     "esProfileMissing": "缺少必需的 external-subagent profile：{names}。请创建，或使用面板里的 profile 安装器。",
     "resume": "检测到既有 SFD 状态——接手简报如下。",
-    "fresh": "未发现 SFD 状态——从 Git 清理门禁开始全新流程。"
+    "fresh": "未发现 SFD 状态——从 Git 清理门禁开始全新流程。",
+    "stopped": "SFD 启动已被用户停止。状态机未被改动。",
+    "agentMergeHold": "挂起（HOLD）：请先将当前分支与 main 合并并解决冲突，然后再次运行 /sfd 继续。",
+    "cleanupDone": "分支：{branch}（基线 {base}）",
+    "nextPlan": "下一步：阅读 sectioned-feature-development 技能，从用户请求中识别 Feature，并在 .agent-work/PLAN-FULL.md 起草 PLAN-FULL。自动激活需要用户先批准首个比例适中的计划，之后才进入计划评审。",
+    "legacyTitle": "发现既有 SFD 工作标记（无插件状态）：",
+    "legacyBody": "这可能是未清理的上一轮 run，或插件化之前的手动 run。请决定：归档后重新开始、手动继续、或停止。插件无法接手一个它没有记录的 run。",
+    "readSkillFirst": "请先阅读 sectioned-feature-development 技能，再从上述阶段继续。"
   }
 }

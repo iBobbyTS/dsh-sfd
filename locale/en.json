@@ -7,8 +7,11 @@
     "dirtyTitle": "Workspace is dirty",
     "dirtyQuestion": "The workspace has uncommitted changes. How should SFD proceed?",
     "stop": "Stop",
+    "stopDesc": "Abort SFD start",
     "autoCommit": "Auto commit (AI message)",
+    "autoCommitDesc": "dsh-git-commit AI commit message",
     "customCommit": "Write a commit message",
+    "customCommitDesc": "Free text",
     "branchTitle": "Branch base",
     "onMain": "On main. A feature branch will be created.",
     "branchName": "Feature branch name",
@@ -24,6 +27,8 @@
     "ffToMain": "Fast-forward this branch to main",
     "customMerge": "Write a merge commit message",
     "agentMerge": "Agent merges and resolves conflicts",
+    "detachedHead": "Detached HEAD at {branch}.",
+    "midMerge": "A merge is in progress.",
     "noMain": "No main-like reference found.",
     "noMainQuestion": "Which base should SFD use?",
     "baseRef": "Base reference",
@@ -31,9 +36,18 @@
   },
   "state": {
     "notGit": "The working directory is not a Git repository.",
+    "notRootAgent": "/sfd requires the exact live root chat agent.",
+    "noCwd": "No working directory for this session.",
     "esMissing": "external-subagent is required but not detected. Install it first: brew install external-subagent (or see its README), then run `external-subagent agents enable zcode codex`.",
     "esProfileMissing": "Required external-subagent profile(s) missing: {names}. Create them or use the panel's profile installer.",
     "resume": "Existing SFD state detected — resuming handoff briefing follows.",
-    "fresh": "No SFD state found — starting a fresh run from the Git cleanup gate."
+    "fresh": "No SFD state found — starting a fresh run from the Git cleanup gate.",
+    "stopped": "SFD start stopped by user. Nothing was changed in the repository state machine.",
+    "agentMergeHold": "HOLD: merge the current branch with main and resolve conflicts first, then run /sfd again to resume.",
+    "cleanupDone": "Branch: {branch} (base {base})",
+    "nextPlan": "Next: read the sectioned-feature-development skill, identify Feature(s) from the user request, and draft PLAN-FULL at .agent-work/PLAN-FULL.md. Automatic activation requires user approval of the first proportional plan before plan review.",
+    "legacyTitle": "Existing SFD work markers found (no plugin state):",
+    "legacyBody": "This may be an uncleaned previous run or a manual pre-plugin run. Decide: archive it and start fresh, continue it manually, or stop. The plugin cannot resume a run it did not record.",
+    "readSkillFirst": "Read the sectioned-feature-development skill first, then continue from the phase above."
   }
 }

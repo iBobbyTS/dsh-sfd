@@ -11,21 +11,15 @@
 import { loadState, detectWork, initialState, transition, renderBrief } from './lib/state.js';
 import { preflight } from './lib/es.js';
 import { runCleanup, inspect } from './lib/cleanup.js';
+import { makeT } from './lib/i18n.js';
 
 export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory'];
 
 export function apply(ctx) {
-  const t = (key) => {
-    try {
-      const dict = ctx.locale?.dict?.['dsh-sfd'] ?? {};
-      const parts = key.split('.');
-      let value = dict;
-      for (const part of parts) value = value?.[part];
-      return typeof value === 'string' ? value : key;
-    } catch {
-      return key;
-    }
-  };
+  // Host plugins have no ctx.locale (a browser-client service). lib/i18n.js
+  // resolves the GUI language on the host side; the promise resolves before
+  // any card is shown, and a rejection would surface as a command error.
+  const tReady = makeT(ctx).catch(() => (key) => key);
 
   const askCard = async (agent, signal, question) => {
     // The user-questions request crosses the Remote gateway, which rejects any
@@ -45,8 +39,9 @@ export function apply(ctx) {
     recordInput: false,
     handler: async ({ agent, signal }) => {
       signal.throwIfAborted();
+      const t = await tReady;
       if (ctx.agents.get(agent.id) !== agent || !ctx.agents.roots().includes(agent)) {
-        return { kind: 'error', text: '/sfd requires the exact live root chat agent.' };
+        return { kind: 'error', text: t('state.notRootAgent') };
       }
 
       // Determine the repository root from the session's working directory.
@@ -54,7 +49,7 @@ export function apply(ctx) {
       try {
         cwd = await ctx.workingDirectory?.ensure(agent);
       } catch { cwd = undefined; }
-      if (!cwd) return { kind: 'error', text: 'No working directory for this session.' };
+      if (!cwd) return { kind: 'error', text: t('state.noCwd') };
 
       let facts;
       try {
@@ -84,11 +79,10 @@ export function apply(ctx) {
         return {
           kind: 'success',
           text: [
-            'Existing SFD work markers found (no plugin state):',
+            t('state.legacyTitle'),
             `- ${detection.markers.join('\n- ')}`,
             '',
-            'This may be an uncleaned previous run or a manual pre-plugin run.',
-            'Decide: archive it and start fresh, continue it manually, or stop. The plugin cannot resume a run it did not record.',
+            t('state.legacyBody'),
           ].join('\n'),
         };
       }
@@ -109,7 +103,7 @@ export function apply(ctx) {
         return { kind: 'error', text: `${result.message ?? result.error}` };
       }
       if (result.stopped) {
-        return { kind: 'success', text: 'SFD start stopped by user. Nothing was changed in the repository state machine.' };
+        return { kind: 'success', text: t('state.stopped') };
       }
 
       // 4. Persist initial state and hand the planning phase to the agent
@@ -123,16 +117,16 @@ export function apply(ctx) {
         state = await transition(state, 'hold', {
           hold: { kind: 'WAITING_USER', reason: 'Diverged branch: agent must merge and resolve conflicts before planning starts.', since: new Date().toISOString() },
         }, 'agent merge pending');
-        return { kind: 'success', text: `${t('state.fresh')}\n\nHOLD: merge current branch with main and resolve conflicts first, then run /sfd again to resume.` };
+        return { kind: 'success', text: `${t('state.fresh')}\n\n${t('state.agentMergeHold')}` };
       }
       return {
         kind: 'success',
         text: [
           t('state.fresh'),
           '',
-          `Branch: ${result.state.startBranch} (base ${result.state.base})`,
+          t('state.cleanupDone', { branch: result.state.startBranch, base: result.state.base }),
           '',
-          'Next: read the sectioned-feature-development skill, identify Feature(s) from the user request, and draft PLAN-FULL at .agent-work/PLAN-FULL.md. Automatic activation requires user approval of the first proportional plan before plan review.',
+          t('state.nextPlan'),
         ].join('\n'),
       };
     },

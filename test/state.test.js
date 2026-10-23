@@ -81,5 +81,5 @@ test('renderBrief: status snapshot, no flow narrative', () => {
   assert.match(brief, /Phase: IMPL/);
   assert.match(brief, /S01/);
   assert.match(brief, /waves 2\/5/);
-  assert.match(brief, /sectioned-feature-development skill/);
+  assert.match(brief, /state\.readSkillFirst/); // t() stub: the skill-reference line goes through i18n
 });
