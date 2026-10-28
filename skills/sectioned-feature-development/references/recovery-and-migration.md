@@ -115,7 +115,7 @@ When adopting/activating mid-feature:
    - on `main` with uncommitted work, create/switch to the feature branch and carry the worktree changes;
    - on an unrelated non-`main` branch, ask the user to choose a base: `main`, the current branch, or `main` after an explicitly authorized merge; continuing an already authorized feature branch needs no repeat choice;
    - when feature commits already exist on local `main`, create a safety branch at current HEAD and ask before restoring/rewriting `main`.
-4. Build/review a prospective plan only for active unaccepted and remaining work. If activation was automatic, stop before plan review for user approval.
+4. Build/review a prospective plan only for active unaccepted and remaining work. If activation was automatic, the user approved the start before adoption began; do not add a separate approval pause before plan review.
 5. Continue with delta review when a repair is already in progress; otherwise use one bounded full re-review if prior coverage cannot be reconstructed economically.
 6. Sanitize only the active, unaccepted contract: trace every guarantee/oracle/structural allowance to user intent, repository rules, or established behavior; downgrade unanchored reviewer-authored items to `SCOPE_PROPOSAL`.
 7. Add only the minimum fields needed for future continuation. Do not create migration sections, plan-review loops, legacy admission copies, evidence rehabilitation, or clean-lineage worktrees.

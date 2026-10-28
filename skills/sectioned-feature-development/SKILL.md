@@ -32,8 +32,10 @@ what a tool does; if a tool rejects a call, a gate is speaking.
   hashes (sha256 etc.) of plans, advisor requests/results or any artifact.
   Identity is path + git state + the user's explicit disposition, never a
   digest.
-- Only on **self-activation** must the first proportional plan be approved by
-  the user before plan review; explicit `/sfd` skips that pause.
+- Only on **self-activation** must the user approve starting SFD before you
+  begin — ask first, before any workspace preparation or `sfd_start` call.
+  Explicit `/sfd` (or a user request naming SFD) already carries that approval.
+  Once started, proceed to plan review without a user-approval pause.
 
 ## Workspace preparation (mandatory decision table)
 

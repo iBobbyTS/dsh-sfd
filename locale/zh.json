@@ -13,7 +13,7 @@
     "fresh": "仓库中未发现 SFD 状态。",
     "prepare": "启动前的工作区准备（强制决策表；完整版见 skill）：\n1) 工作区脏 → 询问用户：[停止 | 自动提交（AI 生成提交消息）]；用户输入自由文本时按其指示处理——绝不丢失未提交工作。\n2) 干净且在 main/master → 不询问：自行命名 feature 分支（如 sfd/<slug>）并从 main 创建。\n3) 干净且不在 main → 计算相对 main 的 ahead/behind，向用户提供且仅提供以下选项（始终附带「停止」）：0/0 → [留在当前分支 | 从当前分支开新分支]；ahead>0,behind=0 → [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 先把 main fast-forward 到当前分支再留下]；ahead=0,behind>0 → [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 先 fast-forward 到 main 再从其开分支]；ahead>0,behind>0（分叉）→ [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 由你与 main 合并、解决全部冲突后继续]。\n4) 无 main 类引用 / 分离 HEAD / merge 进行中 → 询问用户如何继续（必须包含「停止」）；绝不猜测基线。\n分支命名、创建、重名处理与任何合并都是你自己的 git 操作。",
     "handoff": "现在由你启动：先阅读 sectioned-feature-development 技能，再确定要做的任务。若本会话还没有任务上下文，先询问用户想做什么，不要自行推进。任务明确后，按上面的决策表完成工作区准备并创建 feature 分支，然后调用 sfd_start 工具并给出一句话 taskSummary（可选 slug、branch）——它不执行任何 git 操作，只记录观察到的 git 事实并落盘初始状态。",
-    "nextPlan": "下一步：阅读 sectioned-feature-development 技能，从用户请求中识别 Feature，并在 .agent-work/PLAN-FULL.md 起草 PLAN-FULL。自动激活需要用户先批准首个比例适中的计划，之后才进入计划评审。",
+    "nextPlan": "下一步：阅读 sectioned-feature-development 技能，从用户请求中识别 Feature，并在 .agent-work/PLAN-FULL.md 起草 PLAN-FULL。",
     "legacyTitle": "发现既有 SFD 工作标记（无插件状态）：",
     "legacyBody": "这可能是未清理的上一轮 run，或插件化之前的手动 run。请决定：归档后重新开始、手动继续、或停止。插件无法接手一个它没有记录的 run。",
     "readSkillFirst": "请先阅读 sectioned-feature-development 技能，再从上述阶段继续。"

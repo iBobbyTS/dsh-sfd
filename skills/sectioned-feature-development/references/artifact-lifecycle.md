@@ -24,7 +24,7 @@ Main collects actual command/build/test output under evidence with its exit stat
 
 Preserve dirty user work, exclude `.agent-work` locally, and resolve already-tracked workflow files separately. Save original requirements, examples and superseding decisions. Use installed `installation.json` / [model routing](model-routing.md), not another host's guessed transport. Role definitions stay self-contained; Main sends curated task facts, not inherited whole conversations.
 
-Use the existing [planning](section-planning.md) authority and matched guides for the sole PLAN. Basic validation is structural, not permission. Automatic activation pauses after the first proportional plan before review; explicit invocation only skips that pause. EXECUTE_WITH_COMMIT applies to execution; PLAN_HANDOFF / REVIEW_ONLY alone authorize no product write or synthetic commit. Optional [efficiency notes](efficiency-checkpoints.md) are not an entry requirement.
+Use the existing [planning](section-planning.md) authority and matched guides for the sole PLAN. Basic validation is structural, not permission. Automatic activation requires the user's approval of the start itself, before preparation or `sfd_start`; explicit invocation carries that approval. Neither path adds an approval pause before plan review. EXECUTE_WITH_COMMIT applies to execution; PLAN_HANDOFF / REVIEW_ONLY alone authorize no product write or synthetic commit. Optional [efficiency notes](efficiency-checkpoints.md) are not an entry requirement.
 
 ## Review and dispatch
 
