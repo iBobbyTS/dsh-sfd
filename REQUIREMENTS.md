@@ -90,7 +90,7 @@ B 侧路由=维持原 skill（ES codex）；提交=程序经 dsh-git-commit（�
 
 启动阶段去程序化（2026-10-27 裁决，grill-me 收敛）：移除 sfd_start 的程序化清理门（gitCommit 自动提交、切 main、fast-forward、分叉挂起、卡片、userNote 转交、performed 台账）；决策表语义逐情形保留为 skill 与 /sfd 交接提示词中的**强制指引**（不降级为原则性提示）。sfd_start 不再执行任何 git 写操作，只读探测 git 事实（分支/基线/脏否/detached/midMerge）并落盘状态。COMMIT 阶段的 gitCommit 集成（P1）不受影响。
 
-自动激活批准时机（2026-10-28 裁决）：取消自动激活时「首个成比例计划须用户批准后才进 plan review」的暂停；改为 agent 自动激活必须在发起启动（工作区准备与 `sfd_start` 之前）先获得用户批准，显式激活（`/sfd` 或口头点名 SFD）视为已批准；其后流程不再有首计划批准暂停。
+自动激活批准时机（2026-10-28 裁决）：取消自动激活时「首个成比例计划须用户批准后才进 plan review」的暂停；改为 agent 自动激活必须在发起启动（工作区准备与 `sfd_start` 之前）先获得用户批准，显式激活（`/sfd` 或口头点名 SFD）视为已批准；其后流程不再有首计划批准暂停。该批准为提示词级规则，由流程 skill 承载（激活以读 skill 开头，读到时尚无任何 git 操作），不做程序化门禁——批准发生在插件唯一入口点之前且为会话性事实，程序无法核验；全局 AGENTS.md 不复述 SFD 流程细节，仅保留何时调用的触发条件（2026-10-28 同日裁决）。
 
 ## Planner discretion
 
