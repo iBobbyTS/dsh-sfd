@@ -26,15 +26,17 @@
    - 无任何 SFD 工作状态文件 → 新流程，从 git 工作区检查开始；
    - 存在状态文件 → 把接手简报注入当前 agent；可能是接手中途任务，也可能是上次未清理干净，由主 agent 决策（继续 / 归档 / 问用户 / 按用户指示）。
 2. **激活路径**：人工 `/sfd` 或口头；或主 agent 识别请求符合 SFD 触发条件后自行启动（skill 式识别，无额外 LLM 调用）。**仅 agent 自动激活时**，第一个成比例计划须用户卡片批准后才进 plan review；显式激活跳过此暂停。
-3. **开始前清理**（决策表，全部程序化 + 卡片）：
-   - 工作区脏 → [停止 | 自动提交（dsh-git-commit AI 消息）| 输入框手写提交消息]；
-   - 干净且在 main → 自动建 feature branch（名字来自 feature slug，卡片确认可改）；
-   - 干净且不在 main，按 ahead/behind：
-     - 0/0 → [停止 | 在当前分支工作 | 开新分支工作]
-     - ahead>0,behind=0 → [停止 | 当前分支 | 从当前分支开新分支 | 从 main 开新分支 | 先把 main fast-forward 到当前分支再开始]
-     - ahead=0,behind>0 → [停止 | 当前分支继续 | 从当前分支开新分支 | 从 main 开新分支 | fast-forward 到 main | 输入框手写 merge commit]
-     - ahead>0,behind>0 → [停止 | 当前分支 | 从当前分支开新分支 | 从 main 开新分支 | agent 执行合并并解决冲突（转主 agent 任务）]
-   - 每个动作执行后重验证；无 main 引用/merge 进行中/detached HEAD → 通用询问卡片。所有选择原文落账。
+3. **开始前准备（agent 提示词驱动的强制决策表；2026-10-27 修订：原程序化清理门移除，语义逐情形保留为 skill/交接提示词中的强制指引）**：
+   - 主 agent 用自身会话工具执行，选项经普通对话问题呈现给用户，用户选择原文留在会话中；
+   - 工作区脏 → [停止 | 自动提交（AI 提交消息）| 用户自由文本指示（如保留 WIP 备注），绝不丢失未提交工作]；
+   - 干净且在 main → 不询问，agent 自行命名并基于 main 创建 feature 分支；
+   - 干净且不在 main，按 ahead/behind 提供固定选项集（均含「停止」）：
+     - 0/0 → [留在当前分支 | 从当前分支开新分支]
+     - ahead>0,behind=0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| 先把 main fast-forward 到当前分支]
+     - ahead=0,behind>0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| fast-forward 到 main 再从其开分支]
+     - ahead>0,behind>0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| agent 执行合并并解决冲突]
+   - 无 main 引用 / merge 进行中 / detached HEAD → 询问用户如何继续（含「停止」），不猜测基线；
+   - 分支命名/创建/重名处理/合并始终由 agent 执行；完成后调用 `sfd_start`，该工具不执行任何 git 操作，只记录观察到的 git 事实（分支/基线/脏否）并落盘状态。
 4. **规划**：PLAN-FULL 由主 agent 撰写（模板+知识库目录由插件按阶段注入；知识库本体 agent 自行读取）；写完后程序结构校验（section_plan.py），保证后续 section 提取必然成功。
 5. **Plan review**：串行 A→B；material 修正波计数，≥2 自动 hold 进入诊断（硬门禁）；finding 准入由主 agent（插件呈递待准入清单，含程序拼接好的证据文件内容，省去多次读取）；修正后有界 PLAN_DELTA 复查；两个覆盖关闭前禁止派发 implementer（硬门禁）。
 6. **TASK 生成与派发**：程序 extract TASK；主 agent 一次性决策（放行，或把补充内容写在回答里，**由程序合并进 task 文件**；主 agent 不改文件）；依赖 section 未接受则拒绝派发（硬门禁）。
@@ -85,6 +87,8 @@
 B 侧路由=维持原 skill（ES codex）；提交=程序经 dsh-git-commit（重试1次→降级主 agent）；首次计划批准=仅自动激活要批；5 条自采假设（queue-continue、返工新鲜上下文、面板自动展开、agent_id↔unit 对账、飞书三行模板）全部确认；impl_std 改 ES zcode deepseek/deepseek-flash。
 
 跨仓 section（2026-10-23 裁决，同日补充，替代更重的"卫星仓"模型）：PLAN-FULL 的 section 契约增加可选 `- Repository:` 字段，缺省=当前仓库；填了则该 section 的实现落在该仓库。SFD 状态与全部工件只存主仓库 `.agent-work/`，不向外部仓库写入 `.agent-work/`（外部仓现存的 `.agent-work/` 不属于本流程，保留不动）。声明 Repository 即跳过程序对该仓库的一切 git 管理：清理门、漂移对账、程序化提交均不覆盖外部仓库，其分支与提交由主 agent 自行管理，无需用户额外授权。程序改动仅限：plan 结构校验接受该字段并校验路径为存在的 git worktree、TASK extract 原样携带。规则不含发布/发版相关内容。
+
+启动阶段去程序化（2026-10-27 裁决，grill-me 收敛）：移除 sfd_start 的程序化清理门（gitCommit 自动提交、切 main、fast-forward、分叉挂起、卡片、userNote 转交、performed 台账）；决策表语义逐情形保留为 skill 与 /sfd 交接提示词中的**强制指引**（不降级为原则性提示）。sfd_start 不再执行任何 git 写操作，只读探测 git 事实（分支/基线/脏否/detached/midMerge）并落盘状态。COMMIT 阶段的 gitCommit 集成（P1）不受影响。
 
 ## Planner discretion
 

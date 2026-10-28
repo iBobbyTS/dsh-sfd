@@ -1,5 +1,7 @@
 /**
  * sfd_start tool integration test with a stubbed ctx and real git repo.
+ * sfd_start performs no git operations: it probes read-only, records git
+ * facts, and persists the initial state (phase PLAN).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,17 +17,11 @@ const run = promisify(execFile);
 const git = (cwd, ...args) => run('git', ['-C', cwd, ...args]);
 
 const t = (key, params = {}) => ({
-  'state.noCwd': 'no cwd', 'state.notGit': 'not git', 'state.stopped': 'stopped',
-  'state.fresh': 'fresh', 'state.cleanupDone': `Branch: ${params.branch} (base ${params.base})`,
+  'state.noCwd': 'no cwd', 'state.notGit': 'not git', 'state.fresh': 'fresh',
   'state.nextPlan': 'next: plan', 'tool.existingRun': 'existing run',
-  'tool.agentMergeTask': 'agent merge task', 'state.esMissing': 'es missing',
-  'state.esProfileMissing': 'es profiles missing: {names}',
-  'cleanup.dirtyTitle': 'dirty', 'cleanup.dirtyQuestion': 'dirty?',
-  'cleanup.stop': 'Stop', 'cleanup.autoCommit': 'Auto', 'cleanup.customCommit': 'Custom',
-  'cleanup.branchTitle': 'branch', 'cleanup.branchName': 'name', 'cleanup.branchNameQuestion': 'name?',
-  'cleanup.onMain': 'on main', 'cleanup.stayCurrent': 'stay', 'cleanup.stopLabel': 'Stop',
-  'cleanup.detachedHead': 'detached', 'cleanup.midMerge': 'mid-merge',
-  'cleanup.noMainQuestion': 'base?',
+  'tool.started': `started on ${params.branch}`,
+  'tool.startedDirty': 'started dirty',
+  'state.esMissing': 'es missing', 'state.esProfileMissing': 'es profiles missing: {names}',
 })[key] ?? key;
 
 async function makeRepo() {
@@ -47,7 +43,6 @@ function makeCtx(cwd) {
     getCtx: () => ({
       tools: { register: (d) => { definition = d; } },
       workingDirectory: { ensure: async () => cwd },
-      gitCommit: null,
     }),
     async call(args) {
       const exec = { agent, signal: undefined };
@@ -56,27 +51,73 @@ function makeCtx(cwd) {
   };
 }
 
-test('sfd_start runs cleanup, derives branch from taskSummary, writes state', async () => {
+test('sfd_start records git facts and writes state, no git ops', async () => {
   const dir = await makeRepo();
   try {
+    // emulate the agent's own preparation: it created and switched to a feature branch
+    await git(dir, 'switch', '-c', 'sfd/dark-mode');
+    const before = (await git(dir, 'rev-parse', 'HEAD')).stdout.trim();
     const c = makeCtx(dir);
     const mod = await import('../lib/es.js');
-    // monkey-patch preflight via module cache is not possible; instead the tool
-    // calls preflight() from es.js — for the test we point ES_* env to a stub.
-    // Simplest: temporarily replace the module's exported function is not supported,
-    // so this test runs preflight against the real ES daemon check. Skip if absent.
+    // The tool calls preflight() from es.js against the real ES daemon.
+    // Skip silently when the environment lacks ES.
     const es = await mod.preflight();
-    if (!es.ok) return; // environment lacks ES; skip silently
-    registerSfdTools(c.getCtx(), { askCard: async () => ({ answers: [{ selected: [] }] }), t: async () => t });
+    if (!es.ok) return;
+    registerSfdTools(c.getCtx(), { t: async () => t });
     const r = await c.call({ taskSummary: 'Add dark mode toggle support' });
     assert.equal(r.ok, true);
-    // on a clean main repo: no card, no branch — creation delegated to the agent
-    assert.equal(r.intent ?? r.state?.intent, 'create-from-main');
-    const branch = (await run('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
-    assert.equal(branch, 'main');
+    assert.equal(r.state.branch, 'sfd/dark-mode');
+    const after = (await git(dir, 'rev-parse', 'HEAD')).stdout.trim();
+    assert.equal(after, before, 'no commit/rewrite may happen');
+    const branch = (await git(dir, 'rev-parse', '--abbrev-ref', 'HEAD')).stdout.trim();
+    assert.equal(branch, 'sfd/dark-mode', 'branch unchanged');
     const st = await loadState(dir);
     assert.equal(st.phase, 'PLAN');
-    assert.equal(st.git.authority.intent, 'create-from-main');
+    assert.equal(st.git.authority.intent, 'agent-managed');
+    assert.equal(st.git.authority.branch, 'sfd/dark-mode');
+    assert.equal(st.git.authority.base, 'sfd/dark-mode');
+    assert.equal(st.git.authority.facts.dirty, false);
+    assert.equal(st.task.summary, 'Add dark mode toggle support');
+    assert.match(r.brief, /started on sfd\/dark-mode/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('sfd_start records explicit branch argument over observed branch', async () => {
+  const dir = await makeRepo();
+  try {
+    const mod = await import('../lib/es.js');
+    const es = await mod.preflight();
+    if (!es.ok) return;
+    const c = makeCtx(dir);
+    registerSfdTools(c.getCtx(), { t: async () => t });
+    const r = await c.call({ taskSummary: 'x', branch: 'sfd/explicit-name' });
+    assert.equal(r.ok, true);
+    assert.equal(r.state.branch, 'sfd/explicit-name');
+    const st = await loadState(dir);
+    assert.equal(st.git.authority.branch, 'sfd/explicit-name');
+    // observed fact stays separate from the reported branch
+    assert.equal(st.git.authority.base, 'main');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('sfd_start flags a dirty workspace in facts and brief', async () => {
+  const dir = await makeRepo();
+  try {
+    const mod = await import('../lib/es.js');
+    const es = await mod.preflight();
+    if (!es.ok) return;
+    await writeFile(join(dir, 'b.txt'), 'dirty\n');
+    const c = makeCtx(dir);
+    registerSfdTools(c.getCtx(), { t: async () => t });
+    const r = await c.call({ taskSummary: 'x' });
+    assert.equal(r.ok, true);
+    const st = await loadState(dir);
+    assert.equal(st.git.authority.facts.dirty, true);
+    assert.match(r.brief, /started dirty/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -90,11 +131,11 @@ test('sfd_start returns brief without touching repo when a run exists', async ()
     if (!es.ok) return;
     await mkdirWrite(dir);
     const c = makeCtx(dir);
-    registerSfdTools(c.getCtx(), { askCard: async () => { throw new Error('must not ask'); }, t: async () => t });
+    registerSfdTools(c.getCtx(), { t: async () => t });
     const r = await c.call({ taskSummary: 'another task' });
     assert.equal(r.ok, false);
     assert.equal(r.error, 'already-running');
-    const branch = (await run('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
+    const branch = (await git(dir, 'rev-parse', '--abbrev-ref', 'HEAD')).stdout.trim();
     assert.equal(branch, 'main');
   } finally {
     await rm(dir, { recursive: true, force: true });

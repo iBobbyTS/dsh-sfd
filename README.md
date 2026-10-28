@@ -4,7 +4,7 @@
 
 ## 简介
 
-SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整计划（PLAN-FULL），把工作切成边界清晰、可独立验收的 Feature / Section，再按「计划评审 A/B → 实现 → 提交 → 代码评审 → 验收」推进。本插件把流程中机械的部分（状态记账、工作区清理、分支基线决策、派发、波次门禁、报告落盘、提交）交给宿主程序，主 agent 只做语义判断：规划、finding 准入、返工判断与验收。
+SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整计划（PLAN-FULL），把工作切成边界清晰、可独立验收的 Feature / Section，再按「计划评审 A/B → 实现 → 提交 → 代码评审 → 验收」推进。本插件把流程中机械的部分（状态记账、派发、波次门禁、报告落盘、提交）交给宿主程序，主 agent 只做语义判断——规划、finding 准入、返工判断与验收——并自行完成启动前的工作区准备（脏区处理、分支基线决策、feature 分支创建，按 skill 中的强制决策表执行）。
 
 仓库权威文档：
 
@@ -22,16 +22,16 @@ SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整�
 
 1. 在仓库内输入 `/sfd`。
 2. 若没有任何 SFD 状态文件，命令只做交接：主 agent 先读流程 skill；会话里没有任务上下文时，它会先问你「要做什么」。
-3. 任务明确后，主 agent 调用 `sfd_start(taskSummary, slug?)`。该工具执行清理决策表——脏工作区的提交方式、基线决策（切回 `main`、fast-forward 或留在当前分支）、冲突时转主 agent 合并——并写入 `.agent-work/sfd-state.json`；它报告自己执行过的每一个 git 操作及其结果。
-4. 主 agent 依据交还的基线决定命名并创建 feature 分支（如 `sfd/readme-faq`），然后进入规划。
+3. 任务明确后，主 agent 按流程 skill 中的**强制决策表**自行完成工作区准备——脏工作区处理（停止/自动提交/按你的自由文本指示）、不在 main 时按 ahead/behind 与你确认基线（留在当前分支 / 从当前或 main 开新分支 / fast-forward / 分叉时由它合并解决冲突）、退化状态（无 main、分离 HEAD、merge 进行中）询问你——然后自己命名并创建 feature 分支（如 `sfd/readme-faq`）。
+4. 准备完成后，主 agent 调用 `sfd_start(taskSummary, slug?, branch?)`。该工具**不执行任何 git 操作**：只记录观察到的 git 事实（分支、基线、脏否）并原子写 `.agent-work/sfd-state.json`。
 5. 规划阶段：主 agent 写 `.agent-work/REQUIREMENTS.md` 与 `.agent-work/PLAN-FULL.md`。
 
 ## 当前状态（P0）
 
 已实现：
 
-- `/sfd` 命令：状态探测与分流（接手简报 / 旧目录标记提示 / 新流程交接）。
-- `sfd_start` 工具：ES 预检、工作区清理决策表（卡片驱动）、原子写状态文件、逐项回报 git 操作结果。
+- `/sfd` 命令：状态探测与分流（接手简报 / 旧目录标记提示 / 新流程交接，交接含启动准备决策表指引）。
+- `sfd_start` 工具：ES 预检、只读探测 git 事实（分支/基线/脏否）、原子写状态文件；不执行任何 git 写操作——工作区准备由主 agent 按 skill 决策表自行完成。
 
 尚未实现（见 [DESIGN.md](DESIGN.md) §10 分期）：
 
@@ -62,11 +62,11 @@ JSON 损坏时，读取会直接报错；如果只有 `PLAN-FULL.md` / `REQUIREM
 
 ### 没有安装 external-subagent 会怎样？
 
-启动即失败：`/sfd` 与 `sfd_start` 都会先做 ES 预检，缺失时返回明确错误（`es-missing` 或缺失的 profile 名），不会进入清理或规划。先装 ES，再执行 `/sfd`。
+启动即失败：`/sfd` 与 `sfd_start` 都会先做 ES 预检，缺失时返回明确错误（`es-missing` 或缺失的 profile 名），不会进入启动准备或规划。先装 ES，再执行 `/sfd`。
 
-### feature 分支是谁创建的？
+### feature 分支是谁创建的？工作区清理是谁做的？
 
-主 agent 创建，命名基于任务 slug。程序只负责清理与基线：切回 `main`、fast-forward、以及在用户选择「从当前分支开始」时保持不变；它在交还基线决定之前不会自行切换分支。重名分支要由主 agent 处理（必要时问你）。
+都是主 agent，用它会话里的常规 git 工具完成。流程 skill 中的启动决策表是**强制指引**：脏工作区必须先问用户（停止/自动提交/按自由文本指示）；干净且在 main 时直接建分支；不在 main 时按 ahead/behind 提供固定选项集；无 main/分离 HEAD/merge 进行中时询问用户。插件本身不执行任何 git 操作——`sfd_start` 只读探测并落盘状态。
 
 ### 现在能一路跑完整个 SFD 流程吗？
 

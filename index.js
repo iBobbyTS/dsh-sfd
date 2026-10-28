@@ -1,9 +1,12 @@
 /**
  * @ibobbyts/dsh-sfd — Sectioned Feature Development host plugin (P0).
  *
- * P0 scope: `/sfd` command with state detection + cleanup decision table +
- * ES preflight. Later phases add plan review orchestration, ES dispatch
- * engine, code review waves, advisor, and the side panel.
+ * P0 scope: `/sfd` command with state detection + ES preflight. Workspace
+ * preparation (dirty handling, branch-base decision, feature-branch creation)
+ * is the main agent's job, driven by the skill's mandatory decision table;
+ * `sfd_start` only records git facts and persists state. Later phases add
+ * plan review orchestration, ES dispatch engine, code review waves, advisor,
+ * and the side panel.
  *
  * The command injects its result into the conversation for the main agent;
  * program flow beyond this gate stays with the state machine in later phases.
@@ -16,30 +19,18 @@ import { registerSfdTools } from './lib/tools.js';
 import { sfdSkillProvider } from './lib/skill-provider.js';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
-export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory', 'tools', 'skills'];
+export const inject = ['commands', 'agents', 'workingDirectory', 'tools', 'skills'];
 
 export function apply(ctx) {
   // Serve the flow skill from this package's skills/ directory so it
   // installs/upgrades/uninstalls together with the plugin.
   try {
     ctx.skills?.registerProvider?.(() => sfdSkillProvider);
-  } catch { /* skills service absent or provider rejected: cards still work */ }
+  } catch { /* skills service absent or provider rejected: skill cards unavailable */ }
   // Host plugins have no ctx.locale (a browser-client service). lib/i18n.js
-  // resolves the GUI language on the host side; the promise resolves before
-  // any card is shown, and a rejection would surface as a command error.
+  // resolves the GUI language on the host side; a rejection degrades to raw
+  // keys rather than failing the command.
   const tReady = makeT(ctx).catch(() => (key) => key);
-
-  const askCard = async (agent, signal, question) => {
-    // The user-questions request crosses the Remote gateway, which rejects any
-    // non-lossless JSON property — including enumerable keys whose value is
-    // undefined. Omit optional fields entirely when absent.
-    const item = { id: question.id, question: question.question };
-    if (question.header !== undefined) item.header = question.header;
-    if (question.detail !== undefined) item.detail = question.detail;
-    if (question.options !== undefined) item.options = question.options;
-    const answer = await ctx.userQuestions.ask({ agent, signal, questions: [item] });
-    return answer;
-  };
 
   ctx.commands.register({
     name: 'sfd',
@@ -111,15 +102,15 @@ export function apply(ctx) {
       }
 
       // 3. Fresh run: hand the flow to the agent. `/sfd` never starts the
-      // cleanup gate or writes state itself — the agent must first know the
-      // task (it asks the user when the session has no context) and then
-      // call sfd_start, which runs cleanup and creates the real branch.
-      return deliver([t('state.fresh'), '', t('state.handoff')].join('\n'));
+      // flow itself — the agent must first know the task (it asks the user
+      // when the session has no context), perform workspace preparation per
+      // the skill's mandatory decision table, and then call sfd_start, which
+      // records the git facts and creates the state.
+      return deliver([t('state.fresh'), '', t('state.prepare'), '', t('state.handoff')].join('\n'));
     },
   });
 
   registerSfdTools(ctx, {
-    askCard,
     t: () => tReady,
   });
 }

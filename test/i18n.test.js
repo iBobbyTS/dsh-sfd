@@ -35,26 +35,28 @@ test('dictionaries: zh covers every en key (no raw-key leak)', async () => {
 
 test('translator: zh overlay with interpolation, unknown key renders key', async () => {
   const t = await translator('zh');
-  assert.equal(t('cleanup.dirtyTitle'), '工作区不干净');
+  assert.equal(t('state.notGit'), '当前目录不是 Git 仓库。');
   assert.equal(t('state.esProfileMissing', { names: 'sfd-a, sfd-b' }).includes('sfd-a, sfd-b'), true);
   assert.equal(t('no.such.key'), 'no.such.key');
 });
 
-test('translator: en base resolves the keys used by cleanup cards', async () => {
+test('translator: en base resolves the keys used by the /sfd handoff and sfd_start', async () => {
   const t = await translator('en');
-  for (const key of ['cleanup.dirtyTitle', 'cleanup.dirtyQuestion', 'cleanup.autoCommit', 'cleanup.stop',
-    'cleanup.autoCommitDesc', 'cleanup.stopDesc',
-    'tool.stoppedShort', 'tool.userNote', 'tool.createBranchFromMain', 'tool.createBranchFromCurrent',
-    'tool.performedPrefix', 'tool.performedOk', 'tool.performedFailed', 'tool.performedAutoCommit',
-    'tool.performedDespiteStop', 'tool.gitFailed', 'tool.gitFailedAdvice',
-    'tool.intent.create-from-main', 'tool.intent.new-from-main', 'tool.intent.new-from-current',
-    'tool.intent.stay-current', 'tool.intent.ff-main-to-current', 'tool.intent.ff-to-main',
-    'tool.intent.agent-merge', 'tool.intent.note-only']) {
+  for (const key of ['state.fresh', 'state.prepare', 'state.handoff', 'state.nextPlan',
+    'state.notGit', 'state.notRootAgent', 'state.noCwd', 'state.esMissing', 'state.esProfileMissing',
+    'state.resume', 'state.legacyTitle', 'state.legacyBody', 'state.readSkillFirst',
+    'tool.existingRun', 'tool.started', 'tool.startedDirty']) {
     assert.equal(t(key) === key, false, `${key} rendered raw`);
+  }
+  // the mandatory decision table must be traceable case by case in the handoff
+  const prepare = t('state.prepare');
+  for (const fragment of ['Dirty workspace', 'on main/master', 'ahead/behind', '0/0',
+    'ahead>0,behind=0', 'ahead=0,behind>0', 'ahead>0,behind>0', 'detached HEAD']) {
+    assert.ok(prepare.includes(fragment), `state.prepare missing decision-table case: ${fragment}`);
   }
 });
 
 test('translator: unsupported language falls back to en', async () => {
   const t = await translator('fr');
-  assert.equal(t('cleanup.dirtyTitle'), 'Workspace is dirty');
+  assert.equal(t('state.notGit'), 'The working directory is not a Git repository.');
 });

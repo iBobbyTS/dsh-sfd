@@ -1,15 +1,16 @@
 ---
 name: sectioned-feature-development
-description: "Plugin-driven Sectioned Feature Development for DSH: the /sfd command and sfd_* tools own scheduling, accounting, gates and dispatch; the main agent owns semantic judgment, finding admission and acceptance. Use for nontrivial implementation or repair with cross-owner, state or interface changes, unclear impact, or failed whole-change convergence. Not for an exact local fix solely because its file is risky."
+description: "Plugin-driven Sectioned Feature Development for DSH: the /sfd command and sfd_* tools own scheduling, accounting, gates and dispatch; the main agent owns semantic judgment, finding admission and acceptance, plus workspace preparation before start (dirty handling, branch-base decision, feature-branch creation per the mandatory decision table). Use for nontrivial implementation or repair with cross-owner, state or interface changes, unclear impact, or failed whole-change convergence. Not for an exact local fix solely because its file is risky."
 ---
 
 # Sectioned Feature Development (plugin flow)
 
 The DSH plugin `@ibobbyts/dsh-sfd` owns everything mechanical: state
-(`sfd-state.json`, program-only), workspace cleanup, branch creation, actor
-dispatch, wave counting, hard gates, reports to disk, commits via
-dsh-git-commit, notifications. You — the main agent — own semantics only:
-planning, finding admission, rework judgment, acceptance. Never reimplement
+(`sfd-state.json`, program-only), actor dispatch, wave counting, hard gates,
+reports to disk, commits via dsh-git-commit, notifications. You — the main
+agent — own semantics — planning, finding admission, rework judgment,
+acceptance — **and workspace preparation before the run starts** (dirty
+handling, branch-base decision, feature-branch creation). Never reimplement
 what a tool does; if a tool rejects a call, a gate is speaking.
 
 ## Starting and resuming
@@ -18,15 +19,11 @@ what a tool does; if a tool rejects a call, a gate is speaking.
   detects state and injects either a **resume brief** or a **start handoff**.
   Both begin with reading this skill.
 - New run: you must know the task first. If the session has no task context,
-  ask the user what to build — never invent one. Then call `sfd_start` with a
-  one-line `taskSummary` (and optional `slug`). The tool runs the cleanup
-  decision table (cards), switches the workspace back to main when the user
-  chose a main base, executes fast-forwards, and hands you the resolved
-  intent plus any text the user typed into a card (`userNote`). **You** name
-  and create the feature branch (handle duplicate names; ask the user when
-  needed); if the user chose to stay on / branch from the current branch,
-  honor that. Do not switch branches before `sfd_start` hands the base
-  decision back to you.
+  ask the user what to build — never invent one. Then perform workspace
+  preparation (mandatory decision table below), create the feature branch,
+  and call `sfd_start` with a one-line `taskSummary` (and optional `slug`,
+  `branch`). The tool performs no git operations — it records the git facts
+  it observes and persists the initial state.
 - Resume: the brief states phase, open findings, budgets, pending decisions,
   and ES actor reconciliation. Reconcile listed actors (result/close), then
   continue from the stated phase. State drift (branch / HEAD mismatch, or the
@@ -36,13 +33,46 @@ what a tool does; if a tool rejects a call, a gate is speaking.
   Identity is path + git state + the user's explicit disposition, never a
   digest.
 - Only on **self-activation** must the first proportional plan be approved by
-  the user card before plan review; explicit `/sfd` skips that pause.
+  the user before plan review; explicit `/sfd` skips that pause.
+
+## Workspace preparation (mandatory decision table)
+
+Before calling `sfd_start`, bring the repository to a state where the run can
+begin. This table is **mandatory, not advisory**: follow it case by case with
+your own session tools, asking the user a plain question whenever a choice
+below is theirs to make. Never lose the user's uncommitted work; record every
+user choice in the conversation verbatim.
+
+1. **Dirty workspace** → ask the user: [stop | auto commit (AI-generated
+   message)]; the user may instead type free text (e.g. a note about their
+   WIP) — honor it: leave the workspace as it is only when the user says so,
+   otherwise resolve the dirt as the user directs before continuing.
+2. **Clean + on main (or master)** → no question: name the feature branch
+   yourself (from the task slug, e.g. `sfd/<slug>`) and create it from main.
+3. **Clean + off main** — compute ahead/behind versus main, then offer the
+   user exactly these option sets (always plus "stop"):
+   - `0/0` → [stay on the current branch | new branch from the current branch]
+   - `>0/0` → [stay | new from current | new from main (switch to main first)
+     | fast-forward main to the current branch, then stay]
+   - `0/>0` → [stay | new from current | new from main (switch to main first)
+     | fast-forward the current branch to main, then branch from it]
+   - `>0/>0` (diverged) → [stay | new from current | new from main (switch to
+     main first) | you merge the current branch with main, resolve all
+     conflicts, and continue from the result]
+4. **Degenerate states** — no main-like reference, detached HEAD, or a merge
+   in progress → ask the user how to proceed (offer reasonable options for
+   the concrete situation, always including "stop"); do not guess a base.
+
+Branch creation, duplicate-name handling (ask the user when needed), and any
+merge you accepted above are always your own git operations. After
+preparation, call `sfd_start` — the state records the branch it observes (or
+the `branch` name you pass) as the run's starting point; planning follows.
 
 ## Phase model and your duties
 
 | Phase | Program (plugin) does | You do |
 |---|---|---|
-| CLEANUP | decision-table cards, dirty-workspace commits (gitCommit), switch-to-main / fast-forward ops, intent + userNote handoff, state write | name and create the feature branch per the handed-back intent (handle duplicates, ask when needed); for a diverged branch merge and resolve conflicts, then `sfd_start` again; decide next steps from any `userNote` |
+| CLEANUP | `sfd_start` records git facts (branch, base, cleanliness) and writes state; no git operations | workspace preparation per the mandatory decision table above (dirty handling, base decision, merges); name and create the feature branch (handle duplicates, ask when needed); then call `sfd_start` |
 | PLAN | injects template + knowledge index for this phase | identify Features/Sections from the request; write REQUIREMENTS.md and PLAN-FULL.md (markdown, never big JSON); plan structure is validated programmatically before review |
 | PLAN_REVIEW | serial A→B dispatch (ES zcode glm-5.3 max / ES codex), material-wave counting, ≥2 waves → hold + advisor; evidence bundles pre-assembled | admit/reject findings (each with evidence in the bundle); author bounded PLAN_DELTA repairs; both independent coverages must close before any implementer dispatch (hard gate) |
 | IMPL | deterministic TASK extract, dispatch impl_std (ES zcode deepseek-flash) or impl_large (ES codex), inline prompts with file contents, failure protocol (queue-continue → 5 min → retry → Feishu + block) | the one decision point per section: completeness + review-panel routing (first by risk, then reuse); write supplementary content in your answer, program merges it into the task file; you never edit task files directly |

@@ -1,12 +1,13 @@
 # SFD → DSH 插件化改造设计 v2
 
-> 需求权威见 [REQUIREMENTS.md](REQUIREMENTS.md)（grill-me 面谈收敛，2026-10-22）。本文件是实现设计；与合同冲突时以合同为准。
+> 需求权威见 [REQUIREMENTS.md](REQUIREMENTS.md)（grill-me 面谈收敛，2026-10-22；启动阶段去程序化修订 2026-10-27）。本文件是实现设计；与合同冲突时以合同为准。
 
 ## 1. 与 v1 的关键差异
 
 - 全部 actor 走 external-subagent（无 native subagent）：A 侧 zcode/glm-5.3/max，B 侧与 impl_large 走 codex，impl_std 走 zcode/deepseek-flash。
 - 砍掉全部 LLM 决策步与额外 subagent；触发 = 人命令或主 agent skill 式识别。
 - 单命令 `/sfd`（无子命令、无 import）；启动时自动探测状态文件并分流 新流程/接手。
+- **启动阶段去程序化（2026-10-27）**：工作区准备（脏区处理、基线决策、建分支）由主 agent 按流程 skill 中的强制决策表自行完成；`sfd_start` 不执行任何 git 操作，只读探测 git 事实并落盘状态。
 - 提交全部程序化经 `ctx.gitCommit`（重试 1 次 → 降级主 agent）；主 agent 不再决定提交时机，只判 impl 成败。
 - impl 判定与 review 面选择合并为一个决策点。
 - 全流程零并行（A 组 lens 串行）。
@@ -20,13 +21,15 @@
 ```
 ┌─ Host (index.js) ────────────────────────────────────────────┐
 │ sfd 状态机服务（单例，串行迁移，原子写 .agent-work/sfd-state.json）│
+│ 启动: 只读 git 事实探测（分支/基线/脏否）；工作区准备由主 agent    │
+│   按 skill 强制决策表自理，sfd_start 不做任何 git 操作            │
 │ 派发引擎: external_subagent ES 任务封装                        │
 │   · spawn（plan 只读模式 / build）、prompt 内联文件内容          │
 │   · 故障协议: queue-continue → 5min → 重试 → 飞书+阻塞          │
 │   · 路由覆盖参数（人指示"用某配置重启"）                          │
 │ 工具面: sfd_* 工具集（见 §4）                                  │
-│ 命令: /sfd（唯一；无状态→清理流程，有状态→注入接手简报）           │
-│ 集成: ctx.gitCommit（提交）、fetch（飞书 webhook）               │
+│ 命令: /sfd（唯一；无状态→交接含决策表指引，有状态→注入接手简报）   │
+│ 集成: ctx.gitCommit（COMMIT 阶段提交）、fetch（飞书 webhook）    │
 │ 脚本: section_plan.py / advisor_pack.py / archive_plan.py 复用 │
 ├─ Client (client.js) ──────────────────────────────────────────┤
 │ 右侧栏 tab（sidebarRight.tabs.register kind:'sfd'）             │
@@ -36,12 +39,13 @@
 │ 数据: Host sfd follow Remote 流                                │
 ├─ Skill（随 bundle）───────────────────────────────────────────┤
 │ 重写后的语义权威（规划方法/准入标准/边界/验收）                    │
+│ + 启动前准备的强制决策表（脏区/基线/退化状态）                     │
 └───────────────────────────────────────────────────────────────┘
 ```
 
 ## 3. 状态机与数据
 
-- `sfd-state.json`：阶段（CLEANUP→PLAN→PLAN_REVIEW→IMPL→COMMIT→CODE_REVIEW→ACCEPT→ARCHIVE）、每 unit 进度、review 槽、wave 计数、holds、actors（含 ES agent_id↔unit 映射、路由、重试计数、报告路径+哈希）、git.authority（分支/基/选择原文）、userDecisions。原子写，先落盘后副作用。
+- `sfd-state.json`：阶段（CLEANUP→PLAN→PLAN_REVIEW→IMPL→COMMIT→CODE_REVIEW→ACCEPT→ARCHIVE）、每 unit 进度、review 槽、wave 计数、holds、actors（含 ES agent_id↔unit 映射、路由、重试计数、报告路径+哈希）、git.authority（agent 上报分支 + 探测到的基线/脏否/detached/midMerge 事实）、userDecisions。原子写，先落盘后副作用。
 - `.agent-work/` 布局沿用原 skill（REQUIREMENTS/PLAN-FULL/sections/handoffs/reviews/evidence/advisor/archive），全部 markdown。
 - FEATURE-STATE.md 由状态渲染（派生视图）。
 - 接手对账：ES result/close 逐个核对；无报告=failed/cancelled（有界重试）；漂移→阻塞+选项。
@@ -53,7 +57,7 @@
 
 | 工具 | 职责 | 决策归属 |
 |---|---|---|
-| `sfd_start_check` | 触发（人命令后 agent 调用或 agent 自主）：ES 安装检查、状态探测、清理决策表执行 | 程序 |
+| `sfd_start(taskSummary, slug?, branch?)` | 启动落盘：ES 检查、只读探测 git 事实、写初始状态。工作区准备（决策表）由主 agent 在调用前自行完成 | 程序（事实记录） |
 | `sfd_plan_validate` | PLAN-FULL 结构校验 | 程序 |
 | `sfd_plan_review_run(slot)` | 派发 plan A/B reviewer（串行）、等待回收、计数 | 程序 |
 | `sfd_findings_pending` / `sfd_findings_admit` | 待准入清单（含拼接证据）/ 准入落账 | 主 agent |
@@ -81,7 +85,7 @@
 
 三个成分，职责互斥：
 
-1. **流程 skill（唯一，随 bundle）**：沿用名 `sectioned-feature-development`，frontmatter 描述改写为插件化流程（触发条件不变：非平凡、跨 owner、状态/接口影响）。内容：阶段模型、每阶段主 agent 职责与判定标准、sfd_* 工具面、门禁语义、失败/接手协议、如何读注入状态。**启动与接手的第一步都是读它**。
+1. **流程 skill（唯一，随 bundle）**：沿用名 `sectioned-feature-development`，frontmatter 描述改写为插件化流程（触发条件不变：非平凡、跨 owner、状态/接口影响）。内容：阶段模型、每阶段主 agent 职责与判定标准、sfd_* 工具面、门禁语义、失败/接手协议、如何读注入状态，以及**启动前工作区准备的强制决策表**（脏区/基线/退化状态；2026-10-27 起）。**启动与接手的第一步都是读它**。
 2. **注入上下文（程序生成）**：只含当前状态快照——阶段/unit、开放 findings、预算余量、待决策项、拼接证据内容、skill 引用。绝不含整体流程描述；agent 忘流程自己重读 skill。
 3. **知识库（planning references，随 bundle，基本不动）**：由流程 skill 按阶段引用（如规划阶段给路由目录），本体 agent 自行 read，不经插件专门流程。
 
@@ -93,7 +97,7 @@
 
 | 时机 | 注入内容（状态 + 证据，无流程） |
 |---|---|
-| `/sfd` 启动 | ES 检查结果、清理决策表当前分支/选项、（自动激活时）首计划批准卡片 |
+| `/sfd` 启动 | ES 检查结果、启动准备决策表指引（skill 强制版摘要）、（自动激活时）首计划批准 |
 | 接手简报 | 阶段/unit 快照、actors 对账结果、开放决策、预算余量、skill 引用 |
 | plan review 准入 | A/B 报告内容、待准入 finding 清单（带 ID）、拼接证据 |
 | impl 判定 | TASK、HANDOFF、diff stat、检查结果、（合并决策点）review 面请求 |
@@ -120,7 +124,7 @@
 
 ## 10. 分期
 
-- **P0**：Host 骨架+状态机+`/sfd` 探测分流+清理决策表+gitCommit 集成+ES 检查。
+- **P0**：Host 骨架+状态机+`/sfd` 探测分流+`sfd_start` 只读探测落盘（工作区准备为 skill 强制决策表，agent 自理）+ES 检查。
 - **P1**：plan 校验/review 编排+准入工具+TASK 生成/确认+impl 派发+故障协议。
 - **P2**：code review 编排+wave 门禁+B1/B2+advisor+飞书。
 - **P3**：侧栏面板+接手对账+归档。
