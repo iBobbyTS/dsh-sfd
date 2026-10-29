@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initialState, transition, loadState, detectWork, gate, renderBrief, AGENT_WORK } from '../lib/state.js';
+import { createFlow } from '../lib/flow.js';
 
 const withRepo = async (fn) => {
   const dir = await mkdtemp(join(tmpdir(), 'sfd-state-'));
@@ -75,12 +76,15 @@ test('gate: DONE and holds block, otherwise allowed', () => {
   assert.equal(gate(held).allowed, false);
 });
 
-test('renderBrief: status snapshot, no flow narrative', () => {
+test('renderBrief reflects dynamic graph and current obligations', () => {
   const s = initialState('/repo');
-  const brief = renderBrief({ ...s, phase: 'IMPL', plan: { file: '.agent-work/PLAN-FULL.md', review: { A: { state: 'clean', report: '.agent-work/reviews/plan-A.md' } }, materialWaves: 1 }, units: { S01: { status: 'in-impl', wavesUsed: 2 } } }, (k) => `[${k}]`);
-  assert.match(brief, /Phase: IMPL/);
-  assert.match(brief, /S01/);
-  assert.match(brief, /waves 2\/5/);
-  assert.match(brief, /state\.readSkillFirst/); // t() stub: the skill-reference line goes through i18n
-  assert.doesNotMatch(brief, /sha256/i); // no hash accounting anywhere
+  s.phase = 'ACTIVE';
+  s.task = { summary: 'Add test coverage' };
+  s.flow = createFlow([{ id: 'S01', subsections: ['A'] }]);
+  const brief = renderBrief(s, (k) => '[' + k + ']');
+  assert.match(brief, /Phase: ACTIVE/);
+  assert.match(brief, /Workflow revision: 1/);
+  assert.match(brief, /S01\/A:checkpoint/);
+  assert.match(brief, /plan:A/);
+  assert.match(brief, /state\.readSkillFirst/);
 });

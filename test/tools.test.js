@@ -60,13 +60,7 @@ test('sfd_start runs cleanup, derives branch from taskSummary, writes state', as
   const dir = await makeRepo();
   try {
     const c = makeCtx(dir);
-    const mod = await import('../lib/es.js');
-    // monkey-patch preflight via module cache is not possible; instead the tool
-    // calls preflight() from es.js — for the test we point ES_* env to a stub.
-    // Simplest: temporarily replace the module's exported function is not supported,
-    // so this test runs preflight against the real ES daemon check. Skip if absent.
-    const es = await mod.preflight();
-    if (!es.ok) return; // environment lacks ES; skip silently
+    // Startup and resumption do not require a currently available ES daemon.
     registerSfdTools(c.getCtx(), { askCard: async () => ({ answers: [{ selected: [] }] }), t: async () => t });
     const r = await c.call({ taskSummary: 'Add dark mode toggle support' });
     assert.equal(r.ok, true);
@@ -85,9 +79,7 @@ test('sfd_start runs cleanup, derives branch from taskSummary, writes state', as
 test('sfd_start returns brief without touching repo when a run exists', async () => {
   const dir = await makeRepo();
   try {
-    const mod = await import('../lib/es.js');
-    const es = await mod.preflight();
-    if (!es.ok) return;
+    // Initialization remains usable when ES is offline; role gates run at dispatch.
     await mkdirWrite(dir);
     const c = makeCtx(dir);
     registerSfdTools(c.getCtx(), { askCard: async () => { throw new Error('must not ask'); }, t: async () => t });

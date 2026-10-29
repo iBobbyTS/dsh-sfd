@@ -1,125 +1,40 @@
-/**
- * @ibobbyts/dsh-sfd — Sectioned Feature Development host plugin (P0).
- *
- * P0 scope: `/sfd` command with state detection + cleanup decision table +
- * ES preflight. Later phases add plan review orchestration, ES dispatch
- * engine, code review waves, advisor, and the side panel.
- *
- * The command injects its result into the conversation for the main agent;
- * program flow beyond this gate stays with the state machine in later phases.
- */
-import { loadState, detectWork, renderBrief } from './lib/state.js';
-import { preflight } from './lib/es.js';
+/** DSH SFD entry: one command, one durable task graph, model-owned decisions. */
+import { detectWork, renderBrief } from './lib/state.js';
 import { inspect } from './lib/cleanup.js';
 import { makeT } from './lib/i18n.js';
 import { registerSfdTools } from './lib/tools.js';
+import { registerWorkflowTools } from './lib/workflow-tools.js';
 import { sfdSkillProvider } from './lib/skill-provider.js';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
-export const inject = ['commands', 'agents', 'userQuestions', 'gitCommit', 'workingDirectory', 'tools', 'skills'];
+export const inject=['commands','agents','userQuestions','gitCommit','workingDirectory','tools','skills'];
 
 export function apply(ctx) {
-  // Serve the flow skill from this package's skills/ directory so it
-  // installs/upgrades/uninstalls together with the plugin.
-  try {
-    ctx.skills?.registerProvider?.(() => sfdSkillProvider);
-  } catch { /* skills service absent or provider rejected: cards still work */ }
-  // Host plugins have no ctx.locale (a browser-client service). lib/i18n.js
-  // resolves the GUI language on the host side; the promise resolves before
-  // any card is shown, and a rejection would surface as a command error.
-  const tReady = makeT(ctx).catch(() => (key) => key);
-
-  const askCard = async (agent, signal, question) => {
-    // The user-questions request crosses the Remote gateway, which rejects any
-    // non-lossless JSON property — including enumerable keys whose value is
-    // undefined. Omit optional fields entirely when absent.
-    const item = { id: question.id, question: question.question };
-    if (question.header !== undefined) item.header = question.header;
-    if (question.detail !== undefined) item.detail = question.detail;
-    if (question.options !== undefined) item.options = question.options;
-    const answer = await ctx.userQuestions.ask({ agent, signal, questions: [item] });
-    return answer;
+  ctx.skills.registerProvider(() => sfdSkillProvider);
+  const translator=makeT(ctx).catch(()=>key=>key);
+  const askCard=async(agent,signal,question)=>{
+    const item={id:question.id,question:question.question};
+    for(const field of ['header','detail','options'])if(question[field]!==undefined)item[field]=question[field];
+    return ctx.userQuestions.ask({agent,signal,questions:[item]});
   };
-
   ctx.commands.register({
-    name: 'sfd',
-    description: 'Start or resume a sectioned-feature-development run in this repository.',
-    recordInput: false,
-    handler: async ({ agent, signal }) => {
-      // Diagnostic beacon: proves whether the handler runs at all when a
-      // fresh-session /sfd appears to do nothing.
-      try { ctx.logger?.info?.('sfd: /sfd handler entered'); } catch { /* logger absent */ }
-      signal.throwIfAborted();
-      const t = await tReady;
-      try { ctx.logger?.info?.('sfd: root-agent check', { id: agent?.id }); } catch { /* noop */ }
-      if (ctx.agents.get(agent.id) !== agent || !ctx.agents.roots().includes(agent)) {
-        return { kind: 'error', text: t('state.notRootAgent') };
-      }
-
-      // Determine the repository root from the session's working directory.
-      let cwd;
-      try {
-        cwd = await ctx.workingDirectory?.ensure(agent);
-      } catch { cwd = undefined; }
-      try { ctx.logger?.info?.('sfd: cwd resolved', { cwd: cwd ?? null }); } catch { /* noop */ }
-      if (!cwd) return { kind: 'error', text: t('state.noCwd') };
-
-      let facts;
-      try {
-        facts = await inspect(cwd);
-      } catch {
-        return { kind: 'error', text: t('state.notGit') };
-      }
-      const root = facts.root;
-
-      // 1. ES preflight (hard requirement before any flow starts)
-      const es = await preflight();
-      if (!es.ok) {
-        const text = es.blocking === 'es-missing'
-          ? t('state.esMissing')
-          : t('state.esProfileMissing').replace('{names}', (es.missingProfiles ?? []).join(', '));
-        return { kind: 'error', text };
-      }
-
-      // Every success result must ALSO reach the model: command results are
-      // log-only, so deliver the text as a followup user message that wakes
-      // the agent (the /goal command pattern).
-      const deliver = (text) => {
-        try {
-          agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }));
-          try { ctx.logger?.info?.('sfd: followup delivered'); } catch { /* noop */ }
-        } catch (error) {
-          // followup unavailable: the log-only card still shows
-          try { ctx.logger?.warn?.('sfd: followup failed', { error: String(error) }); } catch { /* noop */ }
-        }
-        return { kind: 'success', text };
-      };
-
-      // 2. Detect existing SFD work
-      const detection = await detectWork(root);
-
-      if (detection.present && detection.kind === 'state') {
-        return deliver(renderBrief(detection.state, t));
-      }
-      if (detection.present && detection.kind === 'legacy-markers') {
-        return deliver([
-          t('state.legacyTitle'),
-          `- ${detection.markers.join('\n- ')}`,
-          '',
-          t('state.legacyBody'),
-        ].join('\n'));
-      }
-
-      // 3. Fresh run: hand the flow to the agent. `/sfd` never starts the
-      // cleanup gate or writes state itself — the agent must first know the
-      // task (it asks the user when the session has no context) and then
-      // call sfd_start, which runs cleanup and creates the real branch.
-      return deliver([t('state.fresh'), '', t('state.handoff')].join('\n'));
+    name:'sfd',description:'Start or resume SFD without resetting the active workflow',recordInput:false,
+    handler:async({agent,signal})=>{
+      signal?.throwIfAborted();
+      const t=await translator;
+      if(ctx.agents.get(agent.id)!==agent || !ctx.agents.roots().includes(agent))return{kind:'error',text:t('state.notRootAgent')};
+      const cwd=await ctx.workingDirectory.ensure(agent);
+      if(!cwd)return{kind:'error',text:t('state.noCwd')};
+      let root;try{root=(await inspect(cwd)).root;}catch{return{kind:'error',text:t('state.notGit')};}
+      const existing=await detectWork(root);
+      const message=existing.kind==='state'?renderBrief(existing.state,t)
+        :existing.kind==='legacy-markers'?`${t('state.legacyTitle')}\n${existing.markers.join(', ')}\n${t('state.legacyBody')}`
+        :`${t('state.fresh')}\n\n${t('state.handoff')}`;
+      // Command result is UI-only: enqueue a copy for the current Main agent.
+      agent.followup(createUserMessage({content:[{type:'text',text:message}],source:{kind:'user'}}));
+      return{kind:'success',text:message};
     },
   });
-
-  registerSfdTools(ctx, {
-    askCard,
-    t: () => tReady,
-  });
+  registerSfdTools(ctx,{askCard,t:()=>translator});
+  registerWorkflowTools(ctx);
 }

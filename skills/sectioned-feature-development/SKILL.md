@@ -1,83 +1,27 @@
 ---
 name: sectioned-feature-development
-description: "Plugin-driven Sectioned Feature Development for DSH: the /sfd command and sfd_* tools own scheduling, accounting, gates and dispatch; the main agent owns semantic judgment, finding admission and acceptance. Use for nontrivial implementation or repair with cross-owner, state or interface changes, unclear impact, or failed whole-change convergence. Not for an exact local fix solely because its file is risky."
+description: "DSH dynamic Sectioned Feature Development with mutable graph, independent review evidence, guarded transitions and explicit user waivers."
 ---
 
-# Sectioned Feature Development (plugin flow)
+# Sectioned Feature Development — dynamic runtime
 
-The DSH plugin `@ibobbyts/dsh-sfd` owns everything mechanical: state
-(`sfd-state.json`, program-only), workspace cleanup, branch creation, actor
-dispatch, wave counting, hard gates, reports to disk, commits via
-dsh-git-commit, notifications. You — the main agent — own semantics only:
-planning, finding admission, rework judgment, acceptance. Never reimplement
-what a tool does; if a tool rejects a call, a gate is speaking.
+Main decides *what to do and why*; the DSH plugin remembers *which required steps actually happened*. This is not a fixed-stage controller. When an SFD tool rejects a transition, resolve the missing evidence; do not bypass it by manually editing machine state.
 
-## Starting and resuming
+## Start, progress, review
 
-- `/sfd` (user) or a matching request (you may self-activate): the command
-  detects state and injects either a **resume brief** or a **start handoff**.
-  Both begin with reading this skill.
-- New run: you must know the task first. If the session has no task context,
-  ask the user what to build — never invent one. Then call `sfd_start` with a
-  one-line `taskSummary` (and optional `slug`). The tool runs the cleanup
-  decision table (cards), switches the workspace back to main when the user
-  chose a main base, executes fast-forwards, and hands you the resolved
-  intent plus any text the user typed into a card (`userNote`). **You** name
-  and create the feature branch (handle duplicate names; ask the user when
-  needed); if the user chose to stay on / branch from the current branch,
-  honor that. Do not switch branches before `sfd_start` hands the base
-  decision back to you.
-- Resume: the brief states phase, open findings, budgets, pending decisions,
-  and ES actor reconciliation. Reconcile listed actors (result/close), then
-  continue from the stated phase. State drift (branch / HEAD mismatch, or the
-  recorded plan file missing) blocks; offer the user options.
-- No hash accounting anywhere: never record, recompute or check content
-  hashes (sha256 etc.) of plans, advisor requests/results or any artifact.
-  Identity is path + git state + the user's explicit disposition, never a
-  digest.
-- Only on **self-activation** must the first proportional plan be approved by
-  the user card before plan review; explicit `/sfd` skips that pause.
+- `/sfd` resumes without recreating the flow. `sfd_start` handles prior workspace/branch-base choices; Main establishes the authorized non-main feature branch and writes `.agent-work/REQUIREMENTS.md` and `PLAN-FULL.md`.
+- Main calls `sfd_flow_init` once with true Section IDs/dependencies, implementation profiles, and genuine Subsections. Later revisions use `sfd_flow_revise`; resume by `sfd_flow_status`. Never hand-edit `.agent-work/sfd-state.json`.
+- Plan review A closes before independent Plan B; both precede implementation. Each declared Subsection gets an independently executed R01 scoped checkpoint before its dependent child. Parent reconciliation checks cross-child invariants and consumer behavior.
+- Final Code A needs complete R01 and selected independent specialist coverage. Set risk lenses with `sfd_flow_revise(action="set_lenses",...)` when the actual diff requires them. Code B1 is an independent **blind complete review** only after A findings are resolved. B2 reconciles repairs/invalidated evidence on the same head; don't invent an extra reviewer call when no work remains.
+- Dispatch `sfd_actor_start(taskId,assignment,lens?)`, collect via `sfd_actor_collect(actorId)` until terminal, read the original report, and use `sfd_review_admit` or `sfd_task_finish`. Actor spawn success, running status, unclosed report or model's bare CLEAN claim is insufficient evidence.
+- To repair admitted material findings, dispatch `sfd_actor_start(taskId="S01:repair",assignment="...")`; it uses the Section implementer route and consumes one of five cumulative repair waves. Collect its real terminal result. Material finding closure requires a real independent `CLOSURE_VERIFY` result plus specific Main decision via `sfd_findings_close`. After code repairs, re-establish invalidated Code A/B evidence. `sfd_section_accept` checks A, B1/B2 (or user waiver), tests and feature path; `sfd_flow_complete` requires all Sections and no unresolved material findings.
 
-## Phase model and your duties
+## Dynamic work and authority
 
-| Phase | Program (plugin) does | You do |
-|---|---|---|
-| CLEANUP | decision-table cards, dirty-workspace commits (gitCommit), switch-to-main / fast-forward ops, intent + userNote handoff, state write | name and create the feature branch per the handed-back intent (handle duplicates, ask when needed); for a diverged branch merge and resolve conflicts, then `sfd_start` again; decide next steps from any `userNote` |
-| PLAN | injects template + knowledge index for this phase | identify Features/Sections from the request; write REQUIREMENTS.md and PLAN-FULL.md (markdown, never big JSON); plan structure is validated programmatically before review |
-| PLAN_REVIEW | serial A→B dispatch (ES zcode glm-5.3 max / ES codex), material-wave counting, ≥2 waves → hold + advisor; evidence bundles pre-assembled | admit/reject findings (each with evidence in the bundle); author bounded PLAN_DELTA repairs; both independent coverages must close before any implementer dispatch (hard gate) |
-| IMPL | deterministic TASK extract, dispatch impl_std (ES zcode deepseek-flash) or impl_large (ES codex), inline prompts with file contents, failure protocol (queue-continue → 5 min → retry → Feishu + block) | the one decision point per section: completeness + review-panel routing (first by risk, then reuse); write supplementary content in your answer, program merges it into the task file; you never edit task files directly |
-| COMMIT | gates (terminal result, HANDOFF required fields, declared checks, diff within scope), then `ctx.gitCommit.commit()` (retry 1×, fallback to you) | semantic rework judgment (rare): redispatch with fresh context |
-| CODE_REVIEW | serial lens dispatch, wave budget 5/section, closure verify, B1 blind prompt construction, B2 same-candidate check | finding verification, clustering, admission, closure verdicts — using the pre-assembled evidence bundles |
-| ACCEPT | final journey checks, archive on completion | prove each Feature journey; required failures block readiness |
-| ADVISOR (any) | freeze, render diagnosis, advisor_pack, Feishu, **whole flow holds** | nothing until the user brings results back; then decide next step and resume |
+- Main may insert extra steps, Sections or Subsections at any time, without rebuilding completed unaffected work. Insert tasks ahead of their consumers to make their execution mandatory. Risk-based local investigation is always free.
+- Only an explicit **user** instruction permits `waive_code_b` or `restore_code_b`. Pass `authorization:"user"` plus the authentic user reason. Program stores this as a recorded instruction, not an identity-proof; Main cannot invent consent. Waivers affect only Section B1/B2, never Plan A/B, Code A, required checkpoints or testing. Acceptance must say `ACCEPTED_WITH_WAIVER`, not CLEAN.
+- Cancel active B actors, then collect terminal status before revising. Do not treat cancellation request as completion. No unverified concurrent writer/reviewer on the same mutable candidate. Missing ES runtime/profile blocks that specific dispatch; do not fake a fallback.
+- The plugin cannot guard unrelated bash/MCP dispatch. Run SFD work through its named tools. Main owns implementation delegation, acceptance semantics, tests, commits and delivery; no automatic push.
+- Advisor is external and human-mediated after a real trigger, not another reviewer. Use its existing [authority](references/advisor-escalation.md) when applicable.
 
-## Hard rules
-
-- Zero parallelism: every dispatch is serial, one actor at a time.
-- Actor "running failure" = infrastructure (network/MCP). Agent loops are NOT
-  failures — manage them with the observe tool; the panel shows facts.
-- Reports land in `.agent-work/reviews|handoffs/` and are injected into your
-  context; read them, don't re-read disk.
-- Markdown for every human artifact; JSON only in `sfd-state.json`.
-- Human may direct re-dispatch with route override parameters.
-- The old manual flow is retired: never follow narratives from pre-plugin SFD
-  documents if you encounter them.
-- Cross-repo sections: a section contract may declare `- Repository:` (omitted
-  = current repo). All state and artifacts stay in the primary repo's
-  `.agent-work/`; SFD does not write into an external repo's `.agent-work/`
-  (an existing one there is left untouched). The plugin does
-  not manage git state there — you manage its branches and commits yourself
-  (no extra user authorization needed), under the same naming rules.
-
-## Knowledge base (read on demand, by stage)
-
-Planning references live with this skill under `references/`:
-[Section planning](references/section-planning.md),
-[planning router](references/planning/router.md),
-[reviewer orchestration](references/reviewer-orchestration.md),
-[bounded review](references/bounded-review.md),
-[integration and testing](references/integration-and-testing.md),
-[artifact lifecycle](references/artifact-lifecycle.md),
-[advisor escalation](references/advisor-escalation.md).
-Read the named authority when a stage first applies; reuse text already in
-context; reacquire after compaction or takeover.
+Read only the currently triggered [Section planning](references/section-planning.md), [Subsections](references/subsections.md), [Reviewer orchestration](references/reviewer-orchestration.md), [Bounded review](references/bounded-review.md), [Integration/testing](references/integration-and-testing.md), or [planning router](references/planning/router.md) guide. Preserve original reports and meaningful scope guarantees, but avoid secondary state stores and routine cost diaries.
