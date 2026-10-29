@@ -21,17 +21,26 @@ import { ModelSettingsStore } from './lib/models.js';
 import { createCatalog } from './lib/catalog.js';
 import { resolveProjectRoot } from './lib/project.js';
 import { createHandler, ROUTE } from './lib/rpc.js';
+import { createStageSpawner } from './lib/spawn.js';
+import { createStageContext } from './lib/context.js';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
 export const inject = ['commands', 'agents', 'workingDirectory', 'tools', 'skills'];
 
 export function apply(ctx) {
+  // One settings store for both faces: the panel edits it, and stage spawn
+  // reads the same instance, so a save is visible to the next dispatch.
+  const models = new ModelSettingsStore();
+  const spawner = createStageSpawner({ store: models });
+  // Stage context: one block per plugin-owned state change, pushed into the
+  // agent's own step. This is what keeps a long run on the skill without the
+  // plugin owning the procedure.
+  const stageContext = createStageContext();
   // The right-side panel's data channel: stage model routing plus the
   // spawnable external-subagent catalog. It rides Connection's authenticated
   // /api transport, so it is registered in its own injection scope — a Host
   // without a web client keeps the command and tools and simply has no panel.
   ctx.inject(['connection'], (rpcCtx) => {
-    const models = new ModelSettingsStore();
     const catalog = createCatalog();
     const service = {
       /** Both scopes for the Session's project (see lib/models.js). */
@@ -108,7 +117,7 @@ export function apply(ctx) {
       if (!es.ok) {
         const text = es.blocking === 'es-missing'
           ? t('state.esMissing')
-          : t('state.esProfileMissing').replace('{names}', (es.missingProfiles ?? []).join(', '));
+          : t('state.esNoSpawnable');
         return { kind: 'error', text };
       }
 
@@ -150,7 +159,39 @@ export function apply(ctx) {
     },
   });
 
+  // Inject the stage block before a step of a root agent that has an SFD run.
+  // `agent/pre-step` is the only seam that survives an agent forgetting what it
+  // read: the block is part of the step's own input. Failure here must never
+  // break a turn, so everything is contained.
+  ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
+    const decision = await next();
+    try {
+      if (decision?.kind === 'reject' || payload?.signal?.aborted) return decision;
+      const agent = payload?.agent;
+      if (!agent || !ctx.agents.roots().includes(agent)) return decision;
+      let cwd;
+      try {
+        cwd = ctx.workingDirectory?.get?.(agent.session);
+      } catch { return decision; }
+      const t = await tReady.catch(() => (key) => key);
+      const text = await stageContext.textFor({ sessionId: agent.id, cwd, t });
+      if (typeof text !== 'string' || text.length === 0) return decision;
+      return {
+        ...decision,
+        messages: [...decision.messages, createUserMessage({
+          content: [{ type: 'text', text }],
+          source: { kind: 'user' },
+        })],
+      };
+    } catch {
+      return decision;
+    }
+  }), 'sfd: stage context');
+
   registerSfdTools(ctx, {
     t: () => tReady,
+    store: models,
+    spawner,
+    context: stageContext,
   });
 }

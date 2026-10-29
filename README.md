@@ -14,7 +14,7 @@ SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整�
 ## 安装与启用
 
 - 本包是 DSH 的宿主插件，由所在 bundle 的 [`cordis.patch.yml`](cordis.patch.yml) 插入激活（`id: dsh-sfd`）。
-- 前置条件：`/sfd` 启动时会做 external-subagent（ES）预检；ES 缺失或 profile 缺失时直接报错并给出原因，不会静默开始。
+- 前置条件：`/sfd` 启动时会做 external-subagent（ES）预检；ES 缺失或没有任何可 spawn 的 subagent 时直接报错并给出原因，不会静默开始。本插件**不使用 ES profile**。
 - 流程 skill 随包分发（`skills/sectioned-feature-development/`），经 `ctx.skills` provider 注册，安装/升级/卸载与插件一体。
 - 卡片与简报文案在 [`locale/`](locale/) 的 JSON 中（中/英）。
 
@@ -27,9 +27,22 @@ SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整�
 - 每行一个模型下拉，左侧是原生/外部切换开关——该开关**固定为 external 且禁用**，因为流程的每个阶段都只派发给外部 subagent。
 - 模型候选来自 external-subagent 守护进程：宿主执行 `external-subagent subagents status --probe`（与 MCP 的 `external_subagent_status(probe=true)` 同一数据源），只列出 enabled + `spawn_supported` + 可 spawn 传输的 subagent，并按 subagent 分组给出其 `models.tokens`。目录缓存 30 秒，面板右上角的刷新按钮会强制重新探测；CLI 位置按 `EXTERNAL_SUBAGENT_BIN` → 常见安装路径（`/opt/homebrew/bin`、`/usr/local/bin`、`~/.local/bin`）→ `PATH` 依次解析。
 
-模型路由保存在 `$DSH_HOME/dsh-sfd.json`（权限 0600、原子写）：`global.stages` 对所有项目生效，`projects[<repo root>].stages` 只对该仓库生效。Global 里某项为 `null` 表示未配置；Current Project 里某项为 `null` 表示**继承 Global**（下拉第一项显示 `继承 Global (subagent - model)` / `Inherit Global (subagent - model)`）。当前版本只做配置存储，等 P1/P2 的派发器实现后由它读取这两层选择。
+模型路由保存在 `$DSH_HOME/dsh-sfd.json`（权限 0600、原子写）：`global.stages` 对所有项目生效，`projects[<repo root>].stages` 只对该仓库生效。Global 里某项为 `null` 表示未配置；Current Project 里某项为 `null` 表示**继承 Global**（下拉第一项显示 `继承 Global (subagent - model)` / `Inherit Global (subagent - model)`）。这两层选择由插件的派发器消费（见下）。
 
 > 面板的浏览器半（`lib/client.js`）是新增的 `dsh.client` 能力。DSH 只在启动时扫描一次 `dsh.client` 声明，所以**升级后第一次启用需要重启 DSH**（Desktop 退出重开，或重启 dsh Host）；之后每个会话的右栏布局会自己恢复。
+
+## 阶段派发（spawn 由插件，等待由 agent）
+
+`sfd_spawn_stage(stage, prompt, unit?)` 是唯一的派发入口：
+
+- **插件决定**：阶段 → 角色（plan review / implementation / code review）、该阶段的 subagent 与 model（Current Project 优先，其次 Global）、权限模式（评审 = `plan` 只读，实现 = `build`）、effort（按 subagent 查表），以及**角色指令文本**——它作为 `developer_instructions` 随这次 spawn 内联下发，因此不再需要任何 ES profile，执行者与模型可以自由组合。
+- **调用方只给**：任务正文（要内联的合同/计划/diff、报告落盘路径、这一趟要判定什么）。角色规则不要重复写进 prompt。
+- **交接文件由 agent 写**：评审请求 / TASK / 报告路径都进 `.agent-work/`，spawn 的 prompt 只引用这些路径；角色规则不进 prompt。
+- **评审计数归插件**：每次 spawn 在同一次原子写里把计数 +1（阶段级；给了 `unit` 就是 `阶段@unit`），随 actor 一起落盘。报告与判定仍归 agent，但“这个 section 用了几轮评审”不再靠模型记：它会出现在注入块、接手简报与状态文件里。
+- **派发即止**：工具返回 ES `agent_id` 与本次路由，并把 actor 记进 `sfd-state.json`（id ↔ 阶段、路由、来源、spawn 时间），接手对账读的就是它。**等待、取报告、关闭任务由 agent 自己做**：`external_subagent_wait` → `external_subagent_result` → `external_subagent_close`；插件不读报告、不做判定，agent 读完自己继续流程。
+- **阶段上下文注入**：每次插件状态变更（`sfd_start`、一次 spawn）后，agent 的下一步会收到一段 `[SFD]` 阶段块——阶段、任务、计划/单元/actors（id、路由、已 spawn 多久）、hold、一句下一步提示、工具与 skill 指针。它按 state revision 去重，稳定步骤不重复、不读盘。
+- **advisor 仍归插件**：需要升级时 agent 调 `sfd_advisor_trigger`，由插件冻结证据、渲染诊断、打包、发飞书并置 hold；是否升级由 agent 判断。
+- 拒绝先于建任务：阶段未配置模型、选定 subagent 当前不可 spawn、运行已挂起或已 DONE，都会得到结构化错误而不是一个失败任务。
 
 ## 快速开始
 
@@ -46,13 +59,15 @@ SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整�
 - `/sfd` 命令：状态探测与分流（接手简报 / 旧目录标记提示 / 新流程交接，交接含启动准备决策表指引）。
 - `sfd_start` 工具：ES 预检、只读探测 git 事实（分支/基线/脏否）、原子写状态文件；不执行任何 git 写操作——工作区准备由主 agent 按 skill 决策表自行完成。
 - 右侧面板：guide 卡片（浏览器下方）+ Status / Configuration 两页；Configuration 的 Global 与 Current Project 各配 6 个阶段的模型（external 固定），候选来自 external-subagent 探针。
+- `sfd_spawn_stage` 工具：按面板路由 + 内置角色指令内联派发 ES 任务（不使用 profile），记录 actor 后把 `agent_id` 交回 agent 自行 wait/result/close。
+- 阶段上下文注入：`agent/pre-step` 按 revision 推送 `[SFD]` 阶段块（事实 + 下一步指针），让主 agent 不必靠记忆维持流程。
 
 尚未实现（见 [DESIGN.md](DESIGN.md) §10 分期）：
 
 - P1：计划结构校验、计划评审编排与 finding 准入、TASK 生成与 `impl_*` 派发、故障协议。
 - P2：代码评审编排、wave 门禁、B1/B2 盲审、advisor 与飞书通知。
 - P3：侧栏面板的 Status 实时进度、接手对账、归档（面板骨架与模型路由配置已提前实现）。
-- P4：流程 skill 打磨、profile 管理按钮。
+- P4：流程 skill 打磨、ES 状态区与面板交互细节。
 
 因此当前版本能把一次 SFD 运行从 `/sfd` 推进到规划产出，但**不能**自动走完评审、实现、提交与验收。
 
@@ -76,7 +91,7 @@ JSON 损坏时，读取会直接报错；如果只有 `PLAN-FULL.md` / `REQUIREM
 
 ### 没有安装 external-subagent 会怎样？
 
-启动即失败：`/sfd` 与 `sfd_start` 都会先做 ES 预检，缺失时返回明确错误（`es-missing` 或缺失的 profile 名），不会进入启动准备或规划。先装 ES，再执行 `/sfd`。
+启动即失败：`/sfd` 与 `sfd_start` 都会先做 ES 预检，缺失时返回明确错误（`es-missing`，或已装但无可 spawn subagent 的 `es-subagents`），不会进入启动准备或规划。先装 ES 并 `external-subagent agents enable <zcode|dsh|codex|agy>`，再执行 `/sfd`。
 
 ### feature 分支是谁创建的？工作区清理是谁做的？
 

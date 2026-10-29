@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCatalog, parseCatalog, resolveBinary, spawnBlocker } from '../lib/catalog.js';
+import { createCatalog, parseCatalog, spawnBlocker } from '../lib/catalog.js';
+import { resolveBinary } from '../lib/es-cli.js';
 
 const row = (overrides = {}) => ({
   subagent: 'zcode',

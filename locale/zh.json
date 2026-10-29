@@ -8,7 +8,7 @@
     "notRootAgent": "/sfd 需要在当前活跃的根会话 agent 中执行。",
     "noCwd": "本会话没有工作目录。",
     "esMissing": "需要 external-subagent 但未检测到。请先安装：brew install external-subagent（或见其 README），然后执行 `external-subagent agents enable zcode codex`。",
-    "esProfileMissing": "缺少必需的 external-subagent profile：{names}。请创建，或使用面板里的 profile 安装器。",
+    "esNoSpawnable": "external-subagent 已安装，但当前没有可 spawn 的 subagent。先启用一个：`external-subagent agents enable <zcode|dsh|codex|agy>`。",
     "resume": "检测到既有 SFD 状态——接手简报如下。",
     "fresh": "仓库中未发现 SFD 状态。",
     "prepare": "启动前的工作区准备（强制决策表；完整版见 skill）：\n1) 工作区脏 → 询问用户：[停止 | 自动提交（AI 生成提交消息）]；用户输入自由文本时按其指示处理——绝不丢失未提交工作。\n2) 干净且在 main/master → 不询问：自行命名 feature 分支（如 sfd/<slug>）并从 main 创建。\n3) 干净且不在 main → 计算相对 main 的 ahead/behind，向用户提供且仅提供以下选项（始终附带「停止」）：0/0 → [留在当前分支 | 从当前分支开新分支]；ahead>0,behind=0 → [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 先把 main fast-forward 到当前分支再留下]；ahead=0,behind>0 → [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 先 fast-forward 到 main 再从其开分支]；ahead>0,behind>0（分叉）→ [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 由你与 main 合并、解决全部冲突后继续]。\n4) 无 main 类引用 / 分离 HEAD / merge 进行中 → 询问用户如何继续（必须包含「停止」）；绝不猜测基线。\n分支命名、创建、重名处理与任何合并都是你自己的 git 操作。",
@@ -21,6 +21,38 @@
   "tool": {
     "existingRun": "本仓库已存在 SFD run；请按上面的简报接手，不要重新开始。",
     "started": "SFD run 已在分支 {branch} 上启动。",
-    "startedDirty": "注意：sfd_start 运行时工作区仍是脏的——请按你的决策表处理继续，绝不丢失用户的未提交工作。"
+    "startedDirty": "注意：sfd_start 运行时工作区仍是脏的——请按你的决策表处理继续，绝不丢失用户的未提交工作。",
+    "spawnNoRun": "本仓库还没有 SFD 运行；先执行 /sfd 并调用 sfd_start。",
+    "spawnNoModel": "阶段 {stage} 还没有配置模型。请在右侧面板 Configuration 的 Global 或 Current Project 里为它选一个 subagent 与模型。",
+    "spawnSubagent": "阶段 {stage} 选定的 subagent「{subagent}」当前不可 spawn；检查 external-subagent 的启用状态与运行时。",
+    "spawnUnavailable": "本进程没有装配派发器，无法 spawn。",
+    "spawnEmptyPrompt": "spawn 需要非空的任务正文。",
+    "spawnFailed": "派发失败：{reason}",
+    "spawned": "已在阶段 {stage} 派发 ES 任务：{subagent} / {model}（{mode}，路由来自 {source}），agent_id = {id}。",
+    "spawnNext": "下一步（由你执行）：调用 external_subagent_wait(agent_id={id}) 等待；终结后调用 external_subagent_result 读取报告并落盘到指定路径，再调用 external_subagent_close 关闭任务。",
+    "spawnCount": "本轮计数：{key} = {value}",
+    "spawnBadUnit": "unit 参数无效：{reason}"
+  },
+  "ctx": {
+    "header": "[SFD] 阶段 {phase} · 仓库 {root}",
+    "task": "任务：{summary}",
+    "plan": "计划：{file} · 评审 A {a} / B {b}",
+    "units": "单元：{items}",
+    "actors": "已派发 actor：{items}",
+    "hold": "挂起：{kind} — {reason}",
+    "next": "下一步：{hint}",
+    "tools": "派发用 sfd_spawn_stage；等待 / 取结果 / 关闭用 external_subagent_wait / external_subagent_result / external_subagent_close —— 结果由你读，插件不读。",
+    "skill": "完整流程见 {skill} 技能：先读它，再继续。",
+    "none": "未开始",
+    "hintCleanup": "完成启动前工作区准备与分支决策，然后调用 sfd_start。",
+    "hintPlan": "写 REQUIREMENTS / PLAN-FULL；完成后按 skill 派发计划评审。",
+    "hintPlanReview": "读 reviewer 报告，准入 findings，决定修复还是进入实现。",
+    "hintImpl": "按 TASK 派发 implementer；收到 HANDOFF 后判定实现是否完整。",
+    "hintCommit": "提交本 section，完成后进入代码评审。",
+    "hintCodeReview": "按 skill 派发 A lens / closure / B1；收敛后进入验收。",
+    "hintAccept": "验收本 section，决定下一个 section 或收尾。",
+    "hintArchive": "按归档清单收尾。",
+    "hintDone": "本轮已完成；有新任务时重新 /sfd。",
+    "counts": "评审计数：{items}"
   }
 }

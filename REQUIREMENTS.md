@@ -8,17 +8,25 @@
 
 ## Actors 与路由（全部走 external-subagent，无 native subagent）
 
-| 角色 | 路由 | 备注 |
+| 角色 | 权限模式 | 路由来源 |
 |---|---|---|
-| plan review A / code review A | ES zcode / glm-5.3 / effort=max | 需在 ES 建好对应 profile |
-| plan review B / code review B / impl_large | ES codex | 沿用原 sfd-codex-* profile |
-| impl_std | ES zcode / deepseek/deepseek-flash | spawn 显式 provider/model token，无需命名 profile |
+| plan review A/B | ES `plan`（只读） | 面板：阶段 → subagent + model（Current Project 优先，其次 Global） |
+| code review A/B | ES `plan`（只读） | 同上 |
+| implementation standard/large | ES `build` | 同上 |
 | 主 agent | 会话本身 | 语义判断、准入、验收 |
+
+- 角色指令随插件分发（原 sfd-* profile 的 developer instructions 原文），经 spawn 的 `developer_instructions` 内联下发；**不使用 ES profile**，因此每个阶段的执行者与模型可自由组合。
+- spawn 由插件执行（工具 `sfd_spawn_stage`）；wait / result / close 与报告读取由主 agent 用 ES 工具执行；**插件不读 actor 报告**。
+- 交接文件（评审请求/TASK/报告路径）由主 agent 写进 `.agent-work/`，spawn 的 prompt 只引用路径。
+- review 计数由插件负责：每次成功 spawn 原子 +1，按阶段或 `阶段@unit` 记账，计数与 actor 同写；预算判定与准入仍归主 agent / skill。
+- 每次阶段变化后，插件向主 agent 注入一段阶段上下文（事实 + 下一步指针 + 工具与 skill 指针）；流程判断仍归 skill 与主 agent。
+- advisor 由插件执行（冻结证据、渲染诊断、打包、飞书通知、置 hold）；触发时机由主 agent 判断。
 
 - 不用任何额外的一次性 LLM 分类调用；系统中的模型调用只有主 agent 与上述 actor。
 - Reviewer 以 ES 只读权限模式派发（zcode/codex 的 plan 模式）；不携带非空 write_manifest。
-- 人可指示"用 external-subagent 的某某配置重启"：重派工具接受路由覆盖参数。
-- 插件面板提供"安装/更新 sfd-* profiles"显式按钮（不静默写 ES 配置目录）；缺 profile 时启动报错并给出确切配置内容。
+- 人可指示"用某个 subagent/模型重跑"：改面板即可，下一次 spawn 生效（无需重启、无 profile）。
+- 每个阶段的执行者与模型由面板配置（Global / Current Project 两层）；未配置的阶段拒绝派发并指出要在面板配置什么。
+- 插件不读写 ES 的 profiles 目录。
 
 ## Required user-visible behavior
 
@@ -94,7 +102,7 @@ B 侧路由=维持原 skill（ES codex）；提交=程序经 dsh-git-commit（�
 
 ## Planner discretion
 
-reviewer 只读的具体实现（ES plan 权限模式 vs prompt 约定）；状态文件 schema；面板视觉；profile 安装按钮的交互细节；gitCommit 调用参数。
+reviewer 只读的具体实现（ES plan 权限模式 vs prompt 约定）；状态文件 schema；面板视觉与阶段默认路由；gitCommit 调用参数。
 
 ## Unresolved blockers
 

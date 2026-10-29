@@ -8,7 +8,7 @@
     "notRootAgent": "/sfd requires the exact live root chat agent.",
     "noCwd": "No working directory for this session.",
     "esMissing": "external-subagent is required but not detected. Install it first: brew install external-subagent (or see its README), then run `external-subagent agents enable zcode codex`.",
-    "esProfileMissing": "Required external-subagent profile(s) missing: {names}. Create them or use the panel's profile installer.",
+    "esNoSpawnable": "external-subagent is installed but no subagent is enabled for spawn. Enable one first: `external-subagent agents enable <zcode|dsh|codex|agy>`.",
     "resume": "Existing SFD state detected — resuming handoff briefing follows.",
     "fresh": "No SFD state found in this repository.",
     "prepare": "Workspace preparation before start (mandatory decision table; the skill has the full version):\n1) Dirty workspace -> ask the user: [stop | auto commit (AI-generated message)]; free text from the user directs you instead — never lose uncommitted work.\n2) Clean + on main/master -> no question: name the feature branch yourself (e.g. sfd/<slug>) and create it from main.\n3) Clean + off main -> compute ahead/behind vs main, then offer the user exactly these options (always plus \"stop\"): 0/0 -> [stay | new branch from current]; ahead>0,behind=0 -> [stay | new from current | new from main (switch to main first) | fast-forward main to current, then stay]; ahead=0,behind>0 -> [stay | new from current | new from main (switch to main first) | fast-forward to main, then branch from it]; ahead>0,behind>0 (diverged) -> [stay | new from current | new from main (switch to main first) | you merge with main, resolve all conflicts, and continue].\n4) No main-like ref / detached HEAD / merge in progress -> ask the user how to proceed (always include \"stop\"); never guess a base.\nBranch naming, creation, duplicate handling and any merge are your own git operations.",
@@ -21,6 +21,38 @@
   "tool": {
     "existingRun": "An SFD run already exists in this repository; use its brief above instead of starting a new one.",
     "started": "SFD run started on branch {branch}.",
-    "startedDirty": "Note: the workspace was still dirty when sfd_start ran — continue per your decision-table handling and never lose the user's uncommitted work."
+    "startedDirty": "Note: the workspace was still dirty when sfd_start ran — continue per your decision-table handling and never lose the user's uncommitted work.",
+    "spawnNoRun": "This repository has no SFD run yet; run /sfd and call sfd_start first.",
+    "spawnNoModel": "Stage {stage} has no model configured. Pick a subagent and model for it under Configuration -> Global or Current Project in the right-side panel.",
+    "spawnSubagent": "The subagent \"{subagent}\" configured for stage {stage} cannot spawn right now; check external-subagent enablement and its runtime.",
+    "spawnUnavailable": "This process has no dispatch owner wired, so it cannot spawn.",
+    "spawnEmptyPrompt": "A spawn needs a non-empty task prompt.",
+    "spawnFailed": "Spawn failed: {reason}",
+    "spawned": "Dispatched an ES task for stage {stage}: {subagent} / {model} ({mode}, route from {source}), agent_id = {id}.",
+    "spawnNext": "Next (yours): call external_subagent_wait(agent_id={id}) to wait; once terminal, call external_subagent_result to read the report and save it to the dispatched path, then external_subagent_close to close the task.",
+    "spawnCount": "count: {key} = {value}",
+    "spawnBadUnit": "invalid unit: {reason}"
+  },
+  "ctx": {
+    "header": "[SFD] phase {phase} · repo {root}",
+    "task": "task: {summary}",
+    "plan": "plan: {file} · review A {a} / B {b}",
+    "units": "units: {items}",
+    "actors": "dispatched actors: {items}",
+    "hold": "hold: {kind} — {reason}",
+    "next": "next: {hint}",
+    "tools": "Dispatch with sfd_spawn_stage; wait / read / close with external_subagent_wait / external_subagent_result / external_subagent_close — you read the result, the plugin never does.",
+    "skill": "The full procedure is the {skill} skill: read it first, then continue.",
+    "none": "not started",
+    "hintCleanup": "Finish pre-start workspace preparation and the branch decision, then call sfd_start.",
+    "hintPlan": "Draft REQUIREMENTS / PLAN-FULL; then dispatch the plan review per the skill.",
+    "hintPlanReview": "Read the reviewer reports, admit findings, then choose repair or implementation.",
+    "hintImpl": "Dispatch the implementer per TASK; judge completeness when the HANDOFF arrives.",
+    "hintCommit": "Commit this section, then move to code review.",
+    "hintCodeReview": "Dispatch A lenses / closure / B1 per the skill; enter acceptance once converged.",
+    "hintAccept": "Accept this section, then choose the next section or wrap up.",
+    "hintArchive": "Close out per the archive checklist.",
+    "hintDone": "This run is complete; start a new task with /sfd.",
+    "counts": "review rounds: {items}"
   }
 }

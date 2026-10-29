@@ -36,16 +36,19 @@ test('dictionaries: zh covers every en key (no raw-key leak)', async () => {
 test('translator: zh overlay with interpolation, unknown key renders key', async () => {
   const t = await translator('zh');
   assert.equal(t('state.notGit'), '当前目录不是 Git 仓库。');
-  assert.equal(t('state.esProfileMissing', { names: 'sfd-a, sfd-b' }).includes('sfd-a, sfd-b'), true);
+  assert.equal(t('state.esNoSpawnable').includes('subagent'), true);
   assert.equal(t('no.such.key'), 'no.such.key');
 });
 
 test('translator: en base resolves the keys used by the /sfd handoff and sfd_start', async () => {
   const t = await translator('en');
   for (const key of ['state.fresh', 'state.prepare', 'state.handoff', 'state.nextPlan',
-    'state.notGit', 'state.notRootAgent', 'state.noCwd', 'state.esMissing', 'state.esProfileMissing',
+    'state.notGit', 'state.notRootAgent', 'state.noCwd', 'state.esMissing', 'state.esNoSpawnable',
     'state.resume', 'state.legacyTitle', 'state.legacyBody', 'state.readSkillFirst',
-    'tool.existingRun', 'tool.started', 'tool.startedDirty']) {
+    'tool.existingRun', 'tool.started', 'tool.startedDirty',
+    'tool.spawnNoRun', 'tool.spawnNoModel', 'tool.spawnSubagent',
+    'tool.spawnUnavailable', 'tool.spawnEmptyPrompt', 'tool.spawnFailed', 'tool.spawned', 'tool.spawnNext',
+    'tool.spawnCount', 'tool.spawnBadUnit', 'ctx.counts', 'ctx.header', 'ctx.next']) {
     assert.equal(t(key) === key, false, `${key} rendered raw`);
   }
   // the mandatory decision table must be traceable case by case in the handoff
