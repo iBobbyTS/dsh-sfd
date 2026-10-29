@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sectioned Feature Development"
+  short_description: "Agent-led sections with bounded independent review"
+  default_prompt: "Use $sectioned-feature-development to save the plan, delegate real section work, review bounded changes, and deliver with basic structural checks and agent-managed scheduling."

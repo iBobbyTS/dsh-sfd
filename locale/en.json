@@ -1,58 +1,54 @@
 {
   "meta": {
     "title": "Sectioned Feature Development",
-    "description": "Orchestrates sectioned feature development: agent-driven start preparation and branch decisions, plan review accounting, ES actor dispatch, wave budgets, advisor escalation, and side-panel progress."
+    "description": "Observes the sectioned-feature-development run (agent-driven dispatch through external-subagent profiles), keeps the run ledger, and injects per-step review obligations so reviews are not skipped."
   },
   "state": {
     "notGit": "The working directory is not a Git repository.",
     "notRootAgent": "/sfd requires the exact live root chat agent.",
     "noCwd": "No working directory for this session.",
-    "esMissing": "external-subagent is required but not detected. Install it first: brew install external-subagent (or see its README), then run `external-subagent agents enable zcode codex`.",
-    "esNoSpawnable": "external-subagent is installed but no subagent is enabled for spawn. Enable one first: `external-subagent agents enable <zcode|dsh|codex|agy>`.",
-    "resume": "Existing SFD state detected — resuming handoff briefing follows.",
-    "fresh": "No SFD state found in this repository.",
-    "prepare": "Workspace preparation before start (mandatory decision table; the skill has the full version):\n1) Dirty workspace -> ask the user: [stop | auto commit (AI-generated message)]; free text from the user directs you instead — never lose uncommitted work.\n2) Clean + on main/master -> no question: name the feature branch yourself (e.g. sfd/<slug>) and create it from main.\n3) Clean + off main -> compute ahead/behind vs main, then offer the user exactly these options (always plus \"stop\"): 0/0 -> [stay | new branch from current]; ahead>0,behind=0 -> [stay | new from current | new from main (switch to main first) | fast-forward main to current, then stay]; ahead=0,behind>0 -> [stay | new from current | new from main (switch to main first) | fast-forward to main, then branch from it]; ahead>0,behind>0 (diverged) -> [stay | new from current | new from main (switch to main first) | you merge with main, resolve all conflicts, and continue].\n4) No main-like ref / detached HEAD / merge in progress -> ask the user how to proceed (always include \"stop\"); never guess a base.\nBranch naming, creation, duplicate handling and any merge are your own git operations.",
-    "handoff": "You now drive the start: first read the sectioned-feature-development skill, then determine the task to build. If this conversation has no task context yet, ask the user what they want before doing anything else. Once the task is known, perform workspace preparation per the decision table above and create the feature branch, then call the sfd_start tool with a one-line taskSummary (optional slug, branch) — it performs no git operations; it records the git facts it observes and persists the initial state.",
-    "nextPlan": "Next: read the sectioned-feature-development skill, identify Feature(s) from the user request, and draft PLAN-FULL at .agent-work/PLAN-FULL.md.",
-    "legacyTitle": "Existing SFD work markers found (no plugin state):",
-    "legacyBody": "This may be an uncleaned previous run or a manual pre-plugin run. Decide: archive it and start fresh, continue it manually, or stop. The plugin cannot resume a run it did not record.",
-    "readSkillFirst": "Read the sectioned-feature-development skill first, then continue from the phase above."
+    "resume": "Existing SFD run detected — observed-status handoff follows.",
+    "runClosed": "The SFD run in this repository is closed. Start a new task with /sfd after archiving per the skill.",
+    "fresh": "No SFD run found in this repository.",
+    "prepare": "Workspace preparation before start (mandatory decision table; the skill has the full version):\n1) Dirty workspace -> ask the user: [stop | auto commit (AI-generated message)]; free text from the user directs you instead — never lose uncommitted work.\n2) Clean + on main/master -> no question: name the feature branch yourself (e.g. sfd/<slug>) and create it from main.\n3) Clean + off main -> compute ahead/behind vs main, then offer the user exactly these options (always plus \"stop\"): 0/0 -> [stay | new branch from current]; ahead>0,behind=0 -> [stay | new from current | new from main (switch to main first) | fast-forward main to current, then stay]; ahead=0,behind>0 -> [stay | new from current | new from main (switch to main first) | fast-forward main to current, then branch from it]; ahead>0,behind>0 (diverged) -> [stay | new from current | new from main (switch to main first) | you merge with main, resolve all conflicts, and continue].\n4) No main-like ref / detached HEAD / merge in progress -> ask the user how to proceed (always include \"stop\"); never guess a base.\nBranch naming, creation, duplicate handling and any merge are your own git operations.",
+    "handoff": "You now drive the start: first read the sectioned-feature-development skill, then determine the task to build. If this conversation has no task context yet, ask the user what they want before doing anything else. Once the task is known, perform workspace preparation per the decision table above and create the feature branch, then call the sfd_start tool with a one-line taskSummary (optional slug, branch) — it performs no git operations and no dispatch; it records the git facts it observes and creates the run ledger the plugin observes your external-subagent calls into.",
+    "nextPlan": "Next: read the sectioned-feature-development skill, identify Feature(s) from the user request, and draft PLAN-FULL at .agent-work/PLAN-FULL.md. Dispatch reviewers yourself with the literal external_subagent_spawn(profile=…) rows from the skill's DSH dispatch profile.",
+    "legacyTitle": "Existing SFD work markers found (no plugin run ledger):",
+    "legacyBody": "This may be an uncleaned previous run or a pre-plugin run. Decide: archive it and start fresh, continue it manually, or stop. The plugin cannot resume a run it did not record.",
+    "readSkillFirst": "Read the sectioned-feature-development skill first, then continue from the obligations above."
   },
   "tool": {
-    "existingRun": "An SFD run already exists in this repository; use its brief above instead of starting a new one.",
-    "started": "SFD run started on branch {branch}.",
+    "existingRun": "An SFD run already exists in this repository; use its observed brief above instead of starting a new one.",
+    "started": "SFD run started on branch {branch} (slug {slug}). Dispatch is yours from here: copy the literal external_subagent_spawn(profile=…) rows from the skill's DSH dispatch profile; the plugin observes those calls and injects an [SFD] obligations block into your steps.",
     "startedDirty": "Note: the workspace was still dirty when sfd_start ran — continue per your decision-table handling and never lose the user's uncommitted work.",
-    "spawnNoRun": "This repository has no SFD run yet; run /sfd and call sfd_start first.",
-    "spawnNoModel": "Stage {stage} has no model configured. Pick a subagent and model for it under Configuration -> Global or Current Project in the right-side panel.",
-    "spawnSubagent": "The subagent \"{subagent}\" configured for stage {stage} cannot spawn right now; check external-subagent enablement and its runtime.",
-    "spawnUnavailable": "This process has no dispatch owner wired, so it cannot spawn.",
-    "spawnEmptyPrompt": "A spawn needs a non-empty task prompt.",
-    "spawnFailed": "Spawn failed: {reason}",
-    "spawned": "Dispatched an ES task for stage {stage}: {subagent} / {model} ({mode}, route from {source}), agent_id = {id}.",
-    "spawnNext": "Next (yours): call external_subagent_wait(agent_id={id}) to wait; once terminal, call external_subagent_result to read the report and save it to the dispatched path, then external_subagent_close to close the task.",
-    "spawnCount": "count: {key} = {value}",
-    "spawnBadUnit": "invalid unit: {reason}"
+    "finished": "SFD run closed. The plugin stops injecting the [SFD] block.",
+    "finishOpen": "Actors not fully reconciled before closing: {ids} — reconcile them (result/close) per the skill; the ledger keeps them as evidence.",
+    "finishArchive": "Archive per the skill's artifact lifecycle (archive_plan.py) if you have not already.",
+    "finishNoRun": "This repository has no SFD run to finish."
+  },
+  "phase": {
+    "starting": "preparing",
+    "plan-review": "plan review",
+    "implement": "implementation",
+    "code-review": "code review",
+    "closed": "closed"
   },
   "ctx": {
-    "header": "[SFD] phase {phase} · repo {root}",
-    "task": "task: {summary}",
-    "plan": "plan: {file} · review A {a} / B {b}",
-    "units": "units: {items}",
-    "actors": "dispatched actors: {items}",
-    "hold": "hold: {kind} — {reason}",
-    "next": "next: {hint}",
-    "tools": "Dispatch with sfd_spawn_stage; wait / read / close with external_subagent_wait / external_subagent_result / external_subagent_close — you read the result, the plugin never does.",
-    "skill": "The full procedure is the {skill} skill: read it first, then continue.",
-    "none": "not started",
-    "hintCleanup": "Finish pre-start workspace preparation and the branch decision, then call sfd_start.",
-    "hintPlan": "Draft REQUIREMENTS / PLAN-FULL; then dispatch the plan review per the skill.",
-    "hintPlanReview": "Read the reviewer reports, admit findings, then choose repair or implementation.",
-    "hintImpl": "Dispatch the implementer per TASK; judge completeness when the HANDOFF arrives.",
-    "hintCommit": "Commit this section, then move to code review.",
-    "hintCodeReview": "Dispatch A lenses / closure / B1 per the skill; enter acceptance once converged.",
-    "hintAccept": "Accept this section, then choose the next section or wrap up.",
-    "hintArchive": "Close out per the archive checklist.",
-    "hintDone": "This run is complete; start a new task with /sfd.",
-    "counts": "review rounds: {items}"
+    "header": "[SFD] {slug}@{branch} · rev {rev} · {phase}",
+    "actorsSummary": "observed actors: {total} (running {running}, terminal-not-closed {unclosed})",
+    "actorLine": "  - #{id} {role} {outcome}{extra}",
+    "counts": "dispatch counts: {items}",
+    "reports": "observed .agent-work report writes: {count}",
+    "obligations": "obligations (per the skill; observations, not gates):",
+    "none": "none — nothing observed is due right now",
+    "pointer": "flow authority: $sectioned-feature-development (dispatch = literal external_subagent_spawn(profile=…) rows; wait/result/close = your MCP calls)"
+  },
+  "obl": {
+    "await-actors": "  - await terminal state: {ids} (external_subagent_wait)",
+    "close-actors": "  - close finished actors: {ids} (external_subagent_close)",
+    "plan-coverage": "  - PLAN review A→B: two independent coverages must close before any implementer dispatch (observed dispatched {dispatched}, completed {done})",
+    "plan-skip-warn": "  - WARNING: {impl} implementer(s) already dispatched while only {done} PLAN coverage(s) completed — the skill does not allow this; remediate (run the reviews) or state your justification",
+    "freeze-before-review": "  - freeze the candidate (reconcile staged+unstaged+untracked) before Code A; B1 stays blind — no A findings or repair history in its prompt",
+    "code-coverage": "  - after Code A closes: blind complete B1, then same-head B2; budget rulings (5 waves/section, plan 2 material waves) are the skill's (observed code-review dispatches: {dispatched})"
   }
 }

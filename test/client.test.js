@@ -16,9 +16,6 @@ const BUILT_IN_CLIENT_PACKAGES = new Set([
   '@deepseek-ai/dsh-client-ui-sidebar-right',
 ]);
 
-const STAGE_IDS = ['planReviewA', 'planReviewB', 'implementationStandard', 'implementationLarge', 'codeReviewA', 'codeReviewB'];
-const STAGE_LABELS = ['Plan Review A', 'Plan Review B', 'Implementation Standard', 'Implementation Large', 'Code Review A', 'Code Review B'];
-
 function loadBundle() {
   const registrations = [];
   runInNewContext(source, {
@@ -27,15 +24,6 @@ function loadBundle() {
   });
   return registrations;
 }
-
-const emptyStages = () => Object.fromEntries(STAGE_IDS.map((stage) => [stage, null]));
-const catalogValue = () => ({
-  probedAtMs: 1,
-  subagents: [
-    { subagent: 'zcode', models: ['zai/GLM-5.3', 'deepseek/deepseek-flash'], version: '0.17.0' },
-    { subagent: 'dsh', models: ['deepseek-official:deepseek-v4-pro'], version: '0.2.1-rc.2' },
-  ],
-});
 
 function makeLocale(active) {
   const store = {
@@ -65,19 +53,37 @@ function makeLocale(active) {
   return store;
 }
 
+const runLedger = () => ({
+  revision: 7,
+  run: { status: 'active', slug: 'dark-mode', branch: 'sfd/dark-mode', taskSummary: 'Add dark mode', base: 'main' },
+  actors: {
+    '1001': { profile: 'sfd-zcode-plan-review', role: 'plan-review', status: 'terminal', outcome: 'COMPLETED', closed: false, reportHint: '.agent-work/reviews/plan-a.md' },
+    '1002': { profile: 'sfd-dsh-impl-std', role: 'impl', status: 'running', outcome: null, closed: false, reportHint: null },
+  },
+  counts: { 'plan-review': 1, impl: 1 },
+  artifacts: { plan: ['.agent-work/PLAN-FULL.md'], reports: ['.agent-work/reviews/plan-a.md'], handoffs: [], other: [] },
+});
+
+const statusValue = () => ({
+  run: runLedger(),
+  phase: 'implement',
+  obligations: [
+    { id: 'await-actors', severity: 'todo', params: { ids: '1002' } },
+    { id: 'plan-skip-warn', severity: 'warn', params: { impl: 1, done: 1 } },
+  ],
+  es: { ok: true, subagents: [
+    { subagent: 'zcode', enabled: true, spawnSupported: true, spawnBlocked: null, version: '0.17.0' },
+    { subagent: 'codex', enabled: true, spawnSupported: true, spawnBlocked: null, version: null },
+    { subagent: 'dsh', enabled: true, spawnSupported: true, spawnBlocked: 'transport', version: null },
+  ], probedAtMs: 1 },
+});
+
 /** Minimal hook runtime: one render pass per call, effects run after it commits. */
-function harness({ locale = 'en', settings, catalog } = {}) {
+function harness({ locale = 'en', status } = {}) {
   const calls = [];
   const tabTypes = new Map();
   const components = new Map();
-  const state = {
-    settings: settings ?? {
-      root: '/example/repo',
-      global: { stages: emptyStages() },
-      project: { stages: emptyStages() },
-    },
-    catalog: catalog ?? catalogValue(),
-  };
+  const state = { status: status ?? statusValue() };
   const localeStore = makeLocale(locale);
   const clone = (value) => JSON.parse(JSON.stringify(value));
   let activeScope;
@@ -102,14 +108,7 @@ function harness({ locale = 'en', settings, catalog } = {}) {
   };
   const rpc = async (method, payload = {}) => {
     calls.push({ method, payload });
-    if (method === 'settings') return clone(state.settings);
-    if (method === 'catalog') return clone(state.catalog);
-    if (method === 'saveSettings') {
-      const { scope, stage, selection } = payload;
-      if (scope === 'global') state.settings.global.stages[stage] = selection;
-      else state.settings.project.stages[stage] = selection;
-      return clone(state.settings);
-    }
+    if (method === 'status') return clone(state.status);
     throw new Error(`Unexpected RPC ${method}`);
   };
   const ctx = {
@@ -146,7 +145,7 @@ function harness({ locale = 'en', settings, catalog } = {}) {
     return dom;
   }
   const settle = () => new Promise((resolve) => setImmediate(resolve));
-  return { calls, tabTypes, components, state, localeStore, plugin, mutations: { mount }, render, settle };
+  return { calls, tabTypes, components, state, localeStore, plugin, render, settle };
 }
 
 const walk = (node, predicate, found = []) => {
@@ -173,15 +172,6 @@ async function mounted(options) {
   return h;
 }
 
-const tabButton = (dom, id) => walk(dom, (node) => node.type === 'button' && node.props.id === id)[0];
-const openConfiguration = (h) => {
-  tabButton(h.render(), 'sfd-tab-configuration').props.onClick();
-  return h.render();
-};
-const sectionsOf = (dom) => walk(dom, (node) => node.props?.['data-sfd-section'] !== undefined);
-const rowsOf = (scopeNode) => walk(scopeNode, (node) => node.props?.['data-sfd-stage'] !== undefined);
-const selectsOf = (dom) => walk(dom, (node) => node.type === 'select');
-
 test('the boot graph materializes the client under its exact package identity', () => {
   const registrations = loadBundle();
   assert.equal(registrations.length, 1);
@@ -207,189 +197,48 @@ test('the tab type lands under Browser on the guide page and keeps its body moun
   assert.equal(definition.guide[0].order, 40, 'below browser (30)');
   assert.equal(definition.guide[0].title(), 'Sectioned Feature Development');
   assert.equal(definition.title(), 'Sectioned Feature Development');
-  assert.match(definition.guide[0].description(), /model routing/i);
+  assert.match(definition.guide[0].description(), /observe/i);
   assert.equal(typeof definition.guide[0].icon, 'function');
   assert.equal(definition.guide[0].icon({}).type, 'svg');
 });
 
-test('the panel opens on an empty Status page with Status and Configuration as page navigation', async () => {
+test('the status page shows run facts, actors, obligations and spawnable subagents', async () => {
   const h = await mounted();
   const dom = h.render();
-  const tabs = walk(dom, (node) => node.props?.role === 'tab');
-  assert.deepEqual(tabs.map((tab) => tab.props.id), ['sfd-tab-status', 'sfd-tab-configuration']);
-  assert.equal(tabs[0].props['aria-selected'], true);
-  assert.equal(tabs[1].props['aria-selected'], false);
-  assert.equal(tabs[0].children.join(''), 'Status');
-  assert.equal(tabs[1].children.join(''), 'Configuration');
-  const status = walk(dom, (node) => node.props?.id === 'sfd-panel-status')[0];
-  assert.deepEqual(status.children, [], 'Status stays empty');
+  const sections = walk(dom, (node) => node.props?.['data-sfd-section'] !== undefined);
+  assert.deepEqual(sections.map((section) => section.props['data-sfd-section']), ['run', 'actors', 'obligations', 'es']);
+  const text = textOf(dom);
+  assert.match(text, /Phase: implement/);
+  assert.match(text, /sfd\/dark-mode/);
+  assert.match(text, /Add dark mode/);
+  assert.match(text, /sfd-zcode-plan-review/);
+  assert.match(text, /COMPLETED/);
+  assert.match(text, /plan-review 1/);
+  const obligations = walk(dom, (node) => node.props?.['data-severity'] !== undefined);
+  assert.deepEqual(obligations.map((o) => o.props['data-severity']), ['todo', 'warn']);
+  assert.match(textOf(obligations[1]), /implementer\(s\) dispatched/);
+  // only spawnable rows are listed
+  assert.match(text, /zcode, codex/);
+  assert.doesNotMatch(text, /dsh, /);
+  assert.equal(h.calls.filter((call) => call.method === 'status').length > 0, true);
+  assert.equal(h.calls.every((call) => call.method === 'status'), true, 'the panel makes no other RPC');
 });
 
-test('Configuration shows Global and Current Project with every stage row', async () => {
-  const h = await mounted();
-  const dom = openConfiguration(h);
-  const sections = sectionsOf(dom);
-  assert.deepEqual(sections.map((section) => section.props['data-sfd-section']), ['global', 'project']);
-  for (const section of sections) {
-    const rows = rowsOf(section);
-    assert.deepEqual(rows.map((row) => row.props['data-sfd-stage']), STAGE_IDS);
-    assert.equal(textOf(rows[0]), textOf(rows[0]), 'sanity');
-    assert.deepEqual(rows.map((row) => textOf(walk(row, (node) => node.type === 'span' && node.props.className === 'sfd-stage')[0])), STAGE_LABELS);
-  }
-  assert.equal(selectsOf(dom).length, 12, 'six stages in each of two scopes');
+test('without a run the panel says so and renders only the ES section', async () => {
+  const h = await mounted({ status: { run: null, phase: null, obligations: [], es: statusValue().es } });
+  const dom = h.render();
+  const sections = walk(dom, (node) => node.props?.['data-sfd-section'] !== undefined);
+  assert.deepEqual(sections.map((section) => section.props['data-sfd-section']), ['es']);
+  assert.match(textOf(dom), /No SFD run/);
 });
 
-test('each row has a disabled native/external switch fixed to external', async () => {
-  const h = await mounted();
-  const dom = openConfiguration(h);
-  const rows = walk(dom, (node) => node.props?.['data-sfd-stage'] !== undefined);
-  for (const row of rows) {
-    const switches = walk(row, (node) => node.props?.role === 'switch');
-    assert.equal(switches.length, 1);
-    const [control] = switches;
-    assert.equal(control.props.disabled, true);
-    assert.equal(control.props['aria-checked'], 'true');
-    assert.equal(control.props['data-sfd-mode'], 'external');
-    const labels = walk(row, (node) => node.type === 'span' && String(node.props.className ?? '').startsWith('sfd-mode-name'));
-    assert.deepEqual(labels.map((label) => label.children.join('')), ['native', 'external']);
-    assert.match(labels[1].props.className, /sfd-mode-on/);
-  }
+test('a session outside a repository shows the noRepo hint', async () => {
+  const h = await mounted({ status: { noRepo: true, run: null, phase: null, obligations: [], es: statusValue().es } });
+  assert.match(textOf(h.render()), /not in a Git repository/);
 });
 
-test('model choices come from the probed external-subagent catalog, grouped by subagent', async () => {
-  const h = await mounted();
-  const dom = openConfiguration(h);
-  const [select] = selectsOf(dom);
-  assert.equal(select.props['aria-label'], 'Plan Review A Model');
-  assert.equal(select.props.value, '');
-  const options = walk(select, (node) => node.type === 'option').map((option) => option.props.value);
-  assert.equal(options[0], '', 'not-configured placeholder');
-  assert.ok(options.includes('zcode\tzai/GLM-5.3'));
-  assert.ok(options.includes('dsh\tdeepseek-official:deepseek-v4-pro'));
-  const groups = walk(select, (node) => node.type === 'optgroup').map((group) => group.props.label);
-  assert.deepEqual(groups, ['zcode', 'dsh']);
-});
-
-test('choosing a model saves that stage in the chosen scope', async () => {
-  const h = await mounted();
-  let dom = openConfiguration(h);
-  const [globalSelect] = selectsOf(dom);
-  globalSelect.props.onChange({ target: { value: 'zcode\tzai/GLM-5.3' } });
-  await h.settle();
-  dom = openConfiguration(h);
-  const saved = h.calls.filter((call) => call.method === 'saveSettings');
-  assert.equal(saved.length, 1);
-  assert.deepEqual(JSON.parse(JSON.stringify(saved[0].payload)), {
-    cwd: '/example/repo',
-    scope: 'global',
-    stage: 'planReviewA',
-    selection: { subagent: 'zcode', model: 'zai/GLM-5.3' },
-  });
-  const [globalAgain] = selectsOf(dom);
-  assert.equal(globalAgain.props.value, 'zcode\tzai/GLM-5.3');
-  // The project scope writes its own row and says so.
-  const projectSelect = walk(dom, (node) => node.type === 'select' && node.props['data-sfd-select'] === 'codeReviewB')[1];
-  projectSelect.props.onChange({ target: { value: 'dsh\tdeepseek-official:deepseek-v4-pro' } });
-  await h.settle();
-  const latest = h.calls.filter((call) => call.method === 'saveSettings').at(-1);
-  assert.equal(latest.payload.scope, 'project');
-  assert.equal(latest.payload.stage, 'codeReviewB');
-});
-
-test('a configured model that left the catalog stays visible', async () => {
-  const settings = {
-    root: '/example/repo',
-    global: { stages: { ...emptyStages(), planReviewA: { subagent: 'agy', model: 'gemini-3-pro' } } },
-    project: { stages: emptyStages() },
-  };
-  const h = await mounted({ settings });
-  const dom = openConfiguration(h);
-  const [select] = selectsOf(dom);
-  assert.equal(select.props.value, 'agy\tgemini-3-pro');
-  const labels = walk(select, (node) => node.type === 'optgroup').map((group) => group.props.label);
-  assert.deepEqual(labels, ['zcode', 'dsh', 'Configured']);
-  const options = walk(select, (node) => node.type === 'option');
-  assert.equal(options.at(-1).props.value, 'agy\tgemini-3-pro');
-  assert.equal(options.at(-1).children.join(''), 'agy - gemini-3-pro');
-});
-
-test('an unset project stage inherits the global choice for that stage', async () => {
-  const settings = {
-    root: '/example/repo',
-    global: { stages: { ...emptyStages(), planReviewA: { subagent: 'zcode', model: 'zai/GLM-5.3' } } },
-    project: { stages: emptyStages() },
-  };
-  const h = await mounted({ settings });
-  let dom = openConfiguration(h);
-  const projectStage = (stage) => walk(dom, (node) => node.type === 'select' && node.props['data-sfd-select'] === stage)[1];
-  const [globalSelect] = walk(dom, (node) => node.type === 'select' && node.props['data-sfd-select'] === 'planReviewA');
-  assert.equal(globalSelect.children[0].children.join(''), 'Not configured');
-  assert.equal(projectStage('planReviewA').props.value, '');
-  assert.equal(projectStage('planReviewA').children[0].children.join(''), 'Inherit Global (zcode - zai/GLM-5.3)');
-  assert.equal(projectStage('codeReviewB').children[0].children.join(''), 'Inherit Global (Not configured)');
-
-  projectStage('planReviewA').props.onChange({ target: { value: 'dsh\tdeepseek-official:deepseek-v4-pro' } });
-  await h.settle();
-  dom = openConfiguration(h);
-  assert.equal(projectStage('planReviewA').props.value, 'dsh\tdeepseek-official:deepseek-v4-pro');
-
-  projectStage('planReviewA').props.onChange({ target: { value: '' } });
-  await h.settle();
-  const last = h.calls.filter((call) => call.method === 'saveSettings').at(-1);
-  assert.equal(last.payload.scope, 'project');
-  assert.equal(last.payload.stage, 'planReviewA');
-  assert.equal(last.payload.selection, null, 'inheriting stores no override');
-  dom = openConfiguration(h);
-  assert.equal(projectStage('planReviewA').props.value, '');
-});
-
-test('the project scope inherits in Simplified Chinese too', async () => {
+test('zh copy renders the warning obligation', async () => {
   const h = await mounted({ locale: 'zh' });
-  const dom = openConfiguration(h);
-  const projectStage = walk(dom, (node) => node.type === 'select' && node.props['data-sfd-select'] === 'planReviewA')[1];
-  assert.equal(projectStage.children[0].children.join(''), '继承 Global (未配置)');
-});
-
-test('without a repository the project scope is explained and disabled', async () => {
-  const settings = { root: null, global: { stages: emptyStages() }, project: null };
-  const h = await mounted({ settings });
-  const dom = openConfiguration(h);
-  const sections = sectionsOf(dom);
-  assert.equal(rowsOf(sections[0]).length, 6, 'global rows remain editable');
-  assert.equal(rowsOf(sections[1]).length, 0, 'no project rows without a root');
-  assert.match(textOf(sections[1]), /not in a Git repository/);
-});
-
-test('an empty spawnable catalog disables selection and says why', async () => {
-  const h = await mounted({ catalog: { probedAtMs: 1, subagents: [] } });
-  const dom = openConfiguration(h);
-  const selects = selectsOf(dom);
-  assert.equal(selects.length, 12);
-  for (const select of selects) assert.equal(select.props.disabled, true);
-  assert.match(textOf(dom), /no spawnable subagent/);
-});
-
-test('the refresh control re-probes the catalog', async () => {
-  const h = await mounted();
-  let dom = openConfiguration(h);
-  assert.deepEqual(h.calls.filter((call) => call.method === 'catalog').map((call) => call.payload.force), [false]);
-  const refresh = walk(dom, (node) => node.type === 'button' && node.props['aria-label'] === 'Refresh model catalog')[0];
-  assert.equal(refresh.props.disabled, false);
-  refresh.props.onClick();
-  await h.settle();
-  dom = openConfiguration(h);
-  assert.deepEqual(h.calls.filter((call) => call.method === 'catalog').map((call) => call.payload.force), [false, true]);
-});
-
-test('the panel follows the DSH language', async () => {
-  const h = await mounted({ locale: 'zh' });
-  let dom = openConfiguration(h);
-  assert.equal(h.tabTypes.get('sfdPanel').title(), 'Sectioned Feature Development');
-  assert.match(textOf(dom), /未配置/);
-  assert.match(textOf(dom), /模型来自 external-subagent/);
-  assert.equal(tabButton(dom, 'sfd-tab-status').children.join(''), 'Status');
-  h.localeStore.setLocale('en');
-  dom = openConfiguration(h);
-  assert.match(textOf(dom), /Not configured/);
-  assert.match(textOf(dom), /Models come from external-subagent/);
+  const warn = walk(h.render(), (node) => node.props?.['data-severity'] === 'warn')[0];
+  assert.match(textOf(warn), /警告/);
 });

@@ -1,103 +1,117 @@
-import test from 'node:test';
+/**
+ * The injector: revision-gated `[SFD]` blocks, warn nudge, closed-run silence.
+ */
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PHASE_HINT, createStageContext, renderStageContext } from '../lib/context.js';
-import { PHASES } from '../lib/state.js';
+import { renderObligationBlock, renderResumeBrief, createRunInjector, WARN_NUDGE_STEPS } from '../lib/context.js';
+import { initialRun, recordSpawn, recordEvent, recordArtifact, closeRun } from '../lib/ledger.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const t = (key, params = {}) => ({
-  'ctx.header': `[SFD] ${params.phase} · ${params.root}`,
-  'ctx.task': `task: ${params.summary}`,
-  'ctx.plan': `plan: ${params.file} · A ${params.a} / B ${params.b}`,
-  'ctx.units': `units: ${params.items}`,
-  'ctx.actors': `actors: ${params.items}`,
-  'ctx.hold': `hold: ${params.kind} — ${params.reason}`,
-  'ctx.next': `next: ${params.hint}`,
-  'ctx.tools': 'tools: sfd_spawn_stage / external_subagent_wait',
-  'ctx.skill': `skill: ${params.skill}`,
-  'ctx.none': 'not started',
-  'ctx.counts': `review rounds: ${params.items}`,
-  'ctx.hintPlan': 'hint-plan',
-  'ctx.hintPlanReview': 'hint-planReview',
-  'ctx.hintCodeReview': 'hint-code-review',
+  'ctx.header': `[SFD] ${params.slug}@${params.branch} rev ${params.rev} ${params.phase}`,
+  'ctx.actorsSummary': `actors ${params.total}`,
+  'ctx.actorLine': `  - #${params.id} ${params.role} ${params.outcome}${params.extra}`,
+  'ctx.counts': `counts ${params.items}`,
+  'ctx.reports': `reports ${params.count}`,
+  'ctx.obligations': 'obligations:',
+  'ctx.none': 'none',
+  'ctx.pointer': 'pointer',
+  'phase.starting': 'starting', 'phase.plan-review': 'plan-review', 'phase.implement': 'implement',
+  'phase.code-review': 'code-review', 'phase.closed': 'closed',
+  'obl.await-actors': `await ${params.ids}`,
+  'obl.close-actors': `close ${params.ids}`,
+  'obl.plan-coverage': `plan coverage ${params.dispatched}/${params.done}`,
+  'obl.plan-skip-warn': `WARN impl ${params.impl} done ${params.done}`,
+  'obl.freeze-before-review': 'freeze first',
+  'obl.code-coverage': `code coverage ${params.dispatched}`,
+  'state.resume': 'resume',
+  'state.readSkillFirst': 'read skill first',
 })[key] ?? key;
 
-const state = (overrides = {}) => ({
-  phase: 'PLAN_REVIEW',
-  repoRoot: '/example/repo',
-  task: { summary: 'Add a settings page' },
-  plan: { file: '.agent-work/PLAN-FULL.md', review: { A: { state: 'done' } } },
-  units: { settings: { status: 'pending', wavesUsed: 1 } },
-  counts: { planReviewA: 2, 'codeReviewA@section-auth': 1 },
-  actors: { 10001485: { role: 'planReviewA', route: { subagent: 'codex', model: 'gpt-6.1-sol' }, spawnedAt: '2026-10-29T10:00:00.000Z' } },
-  hold: null,
-  ...overrides,
+async function freshRoot() {
+  return mkdtemp(join(tmpdir(), 'sfd-ctx-'));
+}
+
+test('renderObligationBlock lists facts and obligations compactly', async () => {
+  const root = await freshRoot();
+  try {
+    let run = initialRun(root, { slug: 'dark', branch: 'sfd/dark', taskSummary: 'dark mode' });
+    run = await recordArtifact(run, '.agent-work/PLAN-FULL.md', 'plan');
+    run = await recordSpawn(run, { agentId: '1', role: 'plan-review', reportHint: '.agent-work/reviews/plan-a.md' });
+    const text = renderObligationBlock(run, t);
+    assert.match(text, /\[SFD\] dark@sfd\/dark rev \d+ plan-review/);
+    assert.match(text, /counts plan-review 1/);
+    assert.match(text, /plan coverage 1\/0/);
+    assert.match(text, /await 1/);
+    assert.match(text, /pointer/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
-test('every phase has a hint, and the block names the phase, the run and the next step', () => {
-  for (const phase of PHASES) assert.ok(PHASE_HINT[phase], `missing hint for ${phase}`);
-  const text = renderStageContext(state(), t, { now: Date.parse('2026-10-29T10:03:00.000Z') });
-  assert.match(text, /^\[SFD\] PLAN_REVIEW · \/example\/repo/);
-  assert.match(text, /task: Add a settings page/);
-  assert.match(text, /plan: .*A done \/ B not started/);
-  assert.match(text, /units: settings: pending waves 1\/5/);
-  assert.match(text, /actors: 10001485 codex\/gpt-6.1-sol \(planReviewA, 3m\)/);
-  assert.match(text, /review rounds: codeReviewA@section-auth 1 · planReviewA 2/);
-  assert.match(text, /next: hint-planReview/);
-  assert.match(text, /tools: sfd_spawn_stage/);
-  assert.match(text, /skill: sectioned-feature-development/);
+test('injector: one block per revision, silence on steady steps, nudge on lingering warnings', async () => {
+  const root = await freshRoot();
+  try {
+    let run = initialRun(root, { slug: 'x', branch: 'b' });
+    // stage a warning: impl dispatched, plan coverage incomplete
+    run = await recordArtifact(run, '.agent-work/PLAN-FULL.md', 'plan');
+    run = await recordSpawn(run, { agentId: '1', role: 'plan-review' });
+    run = await recordEvent(run, { agentId: '1', event: 'result', outcome: 'COMPLETED' });
+    run = await recordSpawn(run, { agentId: '2', role: 'impl' });
+    const rev = run.revision;
+
+    const store = new Map([[root, run]]);
+    const injector = createRunInjector({ loadRun: async (r) => store.get(r) ?? null, resolveRoot: async (cwd) => (cwd === '/repo' ? root : null) });
+    const ask = () => injector.textFor({ sessionId: 's1', cwd: '/repo', t });
+
+    const first = await ask();
+    assert.ok(first, 'a new revision injects');
+    assert.equal(await ask(), null, 'same revision, no nudge yet -> silent');
+    // step through the nudge window; the warning eventually re-injects
+    let nudged = null;
+    for (let i = 0; i < WARN_NUDGE_STEPS + 1 && nudged === null; i += 1) {
+      nudged = await ask();
+    }
+    assert.ok(nudged, 'a lingering warning re-injects after the nudge window');
+    assert.match(nudged, /WARN impl 1 done 1/);
+
+    // a ledger change re-injects immediately
+    run = await recordEvent(run, { agentId: '2', event: 'result', outcome: 'COMPLETED' });
+    store.set(root, run);
+    assert.ok((await ask()) !== null);
+    assert.equal(rev < run.revision, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
-test('a hold is visible and stays one line', () => {
-  const text = renderStageContext(state({ hold: { kind: 'BLOCKED', reason: 'advisor pending' } }), t);
-  assert.match(text, /hold: BLOCKED — advisor pending/);
+test('injector: a fresh run injects once then quiets; closed runs and foreign cwds never inject', async () => {
+  const root = await freshRoot();
+  try {
+    let run = initialRun(root, { slug: 'x', branch: 'b' });
+    const store = new Map([[root, run]]);
+    const injector = createRunInjector({ loadRun: async (r) => store.get(r) ?? null, resolveRoot: async () => root });
+    assert.ok((await injector.textFor({ sessionId: 's1', cwd: '/repo', t })) !== null, 'first sight of the run injects');
+    assert.equal(await injector.textFor({ sessionId: 's1', cwd: '/repo', t }), null);
+    run = await closeRun(run);
+    store.set(root, run);
+    assert.equal(await injector.textFor({ sessionId: 's1', cwd: '/repo', t }), null, 'closed runs are silent');
+    assert.equal(await injector.textFor({ sessionId: 's1', cwd: '/elsewhere', t }), null, 'unknown cwd is silent');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
-test('the block never claims to know an actor result', () => {
-  const text = renderStageContext(state(), t);
-  assert.doesNotMatch(text, /report|result:|completed/i);
-});
-
-test('the injector speaks once per revision, and again after a plugin state write', async () => {
-  let reads = 0;
-  const context = createStageContext({
-    resolveRoot: async () => '/example/repo',
-    readState: async () => { reads += 1; return state(); },
-  });
-  assert.equal(typeof (await context.textFor({ sessionId: 's1', cwd: '/example/repo', t })), 'string');
-  assert.equal(await context.textFor({ sessionId: 's1', cwd: '/example/repo', t }), null);
-  assert.equal(reads, 1, 'a steady step reads nothing');
-  context.noteStateChange();
-  assert.match(await context.textFor({ sessionId: 's1', cwd: '/example/repo', t }), /PLAN_REVIEW/);
-  // Another session has its own budget.
-  assert.match(await context.textFor({ sessionId: 's2', cwd: '/example/repo', t }), /PLAN_REVIEW/);
-});
-
-test('no cwd, no repository and no run each stay silent without leaking reads', async () => {
-  let reads = 0;
-  const context = createStageContext({
-    resolveRoot: async (cwd) => (cwd === '/repo' ? '/repo' : null),
-    readState: async () => { reads += 1; return null; },
-  });
-  assert.equal(await context.textFor({ sessionId: 's1', cwd: undefined, t }), null);
-  assert.equal(await context.textFor({ sessionId: 's1', cwd: '/plain', t }), null);
-  assert.equal(await context.textFor({ sessionId: 's1', cwd: '/repo', t }), null, 'no run yet');
-  assert.equal(reads, 1);
-  assert.equal(await context.textFor({ sessionId: 's1', cwd: '/repo', t }), null, 'still silent without a revision change');
-  assert.equal(reads, 1);
-});
-
-test('a run that starts later injects after the state write', async () => {
-  let present = false;
-  const context = createStageContext({
-    resolveRoot: async () => '/repo',
-    readState: async () => (present ? state() : null),
-  });
-  assert.equal(await context.textFor({ sessionId: 's1', cwd: '/repo', t }), null);
-  present = true;
-  context.noteStateChange();
-  assert.match(await context.textFor({ sessionId: 's1', cwd: '/repo', t }), /SFD/);
-});
-
-test('an unknown phase falls back to the planning hint rather than an empty next step', () => {
-  const text = renderStageContext(state({ phase: 'SOMETHING_NEW' }), t);
-  assert.match(text, /next: hint-plan/);
+test('renderResumeBrief wraps the block with the read-skill line', async () => {
+  const root = await freshRoot();
+  try {
+    const run = initialRun(root, { slug: 'x', branch: 'b' });
+    const text = renderResumeBrief(run, t);
+    assert.match(text, /^# SFD resume/);
+    assert.match(text, /read skill first/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Review"
+  short_description: "One evidence-based bounded code review pass"
+  default_prompt: "Use $code-review for one bounded review of the supplied change. Return evidence-backed candidates, coverage and gaps; leave admission and scheduling to the parent workflow."

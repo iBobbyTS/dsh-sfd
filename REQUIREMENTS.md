@@ -1,109 +1,47 @@
 # SFD → DSH 插件：需求合同（Requirements Contract）
 
-由 grill-me 面谈收敛，2026-10-22。本文件是唯一需求权威；设计细节见 DESIGN.md（v2）。
+v2，2026-10-29。本版**整体取代** 2026-10-22 的 v1 合同：v1 描述的「Host 状态机接管记账/派发/调度/门禁/通知」方向在实施中被判定为过度程序化，本合同记录修订后的边界。本文件是唯一需求权威。
 
-## Goal / success condition
+## 背景与目标
 
-把 sectioned-feature-development（v5.5.1）改造为 DSH 持久插件：Host 状态机接管记账/派发/调度/门禁/通知，主 agent 只做语义判断，Client 侧栏提供进度与 external-subagent 状态可视化。成功条件：从头启动与任意阶段中断后新会话接手均可继续执行；原 skill 方法论保障（独立 A/B 覆盖、wave 预算、advisor 升级、盲审隔离）不降级。
+插件化的真实动因：SFD skill（上游 v5.5.2）在长会话中执行时，主 agent 会**跳过部分 review**——markdown 流程读过一次后，随上下文压力失效。
 
-## Actors 与路由（全部走 external-subagent，无 native subagent）
+目标：**在合理的时机通过插件注入上下文**，让被跳过的评审义务持续出现在主 agent 面前；同时把派发还给主 agent，与 skill 原生形态一致（原样调用命名 ES profile 的 `external_subagent_spawn`）。成功条件：一次运行中，PLAN A/B、Code A/B 的可观察派发事实始终被记录并注入；跳过行为发生时主 agent 会被明确警告。
 
-| 角色 | 权限模式 | 路由来源 |
-|---|---|---|
-| plan review A/B | ES `plan`（只读） | 面板：阶段 → subagent + model（Current Project 优先，其次 Global） |
-| code review A/B | ES `plan`（只读） | 同上 |
-| implementation standard/large | ES `build` | 同上 |
-| 主 agent | 会话本身 | 语义判断、准入、验收 |
+## 职责边界（v2 核心）
 
-- 角色指令随插件分发（原 sfd-* profile 的 developer instructions 原文），经 spawn 的 `developer_instructions` 内联下发；**不使用 ES profile**，因此每个阶段的执行者与模型可自由组合。
-- spawn 由插件执行（工具 `sfd_spawn_stage`）；wait / result / close 与报告读取由主 agent 用 ES 工具执行；**插件不读 actor 报告**。
-- 交接文件（评审请求/TASK/报告路径）由主 agent 写进 `.agent-work/`，spawn 的 prompt 只引用路径。
-- review 计数由插件负责：每次成功 spawn 原子 +1，按阶段或 `阶段@unit` 记账，计数与 actor 同写；预算判定与准入仍归主 agent / skill。
-- 每次阶段变化后，插件向主 agent 注入一段阶段上下文（事实 + 下一步指针 + 工具与 skill 指针）；流程判断仍归 skill 与主 agent。
-- advisor 由插件执行（冻结证据、渲染诊断、打包、飞书通知、置 hold）；触发时机由主 agent 判断。
+| 归属 | 内容 |
+|---|---|
+| **主 agent + skill** | 全部流程：规划、派发（原样 `external_subagent_spawn(profile="sfd-*")`）、wait/result/close、报告读取、finding 准入、预算判定（5 waves/section、plan 2 material）、tier 选择、冻结与盲审纪律、验收、归档、提交 |
+| **插件** | 观察账本（actor、派发计数、`.agent-work` 工件）、`[SFD]` 义务注入、`/sfd` 交接、`sfd_start`/`sfd_finish` 锚点、只读状态面板、随包分发 skill |
 
-- 不用任何额外的一次性 LLM 分类调用；系统中的模型调用只有主 agent 与上述 actor。
-- Reviewer 以 ES 只读权限模式派发（zcode/codex 的 plan 模式）；不携带非空 write_manifest。
-- 人可指示"用某个 subagent/模型重跑"：改面板即可，下一次 spawn 生效（无需重启、无 profile）。
-- 每个阶段的执行者与模型由面板配置（Global / Current Project 两层）；未配置的阶段拒绝派发并指出要在面板配置什么。
-- 插件不读写 ES 的 profiles 目录。
+**明确移除**（v1 有、v2 不要）：模型路由面板与两层配置存储、插件代为 spawn、阶段状态机与任何门禁（gated/hold）、插件读 actor 报告、程序化提交（`ctx.gitCommit`）、advisor 程序化流程、飞书通知、B1 盲审 prompt 构造、ES 硬预检。
 
-## Required user-visible behavior
+## 必备行为
 
-1. **单一命令 `/sfd`**，无子命令：
-   - 无任何 SFD 工作状态文件 → 新流程，从 git 工作区检查开始；
-   - 存在状态文件 → 把接手简报注入当前 agent；可能是接手中途任务，也可能是上次未清理干净，由主 agent 决策（继续 / 归档 / 问用户 / 按用户指示）。
-2. **激活路径**：人工 `/sfd` 或口头；或主 agent 识别请求符合 SFD 触发条件后自行启动（skill 式识别，无额外 LLM 调用）。**仅 agent 自动激活时**，必须在发起启动（任何工作区准备与 `sfd_start` 调用）之前获得用户批准；显式激活（`/sfd` 或口头点名 SFD）视为已批准。计划产出后不再设用户批准暂停，直接进 plan review（2026-10-28 修订：原「首个成比例计划须批准后才进 plan review」规则取消）。
-3. **开始前准备（agent 提示词驱动的强制决策表；2026-10-27 修订：原程序化清理门移除，语义逐情形保留为 skill/交接提示词中的强制指引）**：
-   - 主 agent 用自身会话工具执行，选项经普通对话问题呈现给用户，用户选择原文留在会话中；
-   - 工作区脏 → [停止 | 自动提交（AI 提交消息）| 用户自由文本指示（如保留 WIP 备注），绝不丢失未提交工作]；
-   - 干净且在 main → 不询问，agent 自行命名并基于 main 创建 feature 分支；
-   - 干净且不在 main，按 ahead/behind 提供固定选项集（均含「停止」）：
-     - 0/0 → [留在当前分支 | 从当前分支开新分支]
-     - ahead>0,behind=0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| 先把 main fast-forward 到当前分支]
-     - ahead=0,behind>0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| fast-forward 到 main 再从其开分支]
-     - ahead>0,behind>0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| agent 执行合并并解决冲突]
-   - 无 main 引用 / merge 进行中 / detached HEAD → 询问用户如何继续（含「停止」），不猜测基线；
-   - 分支命名/创建/重名处理/合并始终由 agent 执行；完成后调用 `sfd_start`，该工具不执行任何 git 操作，只记录观察到的 git 事实（分支/基线/脏否）并落盘状态。
-4. **规划**：PLAN-FULL 由主 agent 撰写（模板+知识库目录由插件按阶段注入；知识库本体 agent 自行读取）；写完后程序结构校验（section_plan.py），保证后续 section 提取必然成功。
-5. **Plan review**：串行 A→B；material 修正波计数，≥2 自动 hold 进入诊断（硬门禁）；finding 准入由主 agent（插件呈递待准入清单，含程序拼接好的证据文件内容，省去多次读取）；修正后有界 PLAN_DELTA 复查；两个覆盖关闭前禁止派发 implementer（硬门禁）。
-6. **TASK 生成与派发**：程序 extract TASK；主 agent 一次性决策（放行，或把补充内容写在回答里，**由程序合并进 task 文件**；主 agent 不改文件）；依赖 section 未接受则拒绝派发（硬门禁）。
-7. **Subagent prompt 内联**：派发时把要求阅读的文件内容直接放进 prompt（附路径+"仅遗忘主干时重读"）；actor 终止后，程序把报告落盘 `.agent-work/reviews|handoffs/`，并把报告内容直接注入主会话唤起消息（不要求主 agent 再读文件）。
-8. **Impl 判定与提交**（一个决策点）：
-   - 程序先跑确定性门禁（终态结果、HANDOFF 必填、声明的检查、diff 未越出 scope manifest）；
-   - 主 agent 同一步判断：impl 是否完整 + review 面选择（首次由主 agent 按风险路由定，之后同 section 复用）；
-   - 判定通过 → 程序调用 `ctx.gitCommit.commit()`（AI 消息）；失败重试 1 次；仍失败降级主 agent 手工提交。
-   - 语义返工由主 agent 自行决策（小概率），用新鲜上下文重派。
-9. **Code review 编排**（全程零并行）：lens 串行逐个派发→等待→回收；wave 计数 5/section（硬门禁）；closure verify 按已定 lens 面程序化派发；B1 盲审 prompt 由插件构造（不含 A 结论/修复史）；B2 同候选核验。finding 验证、聚类、准入、闭合裁决均主 agent；程序提供拼接好的证据包。
-10. **Advisor**：触发 → 冻结 → 渲染诊断 → `advisor_pack.py` 打包 → 飞书通知 → **整个流程挂起**（不做等待提醒）。用户把结果带回主 agent，主 agent 决定下一步并恢复任务。
-11. **Actor 失败协议**（"运行失败"= 网络/MCP 链路等基础设施故障）：
-    - 运行失败 → 向该任务 queue 发 continue；第二次失败 → 等 5 分钟再试；仍失败 → 飞书通知人并**阻塞全流程**；
-    - 启动失败 → 等 5 分钟重试一次 → 仍失败 → 飞书通知 + 阻塞；
-    - agent 陷入无意义循环**不是**故障：由主 agent 用 observe 工具管理，插件只在面板如实展示运行/无进展事实；
-    - 阻塞期间一切派发工具硬拒绝；人可通过路由覆盖参数指示重启。
-12. **中断与接手**：每个阶段中断都可在新会话接上；`sfd-state.json` 记录 ES agent_id↔unit 映射，接手时逐个 result/close 对账；状态声明已派发但无报告的 actor 归为 failed/cancelled，按有界重试规则处理；状态漂移（plan 哈希/分支/HEAD 不符）→ 阻塞并给选项。
-13. **侧栏面板**：SFD 进度树（plan / plan review / feature / section / subsection / code review / waves / holds 横幅 / 运行中 actor 行）+ external-subagent 状态区（未安装显示安装命令；已安装显示状态）。**ES 未安装时启动 SFD 直接报错**。有 active SFD 时面板自动展开。不加命令；不用 DSH goal。
-14. **JSON 最小化**：agent 永不书写大段 JSON；JSON 仅用于状态表达（`sfd-state.json`，程序独写独读）；REQUIREMENTS/PLAN-FULL/TASK/HANDOFF/review 报告全部 markdown。
-15. **Skill 与上下文重设计**（三个成分，职责互斥）：
-    - 原 skill 的流程性叙述全部移除（调度/计数/顺序/派发由插件接管），且**不得残留任何可能让 agent 误按旧流程执行的描述**——旧流程文件不随 bundle 分发、不留在 agent 可发现的技能面内；被保留的语义规则改写为独立知识文件。
-    - **唯一的流程 skill** 描述插件化后的整体流程：阶段模型、各阶段主 agent 的职责与判定标准、对应 sfd_* 工具、门禁含义、接手方式。沿用原名称（`sectioned-feature-development`），使"用 SFD"的口头触发与 DSH 技能目录识别自然落到新流程上。
-    - **启动与接手的第一步都是读该 skill**（`/sfd` 的启动注入与接手简报均以"先读流程 skill"开头）。
-    - **注入上下文只含当前状态**：阶段、当前 unit、开放 findings、预算余量、待决策项、拼接好的证据内容、指向流程 skill 的引用。**整体流程描述永不出现在注入内容里**——agent 忘记流程时自己重读 skill。
-    - 知识库（planning references）基本不动，由流程 skill 按阶段引用，agent 需要时自行读取，不经插件专门流程。
+1. **单一命令 `/sfd`**（无子命令）：无账本 → 新流程交接（读 skill → 问任务 → 工作区决策表）；有账本且 active → 注入接手简报（观察事实 + 义务 + 未对账 actor）；已关闭 → 提示新开；只有遗留标记（含旧 `sfd-state.json`）→ 提示决策，不静默覆盖。
+2. **激活批准**（2026-10-28 裁定）：仅 agent 自动激活时，须在任何启动准备与 `sfd_start` 之前获得用户批准；显式 `/sfd` 或点名即视为已批准。计划产出后无用户批准暂停（上游 v5.5.2 已采纳该裁定：批准在启动前、无 first-plan pause）。
+3. **工作区准备**：agent 提示词驱动的强制决策表（脏区询问、main 直接建分支、ahead/behind 固定选项集、退化状态询问），与 v1 §3 相同，落在 skill 的 DSH 补充与 `/sfd` 交接文本中；插件不做任何 git 操作。
+4. **`sfd_start(taskSummary, slug?, branch?)`**：只读探测 git 事实（分支/基线/脏否/detached/mid-merge），创建 `.agent-work/sfd-run.json`；不做 ES 预检、不派发。已有运行 → 返回观察简报而非重启。
+5. **观察**（仅 active 运行期间）：`tools/post-execute` 上分类 external-subagent 调用（spawn 取 profile/agent_id/prompt 首行/报告路径提示并按角色计数；wait/result 更新状态与终态；close 标记回收）与 `write`/`edit` 的 `.agent-work/` 写入（plan/reviews/handoffs）。观察失败静默，绝不破坏工具调用；不观察 ES profiles 目录。
+6. **账本合同**：`sfd-run.json` 插件独写、原子落盘、journaled revision（≤500 条）；schema 永不编码阶段/门禁/预算语义，只记观察事实。agent 永不书写该文件。
+7. **注入**（`agent/pre-step`，根 agent）：revision 变化时注入 `[SFD]` 块（运行头、actor 摘要、计数、义务清单、skill 指针）；未消解警告约 6 步后重注入一次；块 = 事实 + 指针，非授权非门禁；与 skill 冲突时以 skill 为准。
+8. **义务推导**（观察可得的不变量，措辞为观察而非裁决）：PLAN A→B 两路覆盖未关闭（派发 n/完成 m）；implementer 已派发而完成覆盖 <2 → 警告；实现后提醒冻结候选与 B1 盲审；非终态 actor 等待清单；终态未 close 的回收清单。
+9. **`sfd_finish()`**：整个授权计划完成并归档后关闭账本、停止注入；未对账 actor 在返回中点名。中途放弃不调用它（用户决策，账本留证）。
+10. **面板**（右侧，guide 40，单页只读 Status）：运行头、actor 表、计数、义务（与注入同源）；ES 状态区（`subagents status --probe`，30s 缓存 + 手动强刷）。无任何配置面。
+11. **skill 分发**：随包分发上游 v5.5.2 全量（SFD + code-review 伴侣、assets、scripts）+ DSH 补充（`references/dispatch/dsh.md` 路由表：A=zcode、B=codex、impl_std=`sfd-dsh-impl-std`、impl_large=`sfd-codex-impl-large`；启动批准裁定；工作区决策表；注入块的消费规则）。上游 v5.5.2 已内含启动前批准规则，DSH 版差异仅剩：DSH addendum、dispatch/dsh.md 与 model-routing 的嵌入块。
 
-## Constraints
+## 约束
 
-- 阈值（plan 2 material waves / code 5 waves / 重试次数）进插件 Config，不写死。
-- 飞书 webhook 默认关闭；通知范围：actor 终态失败 + advisor 触发；里程碑通知默认关。
-- 插件动作（commit/branch）走 Host 服务，不受会话沙箱反复批准干扰。
+- 插件不读写 ES profiles 目录；profile 由 skill 安装器管理，派发可行性由 agent 按 skill 验证。
+- 不用额外一次性 LLM 调用；系统中的模型调用只有主 agent 与它派发的 actor。
+- 阈值只有一个可调项：注入警告的重注入步数（当前 6）；预算阈值不进插件。
+- JSON 最小化：agent 永不书写大段 JSON；账本由程序独写。
 
-## Out of scope
+## Out of scope（本版不做，也不预留钩子）
 
-并行执行与 worktree 管理；DSH goal 机制；旧（非插件）运行记录的 import；native subagent；额外 LLM 决策步；`/sfd` 子命令。
+预算硬门禁、advisor 程序化、通知、程序化提交、并行编排、面板配置面。若未来需要，须重开合同。
 
-## Acceptance criteria
+## 验收记录
 
-1. `/sfd` 在干净仓库走完 规划→review→impl→提交→code review→验收 全流程，面板全程反映真实状态。
-2. 任意阶段杀会话 → 新会话 `/sfd` 出接手简报，对账后从正确断点继续，无重复已完成的 review/impl。
-3. ES actor 被人工终止/网络失败 → 按协议自动续跑；超限后飞书收到通知且全流程阻塞。
-4. material wave / 5-wave / 依赖未接受 / 双覆盖未关 等门禁被越序调用时，工具返回明确错误而不是放行。
-5. `sfd-state.json` 是唯一机器状态；markdown 报告齐备可人读。
-6. 任意接手点仅凭「流程 skill + 注入的当前状态」即可正确继续；注入内容不含整体流程描述；旧 skill 流程文本不出现在 agent 可读面内。
-
-## Confirmed human decisions
-
-B 侧路由=维持原 skill（ES codex）；提交=程序经 dsh-git-commit（重试1次→降级主 agent）；首次计划批准=仅自动激活要批；5 条自采假设（queue-continue、返工新鲜上下文、面板自动展开、agent_id↔unit 对账、飞书三行模板）全部确认；impl_std 改 ES zcode deepseek/deepseek-flash。
-
-跨仓 section（2026-10-23 裁决，同日补充，替代更重的"卫星仓"模型）：PLAN-FULL 的 section 契约增加可选 `- Repository:` 字段，缺省=当前仓库；填了则该 section 的实现落在该仓库。SFD 状态与全部工件只存主仓库 `.agent-work/`，不向外部仓库写入 `.agent-work/`（外部仓现存的 `.agent-work/` 不属于本流程，保留不动）。声明 Repository 即跳过程序对该仓库的一切 git 管理：清理门、漂移对账、程序化提交均不覆盖外部仓库，其分支与提交由主 agent 自行管理，无需用户额外授权。程序改动仅限：plan 结构校验接受该字段并校验路径为存在的 git worktree、TASK extract 原样携带。规则不含发布/发版相关内容。
-
-启动阶段去程序化（2026-10-27 裁决，grill-me 收敛）：移除 sfd_start 的程序化清理门（gitCommit 自动提交、切 main、fast-forward、分叉挂起、卡片、userNote 转交、performed 台账）；决策表语义逐情形保留为 skill 与 /sfd 交接提示词中的**强制指引**（不降级为原则性提示）。sfd_start 不再执行任何 git 写操作，只读探测 git 事实（分支/基线/脏否/detached/midMerge）并落盘状态。COMMIT 阶段的 gitCommit 集成（P1）不受影响。
-
-自动激活批准时机（2026-10-28 裁决）：取消自动激活时「首个成比例计划须用户批准后才进 plan review」的暂停；改为 agent 自动激活必须在发起启动（工作区准备与 `sfd_start` 之前）先获得用户批准，显式激活（`/sfd` 或口头点名 SFD）视为已批准；其后流程不再有首计划批准暂停。该批准为提示词级规则，由流程 skill 承载（激活以读 skill 开头，读到时尚无任何 git 操作），不做程序化门禁——批准发生在插件唯一入口点之前且为会话性事实，程序无法核验；全局 AGENTS.md 不复述 SFD 流程细节，仅保留何时调用的触发条件（2026-10-28 同日裁决）。
-
-## Planner discretion
-
-reviewer 只读的具体实现（ES plan 权限模式 vs prompt 约定）；状态文件 schema；面板视觉与阶段默认路由；gitCommit 调用参数。
-
-## Unresolved blockers
-
-无。
+- v2 重构（2026-10-29，分支 `redesign/injection-first`）：77 个测试全绿（ledger/observer/obligations/context/tools/rpc/client/i18n/skill-provider/skill-prompts/es-status/slug/project/es-cli）。

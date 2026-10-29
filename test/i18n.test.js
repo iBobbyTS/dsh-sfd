@@ -36,19 +36,25 @@ test('dictionaries: zh covers every en key (no raw-key leak)', async () => {
 test('translator: zh overlay with interpolation, unknown key renders key', async () => {
   const t = await translator('zh');
   assert.equal(t('state.notGit'), '当前目录不是 Git 仓库。');
-  assert.equal(t('state.esNoSpawnable').includes('subagent'), true);
+  assert.equal(t('tool.started', { branch: 'sfd/x', slug: 'x' }).includes('sfd/x'), true);
   assert.equal(t('no.such.key'), 'no.such.key');
 });
 
-test('translator: en base resolves the keys used by the /sfd handoff and sfd_start', async () => {
+test('translator: en base resolves every key the injector, tools and command use', async () => {
   const t = await translator('en');
-  for (const key of ['state.fresh', 'state.prepare', 'state.handoff', 'state.nextPlan',
-    'state.notGit', 'state.notRootAgent', 'state.noCwd', 'state.esMissing', 'state.esNoSpawnable',
+  const keys = [
+    'state.fresh', 'state.prepare', 'state.handoff', 'state.nextPlan', 'state.runClosed',
+    'state.notGit', 'state.notRootAgent', 'state.noCwd',
     'state.resume', 'state.legacyTitle', 'state.legacyBody', 'state.readSkillFirst',
     'tool.existingRun', 'tool.started', 'tool.startedDirty',
-    'tool.spawnNoRun', 'tool.spawnNoModel', 'tool.spawnSubagent',
-    'tool.spawnUnavailable', 'tool.spawnEmptyPrompt', 'tool.spawnFailed', 'tool.spawned', 'tool.spawnNext',
-    'tool.spawnCount', 'tool.spawnBadUnit', 'ctx.counts', 'ctx.header', 'ctx.next']) {
+    'tool.finished', 'tool.finishOpen', 'tool.finishArchive', 'tool.finishNoRun',
+    'phase.starting', 'phase.plan-review', 'phase.implement', 'phase.code-review', 'phase.closed',
+    'ctx.header', 'ctx.actorsSummary', 'ctx.actorLine', 'ctx.counts', 'ctx.reports',
+    'ctx.obligations', 'ctx.none', 'ctx.pointer',
+    'obl.await-actors', 'obl.close-actors', 'obl.plan-coverage', 'obl.plan-skip-warn',
+    'obl.freeze-before-review', 'obl.code-coverage',
+  ];
+  for (const key of keys) {
     assert.equal(t(key) === key, false, `${key} rendered raw`);
   }
   // the mandatory decision table must be traceable case by case in the handoff
@@ -56,6 +62,11 @@ test('translator: en base resolves the keys used by the /sfd handoff and sfd_sta
   for (const fragment of ['Dirty workspace', 'on main/master', 'ahead/behind', '0/0',
     'ahead>0,behind=0', 'ahead=0,behind>0', 'ahead>0,behind>0', 'detached HEAD']) {
     assert.ok(prepare.includes(fragment), `state.prepare missing decision-table case: ${fragment}`);
+  }
+  // retired spawn/routing copy must be gone
+  for (const gone of ['tool.spawned', 'tool.spawnNext', 'tool.spawnCount', 'tool.spawnNoModel', 'state.esMissing']) {
+    const en = await loadDict('en');
+    assert.equal(en[gone], undefined, `${gone} is retired copy and must not exist`);
   }
 });
 

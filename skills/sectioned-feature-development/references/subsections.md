@@ -49,7 +49,7 @@ LOC is diagnostic, never a stop/split/compact-code trigger. A known larger but c
 
 ## Plan contract
 
-Keep the existing `sections` DAG. Only decomposed parents add `delivery_mode=SUBSECTIONS`, explicit `lineage_id`, `shared_invariants`, `joint_oracles`, and a serial ordered `subsections` list. Each child supplies ID/parent, scope subset, concrete outcome, planned consumer, safe intermediate state, same-parent predecessors, model, check IDs and its scoped oracle. A child inherits its parent's `- Repository:` unless its contract names its own.
+Keep the existing `sections` DAG. Only decomposed parents add `delivery_mode=SUBSECTIONS`, explicit `lineage_id`, `shared_invariants`, `joint_oracles`, and a serial ordered `subsections` list. Each child supplies ID/parent, scope subset, concrete outcome, planned consumer, safe intermediate state, same-parent predecessors, model, check IDs and its scoped oracle.
 
 The parent retains original requirements, resource limits, exemptions, write envelope, consumers, assurance and budget. No child may weaken these or create an unsupported guarantee. Child tests are written beside the changed behavior; don't create an evidence-only product node or a framework to make the schedule prettier.
 
@@ -71,7 +71,7 @@ its coverage is incrementally inspected, not yet CLEAN for the parent.
 Resolve the actual Code A route from the embedded profile. This checkpoint
 reviewer contributes to the dynamic Code A group at the final frozen parent;
 it does not replace independent Code B.
-2. Implement one child on the existing parent worktree/branch (a child declaring its own repository works on that repository's branch instead); add targeted behavior tests and make a coherent commit. Don't announce the still-incomplete public feature as supported.
+2. Implement one child on the existing parent worktree/branch; add targeted behavior tests and make a coherent commit. Don't announce the still-incomplete public feature as supported.
 3. Freeze the checkpoint SHA. Send `SUBSECTION_DELTA` under `DELEGATED_PASS` to the parent-slot reviewer: predecessor reviewed head→candidate, child scope, parent invariants, pending behaviors, exact checks. New construction is reviewed, not only repair code; “delta” refers to range, not reduced rigor.
 4. Wait for the actual checkpoint reviewer result before Main admission. For every admitted checkpoint repair, freeze the new head and rerun affected checks; the continuing parent R01 reviewer verifies its old finding IDs and invalidated paths using `REPAIR_DELTA` in the **shared parent lineage**. Main also re-routes each repair delta: obtain bounded `FOCUSED_FIND` or decisive executable evidence for a newly triggered, presently required material risk, and admit a distinct repair regression as `NEW_DELTA_FINDING` rather than hiding it under an old ID. If an independent focused reviewer finds a material defect, its repair gets fresh `CLOSURE_VERIFY`; recheck any invalidated R01 invariants within the parent lineage. Only behavior explicitly deferred to a named later consumer may wait; do not defer a currently required safe-intermediate-state invariant. No next same-parent child while review/delta work is live, an admitted finding remains open, or required coverage is invalidated. Stop/cancel is not CHECKPOINT_VERIFIED.
 5. Record `CHECKPOINT_VERIFIED` with base/head, checks and review artifact; not `ACCEPTED`. Continue the next child. Do not create another PLAN.md/state/report hierarchy; one current task packet and one parent ledger are enough.

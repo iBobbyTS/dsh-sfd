@@ -1,58 +1,54 @@
 {
   "meta": {
     "title": "Sectioned Feature Development",
-    "description": "分区特性开发编排：agent 主导的启动准备与分支决策、计划评审记账、ES actor 派发、修复波次预算、advisor 升级与侧栏进度。"
+    "description": "观察 sectioned-feature-development 运行（由主 agent 经 external-subagent profile 自主派发），维护运行账本，并逐步注入评审义务，避免评审被跳过。"
   },
   "state": {
     "notGit": "当前目录不是 Git 仓库。",
-    "notRootAgent": "/sfd 需要在当前活跃的根会话 agent 中执行。",
+    "notRootAgent": "/sfd 只能由当前存活的根会话 agent 执行。",
     "noCwd": "本会话没有工作目录。",
-    "esMissing": "需要 external-subagent 但未检测到。请先安装：brew install external-subagent（或见其 README），然后执行 `external-subagent agents enable zcode codex`。",
-    "esNoSpawnable": "external-subagent 已安装，但当前没有可 spawn 的 subagent。先启用一个：`external-subagent agents enable <zcode|dsh|codex|agy>`。",
-    "resume": "检测到既有 SFD 状态——接手简报如下。",
-    "fresh": "仓库中未发现 SFD 状态。",
-    "prepare": "启动前的工作区准备（强制决策表；完整版见 skill）：\n1) 工作区脏 → 询问用户：[停止 | 自动提交（AI 生成提交消息）]；用户输入自由文本时按其指示处理——绝不丢失未提交工作。\n2) 干净且在 main/master → 不询问：自行命名 feature 分支（如 sfd/<slug>）并从 main 创建。\n3) 干净且不在 main → 计算相对 main 的 ahead/behind，向用户提供且仅提供以下选项（始终附带「停止」）：0/0 → [留在当前分支 | 从当前分支开新分支]；ahead>0,behind=0 → [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 先把 main fast-forward 到当前分支再留下]；ahead=0,behind>0 → [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 先 fast-forward 到 main 再从其开分支]；ahead>0,behind>0（分叉）→ [留下 | 从当前开新分支 | 从 main 开新分支（先切到 main）| 由你与 main 合并、解决全部冲突后继续]。\n4) 无 main 类引用 / 分离 HEAD / merge 进行中 → 询问用户如何继续（必须包含「停止」）；绝不猜测基线。\n分支命名、创建、重名处理与任何合并都是你自己的 git 操作。",
-    "handoff": "现在由你启动：先阅读 sectioned-feature-development 技能，再确定要做的任务。若本会话还没有任务上下文，先询问用户想做什么，不要自行推进。任务明确后，按上面的决策表完成工作区准备并创建 feature 分支，然后调用 sfd_start 工具并给出一句话 taskSummary（可选 slug、branch）——它不执行任何 git 操作，只记录观察到的 git 事实并落盘初始状态。",
-    "nextPlan": "下一步：阅读 sectioned-feature-development 技能，从用户请求中识别 Feature，并在 .agent-work/PLAN-FULL.md 起草 PLAN-FULL。",
-    "legacyTitle": "发现既有 SFD 工作标记（无插件状态）：",
-    "legacyBody": "这可能是未清理的上一轮 run，或插件化之前的手动 run。请决定：归档后重新开始、手动继续、或停止。插件无法接手一个它没有记录的 run。",
-    "readSkillFirst": "请先阅读 sectioned-feature-development 技能，再从上述阶段继续。"
+    "resume": "检测到既有 SFD 运行——以下为观察事实交接简报。",
+    "runClosed": "本仓库的 SFD 运行已关闭。按 skill 归档后可用 /sfd 开始新任务。",
+    "fresh": "本仓库没有 SFD 运行。",
+    "prepare": "启动前的工作区准备（强制决策表，完整版见 skill）：\n1) 工作区脏 → 询问用户：[停止 | 自动提交（AI 生成提交消息）]；用户自由文本指示优先——绝不丢失未提交工作。\n2) 干净且在 main/master → 不询问：自行命名 feature 分支（如 sfd/<slug>）并从 main 创建。\n3) 干净且不在 main → 计算相对 main 的 ahead/behind，向用户提供且仅提供以下选项（永远附带「停止」）：0/0 → [留在当前 | 从当前开新分支]；ahead>0,behind=0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| 先把 main fast-forward 到当前再留下]；ahead=0,behind>0 → [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| 先把 main fast-forward 到当前再从其分支]；ahead>0,behind>0（分叉）→ [留在当前 | 从当前开新分支 | 从 main 开新分支（先切 main）| 由你执行合并、解决全部冲突后继续]。\n4) 无 main 类引用 / detached HEAD / 合并进行中 → 询问用户如何继续（必须含「停止」）；绝不猜测基线。\n分支命名、创建、重名处理与合并都是你自己的 git 操作。",
+    "handoff": "现在由你驱动启动：先读 sectioned-feature-development skill，从用户请求识别 Feature。若本会话尚无任务上下文，先问用户要做什么。任务明确后，按上面决策表完成工作区准备并创建 feature 分支，然后调用 sfd_start 工具并给出一行 taskSummary（可选 slug、branch）——它不做任何 git 操作、也不派发；只记录观察到的 git 事实并创建运行账本，插件据此观察你的 external-subagent 调用。",
+    "nextPlan": "下一步：读 sectioned-feature-development skill，从用户请求识别 Feature，起草 .agent-work/PLAN-FULL.md。评审派发由你自己按 skill 的 DSH dispatch 表原样调用 external_subagent_spawn(profile=…)。",
+    "legacyTitle": "发现既有 SFD 工作痕迹（无插件运行账本）：",
+    "legacyBody": "可能是上次未清理的运行或插件化之前的手动运行。请决策：归档后新开、手动继续或停止。插件无法接手它没有记录的运行。",
+    "readSkillFirst": "先读 sectioned-feature-development skill，再按上面的义务继续。"
   },
   "tool": {
-    "existingRun": "本仓库已存在 SFD run；请按上面的简报接手，不要重新开始。",
-    "started": "SFD run 已在分支 {branch} 上启动。",
-    "startedDirty": "注意：sfd_start 运行时工作区仍是脏的——请按你的决策表处理继续，绝不丢失用户的未提交工作。",
-    "spawnNoRun": "本仓库还没有 SFD 运行；先执行 /sfd 并调用 sfd_start。",
-    "spawnNoModel": "阶段 {stage} 还没有配置模型。请在右侧面板 Configuration 的 Global 或 Current Project 里为它选一个 subagent 与模型。",
-    "spawnSubagent": "阶段 {stage} 选定的 subagent「{subagent}」当前不可 spawn；检查 external-subagent 的启用状态与运行时。",
-    "spawnUnavailable": "本进程没有装配派发器，无法 spawn。",
-    "spawnEmptyPrompt": "spawn 需要非空的任务正文。",
-    "spawnFailed": "派发失败：{reason}",
-    "spawned": "已在阶段 {stage} 派发 ES 任务：{subagent} / {model}（{mode}，路由来自 {source}），agent_id = {id}。",
-    "spawnNext": "下一步（由你执行）：调用 external_subagent_wait(agent_id={id}) 等待；终结后调用 external_subagent_result 读取报告并落盘到指定路径，再调用 external_subagent_close 关闭任务。",
-    "spawnCount": "本轮计数：{key} = {value}",
-    "spawnBadUnit": "unit 参数无效：{reason}"
+    "existingRun": "本仓库已有 SFD 运行；请使用上面的观察简报，不要重复启动。",
+    "started": "SFD 运行已在分支 {branch} 启动（slug {slug}）。此后派发由你完成：按 skill 的 DSH dispatch 表原样调用 external_subagent_spawn(profile=…)；插件会观察这些调用并在你的步骤前注入 [SFD] 义务块。",
+    "startedDirty": "注意：sfd_start 运行时工作区仍是脏的——按你的决策表处理继续，绝不丢失用户未提交的工作。",
+    "finished": "SFD 运行已关闭。插件将不再注入 [SFD] 块。",
+    "finishOpen": "关闭时仍有 actor 未完全对账：{ids}——请按 skill 用 result/close 对账；账本会保留这些证据。",
+    "finishArchive": "若尚未归档，按 skill 的 artifact lifecycle（archive_plan.py）归档。",
+    "finishNoRun": "本仓库没有可关闭的 SFD 运行。"
+  },
+  "phase": {
+    "starting": "准备中",
+    "plan-review": "计划评审",
+    "implement": "实现",
+    "code-review": "代码评审",
+    "closed": "已关闭"
   },
   "ctx": {
-    "header": "[SFD] 阶段 {phase} · 仓库 {root}",
-    "task": "任务：{summary}",
-    "plan": "计划：{file} · 评审 A {a} / B {b}",
-    "units": "单元：{items}",
-    "actors": "已派发 actor：{items}",
-    "hold": "挂起：{kind} — {reason}",
-    "next": "下一步：{hint}",
-    "tools": "派发用 sfd_spawn_stage；等待 / 取结果 / 关闭用 external_subagent_wait / external_subagent_result / external_subagent_close —— 结果由你读，插件不读。",
-    "skill": "完整流程见 {skill} 技能：先读它，再继续。",
-    "none": "未开始",
-    "hintCleanup": "完成启动前工作区准备与分支决策，然后调用 sfd_start。",
-    "hintPlan": "写 REQUIREMENTS / PLAN-FULL；完成后按 skill 派发计划评审。",
-    "hintPlanReview": "读 reviewer 报告，准入 findings，决定修复还是进入实现。",
-    "hintImpl": "按 TASK 派发 implementer；收到 HANDOFF 后判定实现是否完整。",
-    "hintCommit": "提交本 section，完成后进入代码评审。",
-    "hintCodeReview": "按 skill 派发 A lens / closure / B1；收敛后进入验收。",
-    "hintAccept": "验收本 section，决定下一个 section 或收尾。",
-    "hintArchive": "按归档清单收尾。",
-    "hintDone": "本轮已完成；有新任务时重新 /sfd。",
-    "counts": "评审计数：{items}"
+    "header": "[SFD] {slug}@{branch} · rev {rev} · {phase}",
+    "actorsSummary": "已观察 actor：{total}（运行中 {running}，终态未关闭 {unclosed}）",
+    "actorLine": "  - #{id} {role} {outcome}{extra}",
+    "counts": "派发计数：{items}",
+    "reports": "已观察 .agent-work 报告写入：{count} 个",
+    "obligations": "义务（按 skill；以下是观察，不是门禁）：",
+    "none": "无——当前没有到期的观察项",
+    "pointer": "流程权威：$sectioned-feature-development（派发 = 原样调用表中的 external_subagent_spawn(profile=…)；wait/result/close = 你自己的 MCP 调用）"
+  },
+  "obl": {
+    "await-actors": "  - 等待终态：{ids}（external_subagent_wait）",
+    "close-actors": "  - 回收已完成 actor：{ids}（external_subagent_close）",
+    "plan-coverage": "  - PLAN 评审 A→B：两路独立覆盖须在 implementer 派发前关闭（已观察派发 {dispatched}，终态完成 {done}）",
+    "plan-skip-warn": "  - 警告：已派发 {impl} 个 implementer，但 PLAN 覆盖终态完成仅 {done} 个——skill 不允许；请补救（补评审）或说明依据",
+    "freeze-before-review": "  - 派发 Code A 前冻结候选（对账 staged+unstaged+untracked）；B1 盲审——prompt 不携带 A 结论或修复史",
+    "code-coverage": "  - Code A 关闭后：先完整盲审 B1，再同候选核验 B2；预算判定（每 section 5 waves、plan 2 material waves）归 skill（已观察 code-review 派发：{dispatched}）"
   }
 }

@@ -39,13 +39,6 @@ A **Section** is the bounded implementation, review, acceptance and external dep
 
 Use one PLAN-FULL. Legacy single-Feature plans with a `- Feature: slug` preamble stay valid. For explicit Feature blocks, put headings like `### Feature F01 — Draft resume` in the PLAN preamble, before all `## S01 — ...` executable headings. Describe each Feature's complete outcome, real end-to-end oracle, supported environment, identity/security constraints, shared obligations and exclusions. Every top-level Section then has one `- Feature: F01` membership; child S01.A inherits it and must not redefine Feature ownership. IDs are globally unique. Derive the member Section set from bindings: do not maintain a second authoritative handwritten list. Cross-Feature executable dependencies still cite accepted Section IDs, not Feature status labels.
 
-A section executes in the repository hosting the SFD run (the one holding `.agent-work/`) unless its contract adds a `- Repository: path` line — an absolute local path, or one relative to that primary repo root. Omitted means the current repository. Use it when the section's changes genuinely belong in another local repository (typically a dependency that must change for this feature to land). Rules:
-
-- One plan, many repos: the PLAN, TASK, ledger and all SFD state stay in the primary repo's `.agent-work/`; SFD does not write `.agent-work/` or state files into an external repository. An existing `.agent-work/` there is not this run's — leave it untouched.
-- The path must name an existing git worktree the main agent can enter.
-- Declaring `- Repository:` opts that repository out of program git management: the plugin runs no cleanup gate, drift reconciliation or programmatic commits there. The main agent manages the external repository's branches and commits itself — creating branches and committing there needs no additional user authorization.
-- Branch and commit naming rules apply unchanged in the external repository.
-
 A producing Section shared by multiple Features retains **one primary edit/repair owner, original Section lineage, scope and five-wave budget**. Each consuming Feature names the accepted producer Section and the actual interface/invariants it relies on. A consumer can start after that Section is accepted and integrated without awaiting unrelated Sections in the producer's Feature. Its own Feature cannot be marked accepted until its full observable path is proven. A rule with ambiguous shared code ownership or incompatible producer/consumer semantics needs an explicit PLAN decision; duplicating a Section or granting each Feature its own repair counter is invalid.
 
 At Feature identification, at real interface handoffs, and before final acceptance, examine the *supported* trust actors, external inputs, permissions, process/DB/file boundaries, shared state and lifecycle. Locally safe Sections can compose into an unsafe Feature. Route material changed trust boundaries to existing R06-qualified source/probe evidence or a bounded security reviewer, without inventing unsupported threat actors or a standing security committee.
@@ -375,7 +368,7 @@ Sections are selected by business acceptance; subsection choice must identify a 
 ## Readable plan contract
 
 PLAN-FULL is Markdown, not a narrative file paired with a machine-readable JSON schedule.
-The section helper checks IDs, dependency existence/cycles, parent membership, an explicit profile-resolved impl route per unit, and that any declared `- Repository:` path resolves to an existing git worktree.
+The section helper checks IDs, dependency existence/cycles, parent membership and an explicit profile-resolved impl route per unit.
 Required business authority, constraints, tests and joint oracles remain semantic PLAN-review responsibilities; no fixed heading vocabulary, field count or hash grants approval.
 Missing formatting alone is not a new review candidate.
 Ordinary corrected PLAN text can be admitted by main with the original result preserved; changed substantive boundaries receive only the authorized delta recheck.
