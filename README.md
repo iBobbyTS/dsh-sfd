@@ -18,6 +18,19 @@ SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整�
 - 流程 skill 随包分发（`skills/sectioned-feature-development/`），经 `ctx.skills` provider 注册，安装/升级/卸载与插件一体。
 - 卡片与简报文案在 [`locale/`](locale/) 的 JSON 中（中/英）。
 
+## 侧栏面板
+
+右侧面板里有一张常驻卡片 **Sectioned Feature Development**（guide 顺序 40，正好在 **浏览器** 下面），点开是一个 tab 页面：
+
+- 顶部两页导航：**Status**（暂时留空，等流程产出实时进度后接入）与 **Configuration**。
+- Configuration 两个分区：**Global** 与 **Current Project**（按会话工作目录所属 Git 仓库根区分）。每个分区各 6 行阶段：Plan Review A / Plan Review B / Implementation Standard / Implementation Large / Code Review A / Code Review B。
+- 每行一个模型下拉，左侧是原生/外部切换开关——该开关**固定为 external 且禁用**，因为流程的每个阶段都只派发给外部 subagent。
+- 模型候选来自 external-subagent 守护进程：宿主执行 `external-subagent subagents status --probe`（与 MCP 的 `external_subagent_status(probe=true)` 同一数据源），只列出 enabled + `spawn_supported` + 可 spawn 传输的 subagent，并按 subagent 分组给出其 `models.tokens`。目录缓存 30 秒，面板右上角的刷新按钮会强制重新探测；CLI 位置按 `EXTERNAL_SUBAGENT_BIN` → 常见安装路径（`/opt/homebrew/bin`、`/usr/local/bin`、`~/.local/bin`）→ `PATH` 依次解析。
+
+模型路由保存在 `$DSH_HOME/dsh-sfd.json`（权限 0600、原子写）：`global.stages` 对所有项目生效，`projects[<repo root>].stages` 只对该仓库生效。Global 里某项为 `null` 表示未配置；Current Project 里某项为 `null` 表示**继承 Global**（下拉第一项显示 `继承 Global (subagent - model)` / `Inherit Global (subagent - model)`）。当前版本只做配置存储，等 P1/P2 的派发器实现后由它读取这两层选择。
+
+> 面板的浏览器半（`lib/client.js`）是新增的 `dsh.client` 能力。DSH 只在启动时扫描一次 `dsh.client` 声明，所以**升级后第一次启用需要重启 DSH**（Desktop 退出重开，或重启 dsh Host）；之后每个会话的右栏布局会自己恢复。
+
 ## 快速开始
 
 1. 在仓库内输入 `/sfd`。
@@ -32,12 +45,13 @@ SFD 是一套分节开发方法：先写需求合同（REQUIREMENTS）与完整�
 
 - `/sfd` 命令：状态探测与分流（接手简报 / 旧目录标记提示 / 新流程交接，交接含启动准备决策表指引）。
 - `sfd_start` 工具：ES 预检、只读探测 git 事实（分支/基线/脏否）、原子写状态文件；不执行任何 git 写操作——工作区准备由主 agent 按 skill 决策表自行完成。
+- 右侧面板：guide 卡片（浏览器下方）+ Status / Configuration 两页；Configuration 的 Global 与 Current Project 各配 6 个阶段的模型（external 固定），候选来自 external-subagent 探针。
 
 尚未实现（见 [DESIGN.md](DESIGN.md) §10 分期）：
 
 - P1：计划结构校验、计划评审编排与 finding 准入、TASK 生成与 `impl_*` 派发、故障协议。
 - P2：代码评审编排、wave 门禁、B1/B2 盲审、advisor 与飞书通知。
-- P3：侧栏面板、接手对账、归档。
+- P3：侧栏面板的 Status 实时进度、接手对账、归档（面板骨架与模型路由配置已提前实现）。
 - P4：流程 skill 打磨、profile 管理按钮。
 
 因此当前版本能把一次 SFD 运行从 `/sfd` 推进到规划产出，但**不能**自动走完评审、实现、提交与验收。

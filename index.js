@@ -17,11 +17,51 @@ import { inspect } from './lib/cleanup.js';
 import { makeT } from './lib/i18n.js';
 import { registerSfdTools } from './lib/tools.js';
 import { sfdSkillProvider } from './lib/skill-provider.js';
+import { ModelSettingsStore } from './lib/models.js';
+import { createCatalog } from './lib/catalog.js';
+import { resolveProjectRoot } from './lib/project.js';
+import { createHandler, ROUTE } from './lib/rpc.js';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
 export const inject = ['commands', 'agents', 'workingDirectory', 'tools', 'skills'];
 
 export function apply(ctx) {
+  // The right-side panel's data channel: stage model routing plus the
+  // spawnable external-subagent catalog. It rides Connection's authenticated
+  // /api transport, so it is registered in its own injection scope — a Host
+  // without a web client keeps the command and tools and simply has no panel.
+  ctx.inject(['connection'], (rpcCtx) => {
+    const models = new ModelSettingsStore();
+    const catalog = createCatalog();
+    const service = {
+      /** Both scopes for the Session's project (see lib/models.js). */
+      async settings(payload) {
+        return models.get(await resolveProjectRoot(payload.cwd));
+      },
+      /** One stage's selection; the project scope needs a repository root. */
+      async saveSettings(payload) {
+        const root = await resolveProjectRoot(payload.cwd);
+        if (payload.scope === 'project' && root === null) throw new Error('Project settings require a repository');
+        await models.save(root, payload.scope, payload.stage, payload.selection);
+        return models.get(root);
+      },
+      /** Spawnable subagents and their usable model tokens. */
+      async catalog(payload) {
+        return catalog.get({ force: payload.force === true });
+      },
+    };
+    try {
+      rpcCtx.effect(() => rpcCtx.connection.fetch.register({
+        path: ROUTE,
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: createHandler(service),
+      }), 'sfd: panel RPC route');
+    } catch (error) {
+      try { ctx.logger?.warn?.('sfd: panel RPC route unavailable', { error: String(error) }); } catch { /* noop */ }
+    }
+  });
+
   // Serve the flow skill from this package's skills/ directory so it
   // installs/upgrades/uninstalls together with the plugin.
   try {
