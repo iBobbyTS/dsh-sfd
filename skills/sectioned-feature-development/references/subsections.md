@@ -49,7 +49,7 @@ LOC is diagnostic, never a stop/split/compact-code trigger. A known larger but c
 
 ## Plan contract
 
-Keep the existing `sections` DAG. Only decomposed parents add `delivery_mode=SUBSECTIONS`, explicit `lineage_id`, `shared_invariants`, `joint_oracles`, and a serial ordered `subsections` list. Each child supplies ID/parent, scope subset, concrete outcome, planned consumer, safe intermediate state, same-parent predecessors, model, check IDs and its scoped oracle. A child inherits its parent's `- Repository:` unless its contract names its own.
+Keep the existing `sections` DAG. Only decomposed parents add `delivery_mode=SUBSECTIONS`, explicit `lineage_id`, `shared_invariants`, `joint_oracles`, and a serial ordered `subsections` list. Each child supplies ID/parent, scope subset, concrete outcome, planned consumer, safe intermediate state, same-parent predecessors, model, check IDs and its scoped oracle.
 
 The parent retains original requirements, resource limits, exemptions, write envelope, consumers, assurance and budget. No child may weaken these or create an unsupported guarantee. Child tests are written beside the changed behavior; don't create an evidence-only product node or a framework to make the schedule prettier.
 
@@ -71,9 +71,9 @@ its coverage is incrementally inspected, not yet CLEAN for the parent.
 Resolve the actual Code A route from the embedded profile. This checkpoint
 reviewer contributes to the dynamic Code A group at the final frozen parent;
 it does not replace independent Code B.
-2. Implement one child on the existing parent worktree/branch (a child declaring its own repository works on that repository's branch instead); add targeted behavior tests and make a coherent commit. Don't announce the still-incomplete public feature as supported.
+2. Implement one child on the existing parent worktree/branch; add targeted behavior tests and make a coherent commit. Don't announce the still-incomplete public feature as supported.
 3. Freeze the checkpoint SHA. Send `SUBSECTION_DELTA` under `DELEGATED_PASS` to the parent-slot reviewer: predecessor reviewed head→candidate, child scope, parent invariants, pending behaviors, exact checks. New construction is reviewed, not only repair code; “delta” refers to range, not reduced rigor.
-4. Wait for the actual checkpoint reviewer result before Main admission. For every admitted checkpoint repair, freeze the new head and rerun affected checks; the continuing parent R01 reviewer verifies its old finding IDs and invalidated paths using `REPAIR_DELTA` in the **shared parent lineage**. Main also re-routes each repair delta: obtain bounded `FOCUSED_FIND` or decisive executable evidence for a newly triggered, presently required material risk, and admit a distinct repair regression as `NEW_DELTA_FINDING` rather than hiding it under an old ID. If an independent focused reviewer finds a material defect, its repair gets fresh `CLOSURE_VERIFY`; recheck any invalidated R01 invariants within the parent lineage. Only behavior explicitly deferred to a named later consumer may wait; do not defer a currently required safe-intermediate-state invariant. No next same-parent child while review/delta work is live, an admitted finding remains open, or required coverage is invalidated. Stop/cancel is not CHECKPOINT_VERIFIED.
+4. Wait for the actual checkpoint reviewer result before Main admission. For every admitted checkpoint repair, freeze the new head and rerun affected checks; the continuing parent R01 reviewer verifies its old finding IDs and invalidated paths using `REPAIR_DELTA` in the **shared parent lineage**. Main also re-routes each repair delta: obtain bounded `FOCUSED_FIND` or decisive executable evidence for a newly triggered, presently required material risk, and admit a distinct repair regression as `NEW_DELTA_FINDING` rather than hiding it under an old ID. If an independent focused reviewer finds a material defect, its repair is closed by that reviewer's own session through `CLOSURE_VERIFY`; recheck any invalidated R01 invariants within the parent lineage. Only behavior explicitly deferred to a named later consumer may wait; do not defer a currently required safe-intermediate-state invariant. No next same-parent child while review/delta work is live, an admitted finding remains open, or required coverage is invalidated. Stop/cancel is not CHECKPOINT_VERIFIED.
 5. Record `CHECKPOINT_VERIFIED` with base/head, checks and review artifact; not `ACCEPTED`. Continue the next child. Do not create another PLAN.md/state/report hierarchy; one current task packet and one parent ledger are enough.
 6. If a later change invalidates earlier code, record the exact prior checkpoint/paths/invariant, review that delta and rerun affected joint cases. Do not reopen all historical lines or clear old evidence because of a new child number.
 
@@ -81,10 +81,12 @@ Each *declared* child must receive real R01 checkpoint results before a dependen
 
 Independent specialist Code A risk reviews can run early when a material path exists and the candidate is frozen. At the final Section candidate re-route risks, reuse still-valid independent focus evidence, and only fill newly triggered or invalidated gaps. No duplicated specialist group merely because the last child finished. The complete independent Section B1/B2 remains mandatory.
 
-One parent-slot reviewer session is preferred across children, preserving coverage.
+One parent-slot reviewer session runs across all children, preserving coverage
+(mandatory [session continuity](reviewer-orchestration.md#repair-and-recheck-session-continuity); a recorded-gap replacement only when it cannot continue).
 This same-lineage `REPAIR_DELTA` closure applies to the parent R01 `SUBSECTION_DELTA`
 and unfinished `PARENT_RECONCILIATION` checkpoints, **not** to independent focused
-findings or later parent-level Code A/B repairs requiring fresh `CLOSURE_VERIFY`.
+findings or later parent-level Code A/B repairs, whose closures run in the
+discovering reviewer's own session.
 Where provider/harness cannot resume a terminal session, use the existing explicit same-provider delta-with-gap policy or stop under strict continuity.
 Different actual agents are never falsely reported as one session.
 Every real invocation, including checkpoint reviews, counts in the existing physical-call ledger even when it does not complete a logical A/B coverage.
@@ -156,7 +158,7 @@ Parent acceptance stays distinct from checkpoint verification. Record parent/chi
 
 ## Profile freeze
 
-Before PLAN review, each parent AND each child declares its own implementation profile and task-based reason. No implicit child inheritance. Model changes during execution require a bounded plan revision, unchanged original lineage, and task regeneration before dispatch. Parent repair outside a child uses the parent's explicit profile; child-scoped repair uses that child's profile.
+Before PLAN review, each parent AND each child declares its own implementation profile and task-based reason. No implicit child inheritance. Model changes during execution require a bounded plan revision, unchanged original lineage, and task regeneration before dispatch. Repairs follow the owning unit's [repair session](reviewer-orchestration.md#repair-and-recheck-session-continuity): parent-scope repairs use the parent unit's repair session, child-scoped repairs use that child's repair session (an impl_std unit shares one escalated impl_large repair session; an impl_large unit returns to its original implementer session).
 
 ## Checkpoint placement
 

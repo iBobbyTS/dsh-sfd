@@ -1,13 +1,23 @@
-# Dynamic SFD requirements
+# Thin wrapper requirements and authority
 
-Goal: **prevent accidental bypass of quality checkpoints while letting Main retain dynamic control and letting the user revise the live workflow without resetting it.**
+The user's current contract and the canonical SFD skill govern behavior. This document records the implementation boundary; it cannot redefine a user-requested tool name or silently approve a workflow deviation.
 
-- Keep `/sfd`, existing `sfd_start` cleanup and branch-base choices.
-- One persisted graph with genuine ES actor identities/results and Markdown evidence.
-- Each declared Subsection needs real scoped R01 before its dependent successor; Section final A cannot start before implementation/reconciliation.
-- Code B1 cannot start before Code A converges; B2 is explicit same-head reconciliation; missing/skipped B is not CLEAN.
-- Main admits findings and real test/Feature evidence; terminal review report and matching candidate are prerequisites, not proof of quality.
-- Allow live insertion of Sections, Subsections and custom steps, and risk-lens changes, while preserving unaffected evidence.
-- Only a **real user instruction** can waive/restore Code B under the Skill contract; log reason and disclose reduced assurance.
-- Count attempted Section repair dispatches against the existing five-wave lineage limit; preserve counts during revisions.
-- No out-of-band gate guarantee, forced complete workflow reset, invented reviewer evidence, rigid global phase machine or hidden model fallback.
+- Compile canonical Feature → Section → Subsection Markdown with located grammar/dependency/ownership errors. Compilation is never semantic plan approval.
+- Expand serial Plan A/B, actual child checkpoints, cumulative parent reconciliation, complete Section Code A/independent blind Code B, Section acceptance, Feature composition acceptance and cross-Feature delivery. Sections are serial; children never create extra A/B pairs.
+- Reread the latest graph before rejecting order. Support plan updates, preserve unaffected evidence, retain the last valid graph on invalid input but reject stale execution. Removing accepted work must not create an unresolvable ghost Section; real live actors remain visible.
+- Main explicitly declares runtime integration, focused-review, verify-finding, repair, closure, repair-delta, plan-delta and repair-reconciliation obligations through `sfd_workflow_update`. Validate their graph/session structure atomically and preserve them across source reload and risk selection; do not identify findings or initiate dispatch automatically.
+- Keep one additive schema-3 per-session/repository record for actual actor/session/round/page/batch facts, Main dispositions and the declared graph overlay. No separate finding controller, automatic repair router/model selector, wave counter or competing acceptance state.
+- Provide `sfd_compile_workflow`, status/update/Main-confirmation tools, spawn/wait/observe/result/send, `sfd_subagent_cancel` and `sfd_cancel`. Keep the misspelled old name only as a deprecated alias. No respond, automatic retry/actor close/cancellation, rollback or mandatory extra question policy.
+- Prevalidate multi-task spawn. On partial dispatch preserve actual IDs, uncertain operations and unattempted tasks. Never retry non-idempotent calls blindly. Wait for every target and batch peer before group result instructions, accurately list remaining IDs and retain diagnostic paths for loops, no progress and abnormal exits.
+- Pending input, failure/cancellation, missing or partial/empty/paginated report evidence cannot masquerade as successful completion or review approval. Main must inspect actual authored evidence and explicitly confirm semantic decisions.
+- Supply complete applicable skill handling guidance at first role/layer return, then concise current hints with actual actor/session associations and graph successors. Guide the next ready Main-only acceptance stage before confirmation. Do not merely repeat "follow the skill".
+- Enforce declared continuations against real sessions: original impl_large implementer; one escalated impl_large repair session for original impl_std; discovering reviewer for closure and affected Plan A; one parent R01 lineage; current B1 reviewer for necessary same-head B2. Main retains actual model route and assignment choices. A post-repair blind B1 is fresh, never a renamed continuation.
+- Main declares all required closures, invalidations, risk checks and residual composition obligations, following the authoritative skill. The wrapper does not infer them from report keywords or use process status as acceptance.
+- Do not invalidate Plan A/B for trailing blank lines. Main can explicitly retain previously accepted unaffected Plan evidence using the actual actor/round and reason; affected rechecks use their original sessions. Do not rewrite report provenance to imply a new review.
+- Permit skill-authorized last-child checkpoint and parent reconciliation to share one real report when both conclusions are explicitly declared and separately confirmed. Reject unrelated or undeclared report sharing.
+- No writer/reviewer overlap. Overlapping read-only reviews require Main's actual immutable-candidate and isolated report/test-effects declaration. Yolo alone proves no isolation.
+- Activate/hide raw ES tools and ES skill only in the current agent scope; restore membership on resume, refresh restrictions safely and dispose on lifecycle boundaries. Keep other sessions unchanged and fail honestly for unsupported/same-scope host capabilities or lost continuation identity.
+- Keep exact canonical SFD 5.6.0 and sibling code-review resource bytes, with separate adaptation and reproducible manifest checks. Ship only active reachable modules; preserve historical source work without registering old Git/cleanup controllers.
+- Verify meaningful positive/negative regressions with fake ES and actual Cordis scope integration, plus canonical byte comparison and package inspection. State that installed DSH/ES end-to-end behavior remains unverified when no real run occurred.
+
+Raw shell bypass, already-seen content and residual MCP server instructions are outside the hiding guarantee. Authorization provenance is a prompt-level contract, not authentication. The plugin does not install/restart DSH, edit profiles/canonical sources, commit/push/merge, roll back user changes or decide readiness on Main's behalf.

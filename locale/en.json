@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Sectioned Feature Development",
-    "description": "Orchestrates sectioned feature development: cleanup and branch gating, plan review accounting, ES actor dispatch, wave budgets, advisor escalation, and side-panel progress."
+    "description": "Thin plan compiler and per-session external-subagent wrapper. Main owns scheduling, risk routing and acceptance."
   },
   "cleanup": {
     "dirtyTitle": "Workspace is dirty",

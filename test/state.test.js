@@ -1,90 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp,rm,readFile,writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initialState, transition, loadState, detectWork, gate, renderBrief, AGENT_WORK } from '../lib/state.js';
-import { createFlow } from '../lib/flow.js';
-
-const withRepo = async (fn) => {
-  const dir = await mkdtemp(join(tmpdir(), 'sfd-state-'));
-  try {
-    await fn(dir);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-};
-
-test('initialState shape', () => {
-  const s = initialState('/repo');
-  assert.equal(s.schema, 1);
-  assert.equal(s.phase, 'CLEANUP');
-  assert.equal(s.seq, 0);
-  assert.equal(s.hold, null);
-  assert.ok(Array.isArray(s.journal));
+import { withRun,location } from '../lib/run-store.js';
+test('serialized atomic per-session writes persist successful partial effects even when the operation throws',async()=>{
+ const repo=await mkdtemp(join(tmpdir(),'sfd-record-'));try{
+  const results=await Promise.all(Array.from({length:8},()=>withRun(repo,'session',async r=>{const previous=r.revision;await new Promise(resolve=>setImmediate(resolve));r.revision=previous+1;return r.revision;})));
+  assert.deepEqual(results.sort((a,b)=>a-b),[1,2,3,4,5,6,7,8]);
+  await assert.rejects(()=>withRun(repo,'session',r=>{r.actors.created={id:'real-id'};throw new Error('later spawn failed');}),/later spawn/);
+  const loaded=await withRun(repo,'session',r=>r);assert.ok(loaded.actors.created);assert.equal(loaded.revision,8);
+  const different=await withRun(repo,'another-session',r=>r);assert.notEqual(loaded.id,different.id);
+  const file=(await location(repo,'session')).file;assert.ok(!file.includes('session.json'));assert.equal(JSON.parse(await readFile(file,'utf8')).sessionId,'session');
+ }finally{await rm(repo,{recursive:true,force:true});}
 });
-
-test('transition bumps seq, appends journal, writes atomically', async () => {
-  await withRepo(async (repo) => {
-    let s = initialState(repo);
-    s = await transition(s, 'start', { phase: 'PLAN' }, 'hello');
-    assert.equal(s.seq, 1);
-    assert.equal(s.phase, 'PLAN');
-    assert.equal(s.journal.at(-1).kind, 'start');
-    s = await transition(s, 'hold', { hold: { kind: 'BLOCKED', reason: 'x', since: 't' } });
-    assert.equal(s.seq, 2);
-    assert.equal(s.journal.length, 2);
-    // persisted
-    const loaded = await loadState(repo);
-    assert.equal(loaded.seq, 2);
-    assert.equal(loaded.hold.kind, 'BLOCKED');
-  });
-});
-
-test('loadState returns null when absent, throws on bad json/schema', async () => {
-  await withRepo(async (repo) => {
-    assert.equal(await loadState(repo), null);
-    await mkdir(join(repo, AGENT_WORK), { recursive: true });
-    await writeFile(join(repo, AGENT_WORK, 'sfd-state.json'), '{oops', 'utf8');
-    await assert.rejects(() => loadState(repo), /not valid JSON/);
-    await writeFile(join(repo, AGENT_WORK, 'sfd-state.json'), JSON.stringify({ schema: 99 }), 'utf8');
-    await assert.rejects(() => loadState(repo), /Unsupported/);
-  });
-});
-
-test('detectWork: absent / legacy markers / state', async () => {
-  await withRepo(async (repo) => {
-    let d = await detectWork(repo);
-    assert.equal(d.present, false);
-    await mkdir(join(repo, AGENT_WORK), { recursive: true });
-    await writeFile(join(repo, AGENT_WORK, 'PLAN-FULL.md'), '# plan', 'utf8');
-    d = await detectWork(repo);
-    assert.equal(d.present, true);
-    assert.equal(d.kind, 'legacy-markers');
-    await writeFile(join(repo, AGENT_WORK, 'sfd-state.json'), JSON.stringify(initialState(repo)), 'utf8');
-    d = await detectWork(repo);
-    assert.equal(d.kind, 'state');
-  });
-});
-
-test('gate: DONE and holds block, otherwise allowed', () => {
-  const s = initialState('/repo');
-  assert.equal(gate(s).allowed, true);
-  const done = { ...s, phase: 'DONE' };
-  assert.equal(gate(done).allowed, false);
-  const held = { ...s, hold: { kind: 'WAITING_USER', reason: 'r' } };
-  assert.equal(gate(held).allowed, false);
-});
-
-test('renderBrief reflects dynamic graph and current obligations', () => {
-  const s = initialState('/repo');
-  s.phase = 'ACTIVE';
-  s.task = { summary: 'Add test coverage' };
-  s.flow = createFlow([{ id: 'S01', subsections: ['A'] }]);
-  const brief = renderBrief(s, (k) => '[' + k + ']');
-  assert.match(brief, /Phase: ACTIVE/);
-  assert.match(brief, /Workflow revision: 1/);
-  assert.match(brief, /S01\/A:checkpoint/);
-  assert.match(brief, /plan:A/);
-  assert.match(brief, /state\.readSkillFirst/);
+test('unknown schema/identity and corrupt records fail instead of being treated as a fresh run',async()=>{
+ const repo=await mkdtemp(join(tmpdir(),'sfd-record-'));try{
+  await assert.rejects(()=>withRun(repo,'',()=>{}),/session ID/);
+  await withRun(repo,'session',()=>{});const {file}=await location(repo,'session');await writeFile(file,'not json');await assert.rejects(()=>withRun(repo,'session',()=>{}),SyntaxError);
+  await writeFile(file,JSON.stringify({schema:1,repo,sessionId:'session'}));await assert.rejects(()=>withRun(repo,'session',()=>{}),/schema mismatch/);
+ }finally{await rm(repo,{recursive:true,force:true});}
 });

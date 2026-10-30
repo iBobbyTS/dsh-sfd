@@ -1,47 +1,26 @@
+/** Current process boundary regressions; no real external-subagent daemon calls. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
-import {candidate,es,collect,spawnRequest} from '../lib/actors.js';
-const run=promisify(execFile);
-const git=(dir,...args)=>run('git',['-C',dir,...args]);
-test('ES CLI validates output envelope',async()=>{
- const fake=async(_bin,args)=>({stdout:JSON.stringify({ok:true,product:'external-subagent',command:args[0],result:{agent_id:12345678}})});
- assert.equal((await es('spawn',{repository:'/x',prompt:'foo'},fake)).agent_id,12345678);
- await assert.rejects(()=>es('spawn',{},async()=>({stdout:'{"ok":false,"error":{"code":"DENIED"}}'})),/failed/);
+import { dirname } from 'node:path';
+import { createEsTransport,parseEsJson,runEs,resolveBinary,launcherEnvironment } from '../lib/es-cli.js';
+test('GUI minimal PATH resolves configured/known launcher and includes its Node interpreter',async()=>{
+ const env={PATH:'/usr/bin:/bin',EXTERNAL_SUBAGENT_BIN:'/chosen/bin/external-subagent'};
+ assert.equal(resolveBinary(env),env.EXTERNAL_SUBAGENT_BIN);assert.ok(launcherEnvironment(env).PATH.includes(dirname(process.execPath)));
+ let seen;
+ const value=await runEs(['status'],{env,invoke:(binary,args,options,callback)=>{seen={binary,args,options};callback(null,'{"ok":true,"result":{}}','');}});
+ assert.equal(value,'{"ok":true,"result":{}}');assert.equal(seen.binary,env.EXTERNAL_SUBAGENT_BIN);assert.equal(seen.options.timeout,30000);assert.ok(seen.options.env.PATH.includes('/chosen/bin'));
 });
-test('terminal ES collection retrieves all pages and rejects incomplete outcomes',async()=>{
- const x=await collect('/tmp',12345678,async(cmd,args)=>{
-  if(cmd==='wait')return{task:{status:'completed'}};
-  return{task:{status:'completed'},result:{outcome:'COMPLETED',partial:false,final_text:args.offset===0?'first ':'second',next_offset:args.offset===0?6:null}};
- });
- assert.equal(x.status,'completed');assert.equal(x.reportText,'first second');
- await assert.rejects(()=>collect('/tmp',12345678,async(cmd)=>cmd==='wait'?{task:{status:'completed'}}:{result:{outcome:'COMPLETED',partial:true,final_text:'incomplete'}}),/partial/);
+test('CLI envelope errors and launch failures retain honest diagnostics despite exit zero',async()=>{
+ assert.throws(()=>parseEsJson('{"ok":false,"error":{"code":"DENIED","message":"No access"}}'),e=>e.code==='DENIED'&&e.message==='No access');
+ for(const raw of ['null','[]','not json'])assert.throws(()=>parseEsJson(raw),/document|non-JSON/);
+ const rpc=createEsTransport({run:async()=>'{"ok":true}'});await assert.rejects(()=>rpc('spawn',{}),/missing result/);
+ await assert.rejects(()=>runEs([],{invoke:(_bin,_args,_options,cb)=>cb(Object.assign(new Error('missing'),{code:'ENOENT'}),'','')}),e=>e.code==='ES_MISSING');
 });
-test('independent reviewer uses ES profile; implementer uses writable build route',()=>{
- const review=spawnRequest('/tmp',{id:'S01:B1',type:'review',route:'codeB'},'Review final diff');
- assert.equal(review.profile,'sfd-codex-code-review');assert.match(review.prompt,/Blind B1/);
- assert.equal(review.write_manifest,undefined);
- const impl=spawnRequest('/tmp',{id:'S01:impl',type:'impl',route:'implStd'},'Implement');
- assert.equal(impl.permission_mode,'build');assert.equal(impl.model,'deepseek/deepseek-flash');
-});
-test('candidate fingerprint ignores workflow bookkeeping, detects real edits',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'sfd-candidate-'));
- try{
-  await git(dir,'init','-b','main');await git(dir,'config','user.email','t@example.com');await git(dir,'config','user.name','t');
-  await writeFile(join(dir,'file.js'),'export const x=1;\n');
-  await git(dir,'add','.');await git(dir,'commit','-m','base');
-  const a=await candidate(dir,'S01:A');await mkdir(join(dir,'.agent-work'));
-  await writeFile(join(dir,'.agent-work','sfd-state.json'),'one');
-  assert.equal(await candidate(dir,'S01:A'),a);
-  await writeFile(join(dir,'file.js'),'export const x=2;\n');
-  assert.notEqual(await candidate(dir,'S01:A'),a);
-  await writeFile(join(dir,'.agent-work','PLAN-FULL.md'),'plan-1');
-  const p=await candidate(dir,'plan:A');
-  await writeFile(join(dir,'.agent-work','PLAN-FULL.md'),'plan-2');
-  assert.notEqual(await candidate(dir,'plan:A'),p);
- }finally{await rm(dir,{recursive:true,force:true});}
+test('valid long polls exceed requested daemon wait, flat array and scalar envelopes pass through',async()=>{
+ let seen;const response={'10000001':{task:{agent_id:10000001,status:'completed'},pending_requests:[],timed_out:false,result:{outcome:'COMPLETED',final_text:'report',partial:false,offset:0,next_offset:null}}};
+ const rpc=createEsTransport({run:async(args,options)=>{seen={args,options};return JSON.stringify({ok:true,product:'external-subagent',command:'wait',result:response});}});
+ assert.deepEqual(await rpc('wait',{agent_id:[10000001],wait_time:290}),response);assert.equal(seen.options.timeoutMs,310000);
+ assert.equal(JSON.parse(seen.args[2]).wait_time,290);
+ await assert.rejects(()=>rpc('wait',{agent_id:Array(17).fill(10000001)}),/1..16/);await assert.rejects(()=>rpc('wait',{agent_id:10000001,wait_time:291}),/0..290/);
+ await assert.rejects(()=>rpc('respond',{}),/unsupported/);
 });

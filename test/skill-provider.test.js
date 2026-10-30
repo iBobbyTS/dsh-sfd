@@ -6,8 +6,8 @@ import { join } from 'node:path';
 
 test('provider lists the flow skill with frontmatter parsed', async () => {
   const candidates = await sfdSkillProvider.list();
-  assert.equal(candidates.length, 1);
-  const c = candidates[0];
+  assert.equal(candidates.length, 2);
+  const c = candidates.find(c=>c.name==='sectioned-feature-development');
   assert.equal(c.name, 'sectioned-feature-development');
   assert.ok(c.description.length > 20);
   assert.equal(c.provider, 'dsh-sfd');
@@ -24,7 +24,7 @@ test('provider lists the flow skill with frontmatter parsed', async () => {
 });
 
 test('provider get() returns the body without frontmatter', async () => {
-  const [c] = await sfdSkillProvider.list();
+  const c = (await sfdSkillProvider.list()).find(c=>c.name==='sectioned-feature-development');
   const def = await sfdSkillProvider.get(c);
   assert.equal(def.name, 'sectioned-feature-development');
   assert.ok(!def.content.startsWith('---'), 'frontmatter must be stripped from body');
@@ -36,7 +36,7 @@ test('provider get() returns the body without frontmatter', async () => {
 });
 
 test('references directory ships next to the skill', async () => {
-  const [c] = await sfdSkillProvider.list();
+  const c = (await sfdSkillProvider.list()).find(c=>c.name==='sectioned-feature-development');
   for (const ref of ['references/section-planning.md', 'references/reviewer-orchestration.md']) {
     await access(join(c.resourceBase.path, ref));
   }

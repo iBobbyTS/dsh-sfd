@@ -6,3 +6,11 @@ reference/
 
 # dependencies
 node_modules/
+
+# Nested development worktrees
+/git-worktree/
+.agent-work/
+
+# Generated canonical-source interpreter caches are not skill resources
+__pycache__/
+*.pyc

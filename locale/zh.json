@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Sectioned Feature Development",
-    "description": "分区特性开发编排：工作区清理与分支门禁、计划评审记账、ES actor 派发、修复波次预算、advisor 升级与侧栏进度。"
+    "description": "薄计划编译器与当前会话 external-subagent 包装；Main 负责调度、风险路由与验收。"
   },
   "cleanup": {
     "dirtyTitle": "工作区不干净",

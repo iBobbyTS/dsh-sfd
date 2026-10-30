@@ -78,11 +78,11 @@ Inspect the previous reviewed head→current repair, open Bug/SIMP obligations, 
 
 For each Bug ID establish closure; for each SAFE_SIMPLIFICATION SIMP-### action establish PRESERVED / REGRESSED / INSUFFICIENT_EVIDENCE even when there are no Bug IDs. Check consumers and targeted oracles. Never reset simply because HEAD changed.
 
-[Orchestration's closure table](reviewer-orchestration.md#verify-rank-fix-close) determines the actor: unfinished SUBSECTION_DELTA / R01 PARENT_RECONCILIATION may continue **their own** checkpoint IDs through REPAIR_DELTA; independent focused and later Section A/B findings require fresh CLOSURE_VERIFY. Complete new required risk coverage before releasing a checkpoint. A targeted repair pass does not replace complete independent B.
+[Orchestration's closure table](reviewer-orchestration.md#verify-rank-fix-close) determines the actor: unfinished SUBSECTION_DELTA / R01 PARENT_RECONCILIATION may continue **their own** checkpoint IDs through REPAIR_DELTA; independent focused and later Section A/B findings close through CLOSURE_VERIFY in the discovering reviewer's session (a fresh session only under the recorded-gap fallback). Complete new required risk coverage before releasing a checkpoint. A targeted repair pass does not replace complete independent B.
 
 ## Closing logical B (B1/B2)
 
-Use [Code B sequencing](reviewer-orchestration.md#code-b-blind-full-discovery-then-repair-impact-reconciliation): FINAL_BOUNDED starts with blind complete B1, freezes its findings, then same-head B2 reconciles repair evidence. Product/test repairs from either stage require fresh A closure/routing and new complete blind B1 followed by B2. This is the Section's existing B obligation, not an extra Feature review.
+Use [Code B sequencing](reviewer-orchestration.md#code-b-blind-full-discovery-then-repair-impact-reconciliation): FINAL_BOUNDED starts with blind complete B1, freezes its findings, then same-head B2 — run in the B1 session's continuation — reconciles repair evidence. Product/test repairs from either stage require closure by the discovering reviewer session plus routing, and a new complete blind B1 followed by B2. This is the Section's existing B obligation, not an extra Feature review.
 
 ## Sticky coverage
 
@@ -112,7 +112,7 @@ FOCUSED_FIND: assigned primary risk, optionally one tightly coupled secondary; l
 VERIFY_FINDING: disprove specified claims against source/trigger/authority; CONFIRMED / REFUTED / UNRESOLVED.
 
 ### Repair closure
-CLOSURE_VERIFY: fresh targeted Bug/SIMP verification, repair range, consumer evidence and separate NEW_DELTA_FINDING when justified.
+CLOSURE_VERIFY: targeted Bug/SIMP verification in the discovering reviewer's continued session — repair range, consumer evidence and separate NEW_DELTA_FINDING when justified.
 
 ### Delta
 REPAIR_DELTA: continuing bounded repair/invalidated scope where the existing stage permits it, not a new independent final review.

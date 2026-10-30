@@ -4,6 +4,7 @@
 - [PLAN and CODE](#two-logical-coverages-different-plan-and-code-scheduling)
 - [Code A and candidate isolation](#code-a-select-and-dispatch-independent-discovery)
 - [Verify, rank, fix, close](#verify-rank-fix-close)
+- [Repair and recheck session continuity](#repair-and-recheck-session-continuity)
 - [Code B: blind review, then reconciliation](#code-b-blind-full-discovery-then-repair-impact-reconciliation)
 - [Progress and budgets](#review-progress-check-no-repeated-unproductive-work)
 - [PLAN-only retirement](#plan-only-silent-slot-retirement)
@@ -17,7 +18,7 @@ This file owns **who reviews when**. [Bounded review](bounded-review.md) owns fi
 
 A and B are independent valid **coverage records**, not two calls or a consecutive-CLEAN counter. Main alone admits findings, closes gaps and releases successors.
 
-**PLAN:** run A, finish its admitted corrections, then let unprimed B review the entire current plan. If B finds material issues, repair them, recheck invalidated A evidence and obtain B's complete final plan review. NITs do not restart it. Both results and necessary deltas must close before any implementer dispatch, except the explicit PLAN-only retirement policy below. PLAN has at most two material correction waves before diagnosis; [section-planning.md](section-planning.md#finite-recheck-rule) owns bounded delta limits.
+**PLAN:** run A, finish its admitted corrections, then let unprimed B review the entire current plan. If B finds material issues, repair them, recheck invalidated A evidence in A's own reviewer session and obtain B's complete final plan review in B's continuing session. NITs do not restart it. Both results and necessary deltas must close before any implementer dispatch, except the explicit PLAN-only retirement policy below. PLAN has at most two material correction waves before diagnosis; [section-planning.md](section-planning.md#finite-recheck-rule) owns bounded delta limits.
 
 **CODE:** A combines complete R01 behavior coverage, selected independent specialists and required repair closure. A focused CLEAN is local, never full-Section approval. Only after all A blockers and invalidated evidence close does B independently inspect the complete final Section diff. Its blind discovery and same-head reconciliation are B1/B2, defined below.
 
@@ -43,7 +44,7 @@ No writer or B begins until the entire A group terminates and Main reconciles th
 
 **Rank — Main:** cluster by root cause and record each admitted/rejected/duplicate disposition, owner and necessary oracle through the existing state/report references. Use the existing finding taxonomy. Optional SAFE_SIMPLIFICATION actions have stable SIMP-### IDs and preservation oracles; they are not severities or the hard-cap SIMPLIFY_CURRENT recovery.
 
-**Fix — assigned implementer:** batch compatible admitted defects and authorized simplifications within the edit boundary. Optional simplification alone does not start a mandatory wave; explicitly authorized standalone edits still consume the original budget. Main never writes product fixes; reviewers never repair. **Main** runs and preserves targeted consumer/preservation checks under [test ownership](integration-and-testing.md#test-execution-ownership-and-evidence); reviewers read that evidence instead of repeating the suite.
+**Fix — the unit's repair session** ([routing below](#repair-and-recheck-session-continuity)): batch compatible admitted defects and authorized simplifications within the edit boundary. Optional simplification alone does not start a mandatory wave; explicitly authorized standalone edits still consume the original budget. Main never writes product fixes; reviewers never repair. **Main** runs and preserves targeted consumer/preservation checks under [test ownership](integration-and-testing.md#test-execution-ownership-and-evidence); reviewers read that evidence instead of repeating the suite.
 
 For an admitted defect in a **shared semantic owner**, name its invariant in the repair task. Inspect the bounded same-root-cause family of reachable writers and direct consumers, not just reported line numbers. Distinguish real change/no-op, initialization/restore and failure/late-result paths where applicable. Repair relevant siblings or rule them out with source/probe evidence; one proven invariant may cover several sites. Main checks the returned scope. No whole-repository inventory, per-site test quota or silent scope expansion.
 
@@ -51,13 +52,23 @@ For an admitted defect in a **shared semantic owner**, name its invariant in the
 
 | Origin of finding | Required verification |
 |---|---|
-| Ongoing child checkpoint or unfinished R01 PARENT_RECONCILIATION | Continue that R01 lineage with REPAIR_DELTA for **its own IDs** and invalidated invariants; new required risk evidence closes before checkpoint release. |
-| Independent focused discovery, including during a child checkpoint | Fresh CLOSURE_VERIFY for those IDs; the R01 lineage also checks any of its invalidated assumptions. |
-| Other Section-level A findings or admitted B1/B2 findings | Fresh CLOSURE_VERIFY on the repaired head after risk rerouting. B-driven repair then requires **new blind complete B1 and same-head B2**. |
+| Ongoing child checkpoint or unfinished R01 PARENT_RECONCILIATION | Continue that R01 lineage's session with REPAIR_DELTA for **its own IDs** and invalidated invariants; new required risk evidence closes before checkpoint release. |
+| Independent focused discovery, including during a child checkpoint | CLOSURE_VERIFY in that discovery's own reviewer session for those IDs; the R01 lineage's session also checks any of its invalidated assumptions. |
+| Other Section-level A findings or admitted B1/B2 findings | CLOSURE_VERIFY in the finding's discovering reviewer session on the repaired head after risk rerouting. B-driven repair then requires **new blind complete B1 and same-head B2**. |
 
-A fresh closure receives Bug IDs, SIMP-### actions, triggers/preservation oracles, repair range, exact head, affected consumers and invalidations. Old Bug outcomes: VERIFIED_CLOSED / STILL_OPEN / REGRESSION / INSUFFICIENT_EVIDENCE. SIMP outcomes: PRESERVED / REGRESSED / INSUFFICIENT_EVIDENCE, even without Bug IDs. Independent repair regressions get separate NEW_DELTA_FINDING IDs and normal admission; do not bury them under an old finding.
+A closure task carries Bug IDs, SIMP-### actions, triggers/preservation oracles, repair range, exact head, affected consumers and invalidations. Old Bug outcomes: VERIFIED_CLOSED / STILL_OPEN / REGRESSION / INSUFFICIENT_EVIDENCE. SIMP outcomes: PRESERVED / REGRESSED / INSUFFICIENT_EVIDENCE, even without Bug IDs. Independent repair regressions get separate NEW_DELTA_FINDING IDs and normal admission; do not bury them under an old finding.
 
 Closure examines the repair and affected prior evidence, not a fresh whole-Section hunt. Main checks real evidence **for each admitted ID** before recognizing closure. Report counts or a later B1 cannot fill a missing A closure. No edit after discovery means no closure call; closure contributes to A, never replaces B. All child/focused/Section repairs share their original Section lineage.
+
+## Repair and recheck session continuity
+
+Every repair dispatch and closure recheck reuses one established session per origin; only first-pass discovery stays fresh. A session is the route's real continuable unit — a native continuable subagent or a continued external task; a continuation is never a fresh independent actor.
+
+**Repair routing by owning unit** (the Section, or the child for child-scoped findings): a unit implemented on the impl_large route returns every repair to its **original implementer session**; a unit implemented on impl_std opens **one escalated impl_large repair session** at its first admitted repair, and every later repair of that unit reuses that session. The escalated session is an implementer context under the same TASK/report law — never a reviewer. This routing is a repair-dispatch record, not a plan tier change; remaining new assignments still follow [model routing](model-routing.md).
+
+**Recheck routing by discovering session:** CLOSURE_VERIFY, REPAIR_DELTA, B2, PLAN_DELTA and invalidated-evidence rechecks go to the reviewer session that produced the finding or frozen report — B2 to its own B1 session; a child checkpoint repair to its continuing parent R01 session. First-pass discovery (INITIAL_BOUNDED, FOCUSED_FIND, PLAN A/B first review, FINAL_BOUNDED B1 including every post-repair restart) and skeptical VERIFY_FINDING always use a fresh isolated context.
+
+**Recorded-gap fallback:** when a provider/harness can no longer continue a session, exactly one new same-route session receives the frozen report/finding IDs plus a recorded gap, and the ledger notes the break; never fabricate continuity or report different actual agents as one session.
 
 ## Code B: blind full discovery, then repair-impact reconciliation
 
@@ -65,9 +76,9 @@ After A and required checks close, use a fresh independent context on the instal
 
 **B1 — FINAL_BOUNDED:** provide the complete Section base→latest diff, original contract/non-goals, direct semantic neighbors and real check evidence. Withhold A findings/dispositions, closure/SIMP IDs, repair-delta boundaries and persuasive history. B independently checks all changed behavior, the highest-risk consumer path, unnecessary mechanisms and proportional tests. Freeze B's own findings/coverage in its authored report **before** any repair-history input. If B1 has admitted material findings, repair before spending B2 work on that candidate.
 
-**B2 — same-head repair reconciliation:** after clean/nonmaterial B1 is frozen, Main checks the actual A closure IDs, SIMP preservation, repair impact and invalidations against that same candidate. A genuine continuation of the same B lineage may assist; otherwise Main performs it from source/contracts/checks. Do not fabricate continuation or expose history to B1. B2 is not a new mode, independent reviewer or substitute for B1. With no repairs/actions/invalidations, note that no obligation remains; do not dispatch an empty continuation.
+**B2 — same-head repair reconciliation:** after clean/nonmaterial B1 is frozen, the **B1 session itself continues as B2** and checks the actual A closure IDs, SIMP preservation, repair impact and invalidations against that same candidate ([session continuity](#repair-and-recheck-session-continuity); the recorded-gap fallback applies only when that session cannot continue). Do not expose history to B1 before its own findings are frozen. B2 is not a new mode, independent reviewer or substitute for B1. With no repairs/actions/invalidations, note that no obligation remains; do not dispatch an empty continuation.
 
-An admitted B1 **or B2** defect goes through bounded repair, delta risk routing and fresh A closure; then restart **complete blind B1** on the new candidate and finish B2. Unaffected A evidence can carry forward; material structural change resets affected R01. An earlier B1 CLEAN cannot bless a later product/test head. Acceptance needs current A, complete independent B1, B2 and required checks.
+An admitted B1 **or B2** defect goes through bounded repair in the owning unit's repair session, delta risk routing and closure by the finding's discovering reviewer session; then restart **complete blind B1** (fresh context) on the new candidate and finish B2 in that new B1 session. Unaffected A evidence can carry forward; material structural change resets affected R01. An earlier B1 CLEAN cannot bless a later product/test head. Acceptance needs current A, complete independent B1, B2 and required checks.
 
 ## Review-progress check: no repeated unproductive work
 
@@ -83,6 +94,6 @@ Only in PLAN: if one slot is CLEAN in two consecutive rounds while the other fin
 
 CODE retains five attempted admitted repair waves per original Section, including children and B repairs. One compatible repair batch is one wave; failed closure followed by another repair is another attempt. NITs do not start waves. A new name, model, context or child does not replenish allowance. Integration keeps its own original obligation under [integration/testing](integration-and-testing.md); recovery/Advisor limits remain in their existing references. An authorized scope change creates a new candidate only for the changed portion.
 
-Preserve phase/mode/lens, base/head, actual transport/task ID, requested versus observed model/effort (UNKNOWN where unobserved), report, result and relevant closure/invalidation references. Keep physical attempts distinct from logical A/B; detailed totals and cost commentary are optional, but failed/cancelled actors must not disappear. Preserve reviewer-authored reports, not raw spawn/wait payload files.
+Preserve phase/mode/lens, base/head, actual transport/task ID, requested versus observed model/effort (UNKNOWN where unobserved), report, result, session-continuity lineage (original, continued or gap-replaced) and relevant closure/invalidation references. Keep physical attempts distinct from logical A/B; detailed totals and cost commentary are optional, but failed/cancelled actors must not disappear. Preserve reviewer-authored reports, not raw spawn/wait payload files.
 
 Missing terminal evidence, wrong identity, unknown route, changed snapshot or unsupported permissions are not CLEAN. Reconcile failed actors and allow at most one bounded same-route retry; runtime/auth/model errors are not semantic downgrade authority. A continuation is not a fresh independent actor. Only Main closes the handoff; BLOCKED, ABANDONED and child CHECKPOINT_VERIFIED never satisfy an external Section dependency. Default serial successors wait for current acceptance and required integration; only approved independent worktrees may overlap.

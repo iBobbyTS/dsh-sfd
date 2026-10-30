@@ -13,7 +13,7 @@ Reviewer jobs never request a nonempty write_manifest; an implementation manifes
 A permission mode or manifest label alone does not prove isolation: a reviewer's single allowed write is its dispatched report file, and that boundary comes from the role instructions plus checked evidence, not the mode label.
 A TASK path boundary is not sandbox enforcement.
 Main never copies or saves spawn/wait/close/final raw returns as files; identity and outcome go into FEATURE-STATE ledger lines.
-Terminal-session continuity for a reviewer (same_session=false, the plugin’s terminal-round gap reason) follows the plugin contract.
+Terminal-session continuity for a repair-implementer or reviewer session (same_session=false, the plugin's terminal-round gap reason) follows the plugin contract: one replacement same-route session receives the frozen report/finding IDs and a recorded gap.
 
 If a route's exact configuration cannot be established, report MODEL_CONFIGURATION_UNVERIFIED or a capability block before dispatch — never a silent default or invented `model:effort` syntax.
 
