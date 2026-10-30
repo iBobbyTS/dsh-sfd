@@ -1,52 +1,59 @@
-# Thin wrapper design
+# Thin graph wrapper design
 
-## Canonical owners
+## Ownership
 
-- [Entry](index.js) registers the skill provider, non-mutating `/sfd` command, scoped host adapter and wrapper tools. It does not register cleanup/Git controllers or native-child orchestration.
-- [Compiler](lib/compiler.js) reads the canonical Markdown grammar and produces located Feature/Section/Subsection dependencies and review/acceptance nodes. Structural validity is not semantic approval. A separate evidence digest ignores only trailing blank lines; substantive source changes still advance the plan-source revision.
-- [Obligation declarations](lib/obligations.js) compose Main-authored runtime obligations into that graph. This is a graph overlay, not a finding database or repair scheduler. It validates owners, dependencies, cycles and real source/continuation identities. Main selects the actual route, admits findings and decides which obligations exist.
-- [Execution](lib/execution.js) owns order checks, actual actors/rounds, dispatch groups, evidence receipts and explicit Main dispositions. [Guidance](lib/guidance.js) generates role/hierarchy/session/successor instructions from those same records and the canonical authority; it does not maintain a second workflow state.
-- [Run store](lib/run-store.js) serializes one schema-3 session/repository record. [ES transport](lib/es-cli.js) is the sole active process boundary. [Scoped host](lib/scoped-host.js) owns activation and raw-tool hiding. [Skill provider](lib/skill-provider.js) serves exact canonical snapshots plus the separate adaptation.
+Main owns the plan, graph progress, semantic dispositions, model routes and acceptance. The plugin owns compilation, canonical review/acceptance structure, order validation, actual subagent transport and instructions. It does not parse reports, infer findings, choose models, invalidate evidence, or decide whether a review passed.
 
-## Source and graph updates
+## Modules
 
-The plan is reread on execution entry and after order failure. Invalid compilation leaves the last valid graph and records staleness, but cannot authorize stale dispatch. Source changes invalidate affected unit/shared-contract/dependency cones. Plan evidence is handled separately: provisionally reopened Plan A/B can be restored only by real original-session rechecks or Main's explicit `retain` of previously accepted unaffected actor/round evidence. Retention never changes the original report revision or invents an invocation.
+- [Entry](index.js) registers the skill provider, non-mutating `/sfd` command, scoped host adapter and tools.
+- [Compiler](lib/compiler.js) reads canonical Feature → Section → Subsection Markdown and produces deterministic graph nodes with located structural errors. A declared subsection always gets an implement node and a checkpoint review.
+- [Graph store](lib/graph-store.js) owns `SFD-GRAPH.json`, `SFD-GRAPH.prev.json`, atomic writes, structural comparison, backup and validation. It never changes statuses.
+- [Session store](lib/session-store.js) owns actual actor/round/group/page facts in `ACTORS.json`; it does not own progress.
+- [Execution](lib/execution.js) owns spawn/wait/result/send/cancel/observe, partial-dispatch facts and graph prerequisite checks.
+- [Guidance](lib/guidance.js) generates role-specific instructions, first-role authority and the next mandatory review.
+- [ES transport](lib/es-cli.js) is the sole active process boundary. [Scoped host](lib/scoped-host.js) owns activation/hiding. [Skill provider](lib/skill-provider.js) serves exact canonical snapshots plus the separate adaptation.
 
-Completed nodes removed from the current plan keep historical dispositions. They do not become unaccepted ghost Sections. Unmet removed nodes remain retired obligations requiring explicit user-authorized disposition. Live actors remain actual recorded work, never silently cancelled or erased. Open-Section safety continues to derive from actors and acceptance rather than a sticky ownership controller.
+## Graph and progress
 
-Dynamic obligations are reconstructed on source recompilation and reapplied after specialist selection. Main can revise their dependencies atomically, with real prior evidence invalidated where necessary. Retired mandatory delivery gates survive this reconstruction. Runtime graph edits do not masquerade as new plan-source revisions or blanket-invalidate unaffected code.
+One per-session editable graph is the progress authority. Nodes have stable IDs, canonical `needs` and `mandatory` flags. Main edits `status`, `evidence` and `note` directly. The compiler-generated topology is immutable except that Main may add custom nodes and extra prerequisites.
 
-## Roles and session relationships
+`status` values:
 
-Main-authored purposes distinguish integration, focused discovery, skeptical finding verification, owner repair, finding-author closure, child repair delta, plan delta and same-head repair reconciliation. Session checks are mechanical consequences of those declarations, not report interpretation:
+- `pending` / `failed`: not satisfied;
+- `done`: satisfied; review/implementation requires real actor/round/report; Main node requires a reason;
+- `skipped_by_user`: the only skip; requires user provenance and reason; satisfied for order but not CLEAN.
 
-- Original impl_large repair returns to its actual owning implementer. Original impl_std repair uses one fresh logical impl_large session and then reuses it; selection uses the recorded original role, not a later edited plan tier. Predeclared repairs resolve that real target again at dispatch time.
-- Closure/delta/reconciliation uses the declared discovering session. Plan A/B first-pass contexts are independent; affected plan rechecks use their original sessions. One parent R01 session continues across children and parent reconciliation.
-- Code blind first-pass discovery always spawns a fresh session. A continuation cannot be relabelled as a new blind review. Same-head reconciliation requires the current Main-confirmed B1 report, not an old candidate's reviewer. Main updates its source after a fresh B1 restart.
-- The final child checkpoint can explicitly cover parent reconciliation in one physical call. The report carries both declared obligations, and Main separately confirms both conclusions in graph order. Arbitrary report sharing is rejected.
+The graph validation rejects missing/mutated mandatory nodes, removed canonical prerequisites, cycles, unknown prerequisites, done nodes whose prerequisites are unsatisfied, and review evidence that is not a settled successful authored report.
 
-A required session that cannot continue can be replaced only through Main's explicit recorded-gap spawn: the old actor must be terminal, the route must match its recorded route, the frozen-evidence pointer and real old/new IDs remain distinct, and the same lineage gets only one replacement. Future continuations resolve that recorded actual target. Historical report origins survive later failed rounds without turning those failures into successful evidence.
+## Compile and backup
 
-The wrapper has no model-routing table, repair-wave counter, report verdict parser, automated repair dispatch or parallel finding/closure ledger. Main still declares all genuinely required closure/risk/check obligations, applies the skill's budgets and judges exact coverage and semantic acceptance.
+Compilation is deterministic for the current plan and canonical structure. If the target already has the same plan digest and canonical topology, compile returns `already up to date, do not compile again` and does not write, reset status or back up. Progress and custom nodes survive.
 
-## Transport and concurrency
+If the plan/structure changed, the previous target is copied to `SFD-GRAPH.prev.json` (overwriting an earlier backup), a pending graph is written to `SFD-GRAPH.json`, `reconciled=false`, and the result instructs Main to compare previous graph, new graph and `PLAN-FULL.md`. Main copies only still-valid evidence, leaves affected work pending, sets `reconciled=true`, and continues. There is no automatic invalidation or evidence-cone calculation.
 
-Every batch item is validated before the first spawn. Only actual created IDs are recorded. Pending non-idempotent mutations and known IDs are checkpointed before another mutation. Partial dispatch is reconciled explicitly by Main, without automatic retry, cancellation or rollback.
+A plan edit without recompilation is detected by the graph plan digest; spawn/send reject stale execution.
 
-Wait has prepare/poll/apply phases: remote polling runs outside the write queue; apply validates the exact actor round and never rolls terminal state back to running or accepts an older continuation result. Message UUIDs, original session identity, complete contiguous result pages and delivered receipts prevent stale results or a lost-send reply from fabricating completion. Unsupported continuations remain explicit gaps.
+## Dispatch and evidence
 
-Wait expands requested IDs to their batch peers. All must terminate without unresolved input/transport state before group result handling. Remaining IDs and raw failures remain visible. No report counts as accepted without Main's explicit disposition; failed/cancelled/partial/empty reports cannot be used as successful evidence.
+Spawn prevalidates every task before the first RPC: node exists, not done/skipped, every prerequisite done/skipped, no live actor on the node, valid route and assignment. It never changes status. Partial dispatch preserves actual created IDs and uncertain/unattempted failures without retry or automatic cancellation.
 
-Sections are serial. Writers never overlap incompatible actors; concurrent reviewers require Main-declared enforced immutable source with isolated reports/test effects. Yolo is not filesystem isolation. Observe and explicit cancellation use read-only ledger snapshots and forward to ES without a competing cancellation state or a long-held run lock. `sfd_cancel` only cancels its explicit list; it never expands into automatic peer cancellation or graph edits.
+Wait expands all batch peers, applies only the requested rounds, and withholds result instructions until every target ends. Partial targets list remaining IDs; failures, pending input, cancellation and abnormal exits are not successful evidence. The graph remains untouched.
 
-## Instruction delivery and host scope
+Send continues the same real session. It requires a pending node, satisfied prerequisites, settled actor group, verified session identity, matching kind/role and the owning implementation unit; base blind and first-pass Plan reviews require fresh spawns. It never changes graph status.
 
-Guidance names actual actor/session IDs, owning unit/Section/Feature, proper original or escalated repair sessions, discovery/continuation rules and direct graph successors. Applicable canonical handling text is sent on first role/layer delivery; later rounds receive concise state-specific hints. Main-only next-stage instructions are available before the ready gate is confirmed. Suspected loops, no progress and abnormal exits retain a diagnostic branch during partial waits.
+## Mandatory reviews and guidance
 
-Activation uses supported per-agent tool restrictions and a non-invocable runtime ES skill shadow. Effects restore through replayable membership events and dispose with the agent/plugin. Other sessions remain untouched. Same-scope/unknown registrations fail honestly; residual MCP prompt instructions, already-seen content and raw shell bypass are documented limits, not reasons to rewrite host prompts.
+The graph carries Plan A/B, Section Code A/B, subsection checkpoints, parent reconciliation, Section/Feature acceptance and delivery. `section:accept` depends on the Section reconciliation and Code B chain; `S01.B:implement` depends on `S01.A:checkpoint`. No report keyword or terminal process status satisfies acceptance.
 
-## Distribution and evidence boundaries
+The first return for a role/layer supplies canonical handling text. Later returns are short state-specific instructions with actual actor/session IDs and graph successors. Wait and result explicitly name the next mandatory review, including blind Code B and subsection checkpoints, but never mark it done.
 
-Canonical skill resources are unchanged snapshots; their manifest verifies exact bytes independently of the adaptation. The explicit package allowlist ships only the nine currently reachable library modules, not historical cleanup/state/flow helpers. Historical source/tests are preserved in the repository rather than deleted or silently promoted back into runtime support.
+## Transport and host scope
 
-Verification uses fake ES, actual Cordis registry/scope integration, negative evidence tests, syntax/import checks, canonical snapshot comparison and package inspection. Real installed DSH/ES activation/resume/CLI behavior still requires a separately observed end-to-end run; no installation, restart or GUI replacement is part of repository verification.
+Every batch item is validated before the first spawn. Known IDs and uncertain operations are kept. Wait polls outside the actor-state write queue; observe/cancel remain usable. UUID-bound send receipts, result pages and session identity prevent stale replies from fabricating new rounds.
+
+Activation uses per-agent tool restrictions and a non-invocable ES skill shadow. Replayable membership restores effects; other sessions remain unchanged; unknown/same-layer restrictions fail honestly. Raw shell bypass, already-seen prompt content and residual MCP instructions are outside the hiding guarantee.
+
+## Packaging and evidence
+
+The package allowlist ships the nine active library modules and canonical skill snapshots. Historical source/tests remain in the repository but are not part of the active package or official test entry. Fake ES plus actual Cordis scope/registry integration verify the local contract; real installed DSH/ES behavior remains a separate end-to-end check.

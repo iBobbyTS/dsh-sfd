@@ -1,23 +1,21 @@
-# Thin wrapper requirements and authority
+# Editable-graph wrapper requirements
 
 The user's current contract and the canonical SFD skill govern behavior. This document records the implementation boundary; it cannot redefine a user-requested tool name or silently approve a workflow deviation.
 
-- Compile canonical Feature → Section → Subsection Markdown with located grammar/dependency/ownership errors. Compilation is never semantic plan approval.
-- Expand serial Plan A/B, actual child checkpoints, cumulative parent reconciliation, complete Section Code A/independent blind Code B, Section acceptance, Feature composition acceptance and cross-Feature delivery. Sections are serial; children never create extra A/B pairs.
-- Reread the latest graph before rejecting order. Support plan updates, preserve unaffected evidence, retain the last valid graph on invalid input but reject stale execution. Removing accepted work must not create an unresolvable ghost Section; real live actors remain visible.
-- Main explicitly declares runtime integration, focused-review, verify-finding, repair, closure, repair-delta, plan-delta and repair-reconciliation obligations through `sfd_workflow_update`. Validate their graph/session structure atomically and preserve them across source reload and risk selection; do not identify findings or initiate dispatch automatically.
-- Keep one additive schema-3 per-session/repository record for actual actor/session/round/page/batch facts, Main dispositions and the declared graph overlay. No separate finding controller, automatic repair router/model selector, wave counter or competing acceptance state.
-- Provide `sfd_compile_workflow`, status/update/Main-confirmation tools, spawn/wait/observe/result/send, `sfd_subagent_cancel` and `sfd_cancel`. Keep the misspelled old name only as a deprecated alias. No respond, automatic retry/actor close/cancellation, rollback or mandatory extra question policy.
-- Prevalidate multi-task spawn. On partial dispatch preserve actual IDs, uncertain operations and unattempted tasks. Never retry non-idempotent calls blindly. Wait for every target and batch peer before group result instructions, accurately list remaining IDs and retain diagnostic paths for loops, no progress and abnormal exits.
-- Pending input, failure/cancellation, missing or partial/empty/paginated report evidence cannot masquerade as successful completion or review approval. Main must inspect actual authored evidence and explicitly confirm semantic decisions.
-- Supply complete applicable skill handling guidance at first role/layer return, then concise current hints with actual actor/session associations and graph successors. Guide the next ready Main-only acceptance stage before confirmation. Do not merely repeat "follow the skill".
-- Enforce declared continuations against real sessions: original impl_large implementer; one escalated impl_large repair session for original impl_std; discovering reviewer for closure and affected Plan A; one parent R01 lineage; current B1 reviewer for necessary same-head B2. Main retains actual model route and assignment choices. A post-repair blind B1 is fresh, never a renamed continuation.
-- Main declares all required closures, invalidations, risk checks and residual composition obligations, following the authoritative skill. The wrapper does not infer them from report keywords or use process status as acceptance.
-- Do not invalidate Plan A/B for trailing blank lines. Main can explicitly retain previously accepted unaffected Plan evidence using the actual actor/round and reason; affected rechecks use their original sessions. Do not rewrite report provenance to imply a new review.
-- Permit skill-authorized last-child checkpoint and parent reconciliation to share one real report when both conclusions are explicitly declared and separately confirmed. Reject unrelated or undeclared report sharing.
-- No writer/reviewer overlap. Overlapping read-only reviews require Main's actual immutable-candidate and isolated report/test-effects declaration. Yolo alone proves no isolation.
-- Activate/hide raw ES tools and ES skill only in the current agent scope; restore membership on resume, refresh restrictions safely and dispose on lifecycle boundaries. Keep other sessions unchanged and fail honestly for unsupported/same-scope host capabilities or lost continuation identity.
-- Keep exact canonical SFD 5.6.0 and sibling code-review resource bytes, with separate adaptation and reproducible manifest checks. Ship only active reachable modules; preserve historical source work without registering old Git/cleanup controllers.
-- Verify meaningful positive/negative regressions with fake ES and actual Cordis scope integration, plus canonical byte comparison and package inspection. State that installed DSH/ES end-to-end behavior remains unverified when no real run occurred.
-
-Raw shell bypass, already-seen content and residual MCP server instructions are outside the hiding guarantee. Authorization provenance is a prompt-level contract, not authentication. The plugin does not install/restart DSH, edit profiles/canonical sources, commit/push/merge, roll back user changes or decide readiness on Main's behalf.
+- Compile canonical Feature → Section → Subsection Markdown with located grammar/dependency/ownership errors. Compilation is never semantic approval.
+- Every declared subsection always has a real R01 checkpoint review. A final child checkpoint may share a call with parent reconciliation, but not omit review. Children do not create extra A/B pairs.
+- Keep Plan A/B, Section Code A/complete blind Code B, child checkpoints, parent reconciliation, Section/Feature acceptance and delivery in the canonical graph.
+- The graph is the progress authority. Main edits status/evidence/note directly. `done` review/implementation requires a real actor/round/report; `done` Main node requires a reason.
+- `skipped_by_user` is the only skip, requires user provenance and reason, counts as satisfied for order, and is never CLEAN.
+- Canonical nodes and canonical prerequisites cannot be removed. Main may add custom review/repair nodes and extra prerequisites; the plugin validates cycles, owners and status.
+- Compile with an existing unchanged graph returns `already up to date, do not compile again` without writing or resetting progress.
+- Compile with a changed plan/structure backs the old graph up to `SFD-GRAPH.prev.json` (overwriting an earlier backup), writes a new pending graph to the original filename, sets `reconciled=false`, and instructs Main to compare both graphs and PLAN-FULL.
+- No automatic invalidation, evidence-cone retention, hold/risk controller, finding parser, model router, repair scheduler or competing acceptance state.
+- Tools are exactly: `sfd_workflow_compile`, `sfd_subagent_spawn`, `sfd_subagent_wait`, `sfd_subagent_result`, `sfd_subagent_send`, `sfd_subagent_cancel`, `sfd_subagent_observe`.
+- Spawn prevalidates all tasks; partial dispatch preserves actual IDs and uncertain/unattempted failures without blind retry or automatic cancellation.
+- Wait covers all requested actors and batch peers, withholds result instructions until all end, lists remaining IDs and preserves diagnostic branches. It never marks graph status.
+- Pending input, failure/cancellation, empty/partial/paginated evidence and terminal process status cannot masquerade as review approval. Main reads the actual authored report and edits graph status.
+- First role/layer return supplies applicable canonical authority; later returns are short state-specific hints with real actor/session IDs and graph successors. The next mandatory review is named before acceptance.
+- Activation hides raw ES tools and the ES skill in the current agent scope; other sessions remain unchanged. Resume/dispose boundaries are supported; unsupported capabilities fail honestly.
+- Canonical SFD 5.6.0 and sibling code-review resource bytes remain unchanged snapshots; the DSH adaptation is separate and verifiable.
+- Verification uses fake ES, actual Cordis integration, canonical byte comparison and package inspection. Real installed DSH/ES end-to-end behavior remains unverified until separately observed.
