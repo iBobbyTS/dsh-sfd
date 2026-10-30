@@ -1,110 +1,94 @@
 # @ibobbyts/dsh-sfd
 
-A thin PLAN-FULL graph compiler and current-session external-subagent wrapper for DeepSeek Harness. The graph is the checklist; Main edits its progress. The plugin enforces mandatory review order and records actual subagent facts, but does not decide what the reports mean.
+A thin PLAN-FULL graph compiler and current-session external-subagent wrapper for DeepSeek Harness. The graph is the checklist; Main edits progress and dynamically chooses review sessions. The plugin checks current prerequisites, records real task facts and gives concrete next-step instructions. Only implementation repair-session selection is program-owned.
 
-Load the bundled `sectioned-feature-development` skill, or use `/sfd` to queue that instruction. Write the canonical plan, then call `sfd_workflow_compile`.
+Load the bundled sectioned-feature-development skill or use `/sfd`, write PLAN-FULL, then call sfd_workflow_compile.
 
 ## Tools
 
 | Tool | Purpose |
 | --- | --- |
-| `sfd_workflow_compile` | Compile PLAN-FULL into `SFD-GRAPH.json`; back up an existing graph and report already-up-to-date when the plan/structure is unchanged |
-| `sfd_subagent_spawn` | Prevalidate and dispatch one or more graph nodes |
-| `sfd_subagent_wait` | Wait for every requested actor and batch peer; list remaining IDs and next review |
-| `sfd_subagent_result` | Read the next report page for the current actor round |
-| `sfd_subagent_send` | Continue an existing session for a declared recheck or repair |
-| `sfd_subagent_respond` | Answer a pending question or allow/deny a permission request, then wait for fresh state |
-| `sfd_subagent_cancel` | Request cancellation of one explicitly named actor |
-| `sfd_subagent_observe` | Read actor diagnostics without changing progress |
+| sfd_workflow_compile | Compile/reconcile the editable graph; unchanged compile validates/returns navigation without resetting progress |
+| sfd_subagent_spawn | Dispatch graph nodes; review spawn is freely chosen by Main; impl repair may continue an existing actor |
+| sfd_subagent_wait | Wait for requested actors and batch peers; return reports, remaining IDs and current/successor instructions |
+| sfd_subagent_result | Read the next current-round report page |
+| sfd_subagent_send | Send to Main's chosen review actor, or program-select the current impl repair actor |
+| sfd_subagent_respond | Answer pending questions/permission requests, then wait for fresh state |
+| sfd_subagent_cancel | Request cancellation of one named actor |
+| sfd_subagent_observe | Read diagnostics without changing graph progress |
 
-There is no `sfd_workflow_confirm`, `sfd_workflow_update`, `sfd_workflow_status`, `sfd_cancel` or `sfd_subagent_cencel` in the active surface.
+There is no confirm/status/update tool or workflow-wide cancel/rollback controller.
 
-## Editable graph and progress
+## Plan changes versus skipping steps
 
-Each session gets its own graph:
+Skip any user-waived **process step** with `skipped_by_user` and source/reason. Reviews, implementations and Main decisions use exactly the same mechanism. Skipping a task does not waive its unfinished upstream tasks and is never CLEAN.
+
+Remove/change **functionality** in PLAN-FULL first: Feature/Section/child membership, scope, planned implementation tier or declared dependencies. Then compile and reconcile. Do not remove functionality only from the graph, leaving the plan out of sync. Custom review/repair obligations and extra prerequisites can be edited directly in the graph.
+
+Each session stores:
 
 ```text
 .agent-work/sfd-graphs/<session-digest>/SFD-GRAPH.json
-.agent-work/sfd-graphs/<session-digest>/SFD-GRAPH.prev.json   # backup, if recompiled
-.agent-work/sfd-graphs/<session-digest>/ACTORS.json           # actual actor/round facts
+.agent-work/sfd-graphs/<session-digest>/SFD-GRAPH.prev.json
+.agent-work/sfd-graphs/<session-digest>/ACTORS.json
 ```
 
-Nodes carry `kind`, `role`, `needs`, `mandatory`, `status` and `evidence`. Main edits status/evidence/note directly; the plugin validates the graph on every dispatch or continuation.
+Main edits status/evidence/note:
+
+- pending / failed: unsatisfied;
+- done review/implementation: `evidence:{actor_id,round,report}` names a real complete successful report;
+- done Main decision: `evidence:{reason}` after its stage checks;
+- skipped_by_user: `evidence:{user_source,reason}`, allowed upfront for any step.
+
+One report may support several obligations when it actually authors each conclusion. For a cross-node reference, add `evidence.conclusion` for that separately authored conclusion. A final child checkpoint and parent reconciliation can therefore share one real call without losing either result. This does not allow a reviewer report to stand in for implementation work.
+
+Changed compile backs up the old graph, creates a pending graph and sets reconciled=false. Main restores only applicable evidence/step waivers and sets reconciled=true. No automatic semantic invalidation or evidence-retention controller is introduced. Reopen errors describe affected completed descendants and preserved skips; Main edits them explicitly.
+
+## Dynamic reviews
+
+Main chooses fresh spawn versus send and each actual review target. An older reviewer does not prohibit a fresh spawn; role/Section or node names do not select or restrict a send target. No replacement declaration is required. The original skill explains independence and continuity considerations, but the wrapper leaves the decision to Main.
+
+Graph prerequisites, pending status, real actor/session identity, complete batch settlement and no live writer/reader overlap still apply. Review and implementation task kinds remain distinct. Old rounds/reports stay historical facts even when Main chooses a new reviewer.
+
+## Implementation and repair cycles
+
+Each implementation unit, including each child, has its own current cycle. Dispatch with purpose=implementation for new work, purpose=repair for fixes. Spawn defaults to implementation; send defaults to repair, unless the node explicitly declares its purpose.
+
+| Original implementation | Repair selection in that cycle |
+| --- | --- |
+| impl_std | Spawn one impl_large actor at first repair; send every later repair to that same actor/session |
+| impl_large | Send every repair to the original implementation actor/session |
+
+The next new implementation resets the cycle; it does not erase history or rewrite the plan's tier. The plugin chooses the actor, not a guessed concrete model. Supply the configured large route as optional repair_route on new implementation, or as route/repair_route at the first std repair.
+
+Example dispatch shapes (replace node and configured profile names with the actual plan/host values):
 
 ```json
-{
-  "id": "S01.A:checkpoint",
-  "kind": "review",
-  "role": "behavior-review",
-  "needs": ["S01.A:implement"],
-  "mandatory": true,
-  "status": "done",
-  "evidence": { "actor_id": "10000003", "round": 1, "report": "path/to/report.md" }
-}
+{"tasks":[{"node":"<unit>:implement","assignment":"new implementation","route":{"profile":"configured-standard"},"repair_route":{"profile":"configured-large"}}]}
 ```
 
-- `done` on a review/implementation node requires a real `actor_id`, `round` and `report`; the actor record must have a settled successful authored report.
-- `done` on a Main node requires `evidence.reason`.
-- `skipped_by_user` is the **only** skip. It requires `evidence.user_source` and `evidence.reason` and may be recorded upfront for all user-waived reviews. It removes that task, not its unfinished prerequisites: successors still await non-waived upstream work. It is never CLEAN.
-- `pending`/failed nodes do not satisfy successors.
-- The compiler-generated mandatory nodes and their canonical `needs` are immutable. Main may add custom review/repair nodes and extra prerequisites, but cannot remove a required Code A/B/checkpoint review. Custom review/repair nodes should carry `unit`, `section` and `feature` so continuation identity can be checked.
+```json
+{"tasks":[{"node":"<pending-repair-node>","purpose":"repair","assignment":"fix admitted findings"}]}
+```
 
-## Compile, backup and reconciliation
+A custom repair node has kind=implementation, purpose=repair and its owning unit/section/feature. To repair a completed canonical implementation node instead, first reopen it and reconcile affected descendants. Calling spawn for a repair may send to the cycle actor; calling send with the original std ID may spawn the first large repair actor or redirect to its recorded ID. **Read the returned actual IDs/actions and wait on those IDs.** Subsequent route arguments do not replace the selected repair actor.
 
-If `SFD-GRAPH.json` already exists and the plan plus canonical structure are unchanged, compile returns:
+Missing large-route configuration gives an actionable error. Unknown spawn outcomes must be reconciled against actual ES task facts before retry. Unsupported repair continuation reports a capability gap rather than silently creating another repair session. Genuinely new implementation requires an explicit declaration, not a hidden repair fallback.
 
-> already up to date, do not compile again
+## Reports, stage instructions and host scope
 
-and does not write or reset progress.
+Wait/result first ask Main to inspect and record returned reports, not to redispatch their still-pending nodes. Successors and ready Main actions include concrete risk/specialist selection, repair reconciliation, Section finding/check/integration closure, Feature journey/composition and delivery/actor-cleanup duties. The effective graph and explicit arbitrary step waivers take precedence over default reminders. COMPLETED is never CLEAN.
 
-If the plan/structure changed, the previous graph is copied to `SFD-GRAPH.prev.json` (overwriting an earlier backup), a new pending graph is written to `SFD-GRAPH.json`, `reconciled` becomes `false`, and compile returns an instruction to compare the previous graph, the new graph and `PLAN-FULL.md`. Main copies only still-valid `done` evidence and still-applicable user waivers, leaves affected work pending, sets `reconciled: true`, and continues.
+Pending questions direct Main to respond; inspect ES's effective permission decision and wait for fresh state. Cancel/observe/respond never mark graph completion. Batch validation and checkpoints retain actual IDs, message UUIDs and cycle facts across partial dispatch. Wait runs outside the state write queue so diagnostics/cancel remain usable.
 
-No automatic invalidation, no automatic evidence cone, no `retain`/hold/risk controller.
-
-## Mandatory reviews
-
-The compiled graph always contains the reviews required by the skill:
-
-- serial Plan A and independent Plan B;
-- every Section's behavior/Code A and complete blind Code B;
-- every declared subsection's real R01 checkpoint;
-- parent cumulative reconciliation;
-- Section, Feature and delivery acceptance gates;
-- code review cannot be replaced by a report keyword or terminal status.
-
-A subsection always has at least one review: its checkpoint. A final child checkpoint may share a call with parent reconciliation, but not omit review. `skipped_by_user` is the only user-authorized exception.
-
-## Dispatch and wait
-
-Spawn checks that the node is not done/skipped, every prerequisite is done/skipped, no live actor owns the node, and the graph is reconciled. Partial dispatch returns real created IDs and uncertain/not-attempted failures without retrying or canceling. Wait expands batch peers, withholds result instructions until every target ends, lists remaining IDs, and preserves diagnostic paths for loops/no progress/abnormal exits.
-
-Wait never marks a node done. After reading the actual report, Main edits the graph itself. The tool returns the next mandatory review (for example Code B blind review or subsection checkpoint) and the actual actor/session IDs.
-
-## Session scope
-
-Activation hides inherited raw ES MCP tools and shadows the ES skill only in the current agent scope. Other sessions remain unaffected. The graph is per session and repository; session logs own membership, actor facts own actual rounds/pages/batches.
+Activation hides raw ES tools and its skill only in the current session; other sessions are unaffected. Supported resume/dispose boundaries restore those effects. The nine active library modules are packaged; historical implementations/tests are not in the official package/test entry.
 
 ## Verification
 
 ```bash
 npm test
 npm run verify:skills -- --source /Users/ibobby/Projects/skills/sectioned-feature-development/skill
+npm pack --dry-run
 ```
 
-`npm test` covers the current graph/status/dispatch contract with fake ES. Canonical SFD 5.6.0 and sibling code-review resources are byte-for-byte snapshots. Real installed DSH/ES activation/resume/CLI behavior still requires a separately observed end-to-end run; this repository cannot substitute for it.
-
-## Dynamic changes and recovery
-
-Main may record an explicit request such as “skip all blind reviews” on every affected node immediately, even before planning or implementation finishes. Tool navigation names the effective remaining reviews and acknowledges waived nodes instead of restoring default reminders.
-
-To reopen completed work, set the changed node and the completed descendants whose evidence must be re-established to pending with evidence=null. A dispatch/continuation attempted too early returns recovery.changed_nodes, recovery.reset_nodes and recovery.preserve_skips plus an instruction to repair the graph in one edit. This is a dependency-based repair recipe, not automatic semantic invalidation; Main still judges the actual impact. The plugin never resets statuses itself.
-
-If an original reviewer cannot continue, spawn the pending review with an explicit replacement declaration:
-
-```json
-{"tasks":[{"node":"plan:initial","assignment":"Complete current plan and all required closure scope", "route":{"profile":"caller-selected-reviewer"},"replacement":{"agent_id":"10000001","reason":"original reviewer cannot resume"}}]}
-```
-
-The prior reviewer must not have live/uncertain work; cancel and wait if needed. The replacement keeps the review role and owning scope. Old rounds and reports remain recorded; future continuation guidance selects the replacement. Prefer continuity when available; never relabel an old report as the new review.
-
-When wait returns pending_requests, its instruction points to sfd_subagent_respond, not another blind wait. For permission use allow/deny; for user_input use answer with non-empty content. Preserve any human-owned decision. The response contains ES disposition, requested_decision, effective_decision and policy override facts; already_responded/in_flight are not new approvals. Always wait for fresh task state afterwards. Respond remains usable while a graph or plan is being repaired and never marks work complete.
+Tests use fake ES plus actual Cordis registry/scope integration. Canonical SFD 5.6.0 and sibling code-review resources remain byte-for-byte snapshots; only the DSH addendum changes. Real installed DSH/ES activation/resume/CLI behavior requires a separately observed end-to-end run. Local tests are not a deployment claim.

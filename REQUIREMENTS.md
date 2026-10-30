@@ -1,26 +1,23 @@
 # Editable-graph wrapper requirements
 
-The user's current contract and the canonical SFD skill govern behavior. This document records the implementation boundary; it cannot redefine a user-requested tool name or silently approve a workflow deviation.
+The user's current contract and canonical SFD skill govern behavior. This document records the implementation boundary; canonical review defaults are guidance, not a reviewer-session enforcement policy.
 
 - Compile canonical Feature → Section → Subsection Markdown with located grammar/dependency/ownership errors. Compilation is never semantic approval.
-- Every declared subsection always has a real R01 checkpoint review. A final child checkpoint may share a call with parent reconciliation, but not omit review. Children do not create extra A/B pairs.
-- Keep Plan A/B, Section Code A/complete blind Code B, child checkpoints, parent reconciliation, Section/Feature acceptance and delivery in the canonical graph.
-- The graph is the progress authority. Main edits status/evidence/note directly. `done` review/implementation requires a real actor/round/report; `done` Main node requires a reason.
-- `skipped_by_user` is the only skip, requires user provenance and reason, and may be recorded upfront. A waiver removes its task, not unfinished non-waived upstream work; it is never CLEAN.
-- Canonical nodes and canonical prerequisites cannot be removed. Main may add custom review/repair nodes and extra prerequisites; the plugin validates cycles, owners and status.
-- Compile with an existing unchanged graph returns `already up to date, do not compile again` without writing or resetting progress.
-- Compile with a changed plan/structure backs the old graph up to `SFD-GRAPH.prev.json` (overwriting an earlier backup), writes a new pending graph to the original filename, sets `reconciled=false`, and instructs Main to compare both graphs and PLAN-FULL.
-- No automatic invalidation, evidence-cone retention, hold/risk controller, finding parser, model router, repair scheduler or competing acceptance state.
-- Tools are exactly: `sfd_workflow_compile`, `sfd_subagent_spawn`, `sfd_subagent_wait`, `sfd_subagent_result`, `sfd_subagent_send`, `sfd_subagent_respond`, `sfd_subagent_cancel`, `sfd_subagent_observe`.
-- Spawn prevalidates all tasks; partial dispatch preserves actual IDs and uncertain/unattempted failures without blind retry or automatic cancellation.
-- Wait covers all requested actors and batch peers, withholds result instructions until all end, lists remaining IDs and preserves diagnostic branches. It never marks graph status.
-- Pending input, failure/cancellation, empty/partial/paginated evidence and terminal process status cannot masquerade as review approval. Main reads the actual authored report and edits graph status.
-- First role/layer return supplies applicable canonical authority; later returns are short state-specific hints with real actor/session IDs and graph successors. The next mandatory review is named before acceptance.
-- Activation hides raw ES tools and the ES skill in the current agent scope; other sessions remain unchanged. Resume/dispose boundaries are supported; unsupported capabilities fail honestly.
-- Canonical SFD 5.6.0 and sibling code-review resource bytes remain unchanged snapshots; the DSH adaptation is separate and verifiable.
-- Verification uses fake ES, actual Cordis integration, canonical byte comparison and package inspection. Real installed DSH/ES end-to-end behavior remains unverified until separately observed.
-
-- Reopen errors include the complete transitive reset_nodes recipe and preserve_skips. Main owns affected-evidence decisions and graph edits; the plugin never automatically resets progress.
-- An unavailable terminal reviewer can be explicitly replaced with replacement:{agent_id,reason}; preserve old rounds, require role/scope continuity and no live/uncertain overlap, and select the replacement in later navigation.
-- Pending requests return an actionable respond instruction. Respond forwards permission decisions or user-input answers, preserves effective policy/idempotency facts, works during graph repair and requires fresh wait before evidence can settle.
-- Success and execution-error instructions follow the effective graph, acknowledge user waivers and guide plan reconciliation without reinstating waived reviews.
+- Generate complete default Plan/Section reviews, child checkpoints, parent reconciliation, Section/Feature acceptance and delivery obligations. Children do not get extra A/B pairs.
+- Main edits graph status/evidence/note, adds custom obligations and prerequisites, and decides whether reports satisfy them. The plugin does not parse findings, infer CLEAN, choose review sessions or schedule repairs.
+- Any process step may be `skipped_by_user`, with user source and reason. This works for reviews, implementations and Main decisions. A skipped task does not waive unfinished upstream work and is never CLEAN.
+- Removing/changing a Feature, Section or implementation scope belongs in PLAN-FULL first, followed by compile and reconciliation. Do not remove functionality only from the graph. Canonical ownership and dependency structure remain tied to the current plan; extra workflow obligations may be edited directly.
+- Unchanged compile validates and returns current navigation without writing/resetting progress. Changed plan/structure backs up the old graph, writes a new pending graph and requires Main to restore valid evidence/step waivers and set reconciled=true.
+- Real review/implementation evidence requires a settled successful actor/round/report. One report may support multiple obligations when Main records each separately authored cross-node `evidence.conclusion`; matching task kind and complete evidence remain required. Main decisions require `evidence.reason`.
+- Main freely chooses review spawn/send and each send target. Do not reject a new reviewer because an older one exists, enforce reviewer replacement declarations, or select continuation from node names/roles. Keep pending-node/prerequisite, real-session, no-live-overlap and receipt checks.
+- Only implementation repair selection is program-owned. Declare `purpose=implementation|repair` on dispatch or a custom implementation node. Spawn defaults to new implementation; send defaults to repair unless the node explicitly declares a purpose. A newly dispatched implementation starts a new per-unit cycle.
+- An original impl_std gets one impl_large repair actor on first repair, then every later repair in that cycle uses that same actor/session. An original impl_large uses its original actor/session for every repair. The next new implementation resets this selection. Children keep separate unit cycles.
+- Concrete routes are explicit caller configuration, not guessed model names. Save optional `repair_route` on new implementation, or supply the configured large `route`/`repair_route` for the first std repair. Later repair routes are ignored in favor of the recorded actor. Return actual dispatch action, IDs and round, including redirects from send to first repair spawn or from spawn to continuation.
+- Preserve unknown dispatch outcomes and do not blindly spawn another implementer. A definitively unsupported repair continuation reports a capability gap rather than silently creating another repair actor. An explicitly requested new implementation is not an automatic fallback.
+- Spawn prevalidates the entire batch and checkpoints real IDs/round/message/cycle facts before the next irreversible call. Partial dispatch preserves actual IDs and uncertain/unattempted operations without automatic retry/cancel.
+- Wait covers requested actors and batch peers, preserves pending requests/diagnostics/pagination, and never marks graph completion. Failure, cancellation, partial/empty reports or process terminal status cannot masquerade as approval.
+- Successful returns first ask Main to read and record the actual report rather than redispatching its still-pending node. Ready Main nodes and graph successors contain concrete stage instructions for risk selection, repair reconciliation, Section/Feature acceptance and delivery.
+- Every success/error follows the effective graph and acknowledges arbitrary user step waivers. Changes to product scope direct Main back to PLAN-FULL plus compile/reconciliation.
+- Tools remain exactly compile plus spawn/wait/result/send/respond/cancel/observe wrappers. No automatic acceptance, finding parser, general model router, repair scheduler, graph invalidation controller or competing progress state.
+- Activation hides raw ES tools/skill only in the current session; resume/dispose and unsupported host capability boundaries remain honest.
+- Keep canonical SFD 5.6.0 and sibling code-review bytes unchanged; DSH transport/dynamic-decision adaptations are separate and verifiable. Local fake ES/Cordis/package evidence does not substitute for real installed DSH/ES end-to-end validation.

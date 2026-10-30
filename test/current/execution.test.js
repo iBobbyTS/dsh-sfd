@@ -71,7 +71,7 @@ test('partial spawn preserves actual IDs and never retries or auto-cancels', asy
   } finally { await cleanup(f); }
 });
 
-test('continuation keeps the owning implementation unit and rejects blind/plan first-pass reuse', async () => {
+test('implementation retains its owning unit while Main chooses plan and code review sessions', async () => {
   const f = await fixture('# Plan\n\n' + section(1, { children: true }));
   try {
     await f.compile();
@@ -91,10 +91,9 @@ test('continuation keeps the owning implementation unit and rejects blind/plan f
     await planTest.compile();
     const planA = await spawnWaitDone(planTest, 'plan:initial');
     await markDone(planTest, 'plan:initial', planA.id, 1);
-    await assert.rejects(
-      () => planTest.send(planA.id, 'plan:final', 'pretend to be independent Plan B'),
-      /first-pass plan review requires a fresh spawn/,
-    );
+    const selected = await planTest.send(planA.id, 'plan:final', 'Main-selected plan follow-up');
+    assert.equal(selected.ok, true);
+    assert.equal(selected.actor_id, planA.id);
   } finally { await cleanup(planTest); }
 
   const blindTest = await fixture();
@@ -107,10 +106,9 @@ test('continuation keeps the owning implementation unit and rejects blind/plan f
     await markDone(blindTest, 'S01:behavior', behavior.id, 1);
     await markMain(blindTest, 'S01:risk');
     const blind = await spawnWaitDone(blindTest, 'S01:blind');
-    await assert.rejects(
-      () => blindTest.send(blind.id, 'S01:blind', 'reuse blind session for a new first pass'),
-      /fresh spawn/,
-    );
+    const selected = await blindTest.send(blind.id, 'S01:blind', 'Main-selected code-review follow-up');
+    assert.equal(selected.ok, true);
+    assert.equal(selected.actor_id, blind.id);
   } finally { await cleanup(blindTest); }
 });
 

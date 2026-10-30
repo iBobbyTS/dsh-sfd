@@ -73,8 +73,9 @@ test('reopening completed work returns every completed descendant, preserves wai
   for (const id of blocked.recovery.reset_nodes) { g.nodes[id].status = 'pending'; g.nodes[id].evidence = null; }
   await f.save(g);
   const reopened = (await f.compile()).navigation.next.find((item) => item.node === node('implement'));
-  assert.equal(reopened.action, 'sfd_subagent_send');
-  assert.match(reopened.note, /do not reuse a historical report/);
+  assert.equal(reopened.action, 'dispatch-implementation');
+  assert.equal(reopened.repair.agent_id, implementation.id);
+  assert.match(reopened.instruction, /program selects the cycle repair actor/);
   assert.equal((await f.send(implementation.id, node('implement'), 'change the implementation')).ok, true);
   assert.equal((await f.graph()).nodes[node('blind')].status, 'skipped_by_user');
 });
@@ -92,51 +93,53 @@ test('reopen traversal includes transitive dependents and custom gates without t
   assert.ok(!recovery.reset_nodes.includes(label(2) + ':accept'));
 });
 
-test('an unavailable original reviewer can be explicitly replaced and future guidance selects the replacement', async (t) => {
+test('unavailable reviewers can be freshly spawned without replacement declarations and old actors remain selectable', async (t) => {
   const f = await setup(t);
   const prior = await spawnWaitDone(f, 'plan:initial');
   const rpc = async (command, args) => {
     if (command === 'send') { const error = new Error('cannot continue'); error.code = 'TERMINAL_SEND_UNSUPPORTED'; throw error; }
     return f.rpc(command, args);
   };
-  await assert.rejects(() => send(f.repo, f.session, { agent_id: prior.id, node: 'plan:initial', content: 'recheck changes' }, rpc), (error) => error.code === 'TERMINAL_SEND_UNSUPPORTED' && /replacement/.test(error.instruction));
-  await assert.rejects(() => f.spawn([task('plan:initial')]), /original reviewer/);
-  const replacement = await f.spawn([task('plan:initial', { replacement: { agent_id: prior.id, reason: 'original runtime cannot resume' } })]);
-  const id = replacement.agent_ids[0];
+  const failed = await send(f.repo, f.session, { agent_id: prior.id, node: 'plan:initial', content: 'recheck changes' }, rpc);
+  assert.equal(failed.ok, false);
+  assert.match(failed.instruction, /No replacement declaration/);
+  const fresh = await f.spawn([task('plan:initial')]);
+  const id = fresh.agent_ids[0];
+  assert.notEqual(id, prior.id);
+  await f.wait(id);
   const state = await f.state();
-  assert.equal(state.actors[prior.id].replacedBy, id);
-  assert.deepEqual(state.actors[id].replaces, { agent_id: prior.id, reason: 'original runtime cannot resume' });
   assert.equal(state.actors[prior.id].rounds.length, 2);
-  await f.wait(id);
-  const next = workflowNavigation(await f.graph(), await f.state()).next.find((item) => item.node === 'plan:initial');
-  assert.equal(next.agent_id, id);
-  await assert.rejects(() => f.send(prior.id, 'plan:initial', 'use obsolete reviewer'), /replaced/);
-  await markDone(f, 'plan:initial', id, 1);
-  assert.equal((await f.spawn([task('plan:final')])).ok, true);
+  const next = workflowNavigation(await f.graph(), state).next.find((item) => item.node === 'plan:initial');
+  assert.equal(next.action, 'choose-review-dispatch');
+  assert.deepEqual(new Set(next.actor_candidates.map((item) => item.agent_id)), new Set([prior.id, id]));
+  assert.equal((await f.send(prior.id, 'plan:initial', 'Main retries its selected original reviewer')).ok, true);
 });
 
-test('replacement cannot overlap live work, change review scope or omit its reason', async (t) => {
+test('dynamic reviewer decisions retain live-work protection but do not require reviewer identity continuity', async (t) => {
   const f = await setup(t);
-  const initial = await f.spawn([task('plan:initial')]); const id = initial.agent_ids[0];
-  await assert.rejects(() => f.spawn([task('plan:initial', { replacement: { agent_id: id, reason: 'unavailable' } })]), /live/);
-  await f.wait(id);
-  await assert.rejects(() => f.spawn([task('plan:initial', { replacement: { agent_id: id } })]), /replacement reason/);
-  await markDone(f, 'plan:initial', id, 1);
-  await assert.rejects(() => f.spawn([task('plan:final', { replacement: { agent_id: id, reason: 'wrong role scope' } })]), /review scope/);
+  const first = await f.spawn([task('plan:initial')]);
+  await assert.rejects(() => f.spawn([task('plan:initial')]), /live/);
+  await f.wait(first.agent_ids[0]);
+  const fresh = await f.spawn([task('plan:initial')]);
+  assert.notEqual(fresh.agent_ids[0], first.agent_ids[0]);
+  await f.wait(fresh.agent_ids[0]);
+  await markDone(f, 'plan:initial', fresh.agent_ids[0], 1);
+  assert.equal((await f.send(first.agent_ids[0], 'plan:final', 'Main-selected plan reviewer')).ok, true);
 });
 
-test('checkpoint reviewers can be replaced after cancellation and reused across later checkpoints', async (t) => {
+test('checkpoint reviewers can be freshly spawned after cancellation or selected for later checkpoints', async (t) => {
   const f = await setup(t, '# Plan\n\n' + section(1, { children: true }));
   await planDone(f);
   const child = owner + '.A'; const nextChild = owner + '.B';
   const impl = await spawnWaitDone(f, child + ':implement'); await markDone(f, child + ':implement', impl.id, 1);
   const review = await f.spawn([task(child + ':checkpoint')]); const prior = review.agent_ids[0];
   await f.cancel(prior); await f.wait(prior);
-  const replacement = await f.spawn([task(child + ':checkpoint', { replacement: { agent_id: prior, reason: 'original reviewer lost' } })]);
-  const id = replacement.agent_ids[0]; await f.wait(id); await markDone(f, child + ':checkpoint', id, 1);
+  const fresh = await f.spawn([task(child + ':checkpoint')]);
+  const id = fresh.agent_ids[0]; await f.wait(id); await markDone(f, child + ':checkpoint', id, 1);
   const laterImpl = await spawnWaitDone(f, nextChild + ':implement'); await markDone(f, nextChild + ':implement', laterImpl.id, 1);
   const next = workflowNavigation(await f.graph(), await f.state()).next.find((item) => item.node === nextChild + ':checkpoint');
-  assert.equal(next.agent_id, id);
+  assert.equal(next.action, 'choose-review-dispatch');
+  assert.ok(next.actor_candidates.some((item) => item.agent_id === id));
   assert.equal((await f.send(id, nextChild + ':checkpoint', 'review the next bounded increment')).ok, true);
 });
 

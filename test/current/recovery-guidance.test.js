@@ -43,7 +43,7 @@ for (const children of [false, true]) {
     assert.equal(waited.instructions.length, 1);
     const guide = waited.instructions[0];
     assert.ok(guide.skipped.some((item) => item.node === waived));
-    assert.match(guide.instruction, /do not reinstate user-waived/);
+    assert.match(guide.instruction, /do not reinstate any user-waived/);
     assert.doesNotMatch(guide.instruction, /next required review is Code A|requires its real R01 checkpoint/);
     assert.ok(!guide.next.some((item) => item.node === waived));
     await markDone(f, unit + ':implement', id, 1);
@@ -77,7 +77,7 @@ test('failed terminal work gives failure recovery, not successful-report progres
   assert.equal((await f.graph()).nodes['plan:initial'].status, 'pending');
 });
 
-test('unavailable implementation sessions guide a fresh worker rather than reviewer-only replacement', async (t) => {
+test('unavailable repair sessions preserve their cycle and report a capability gap rather than silently spawning', async (t) => {
   const f = await setup(t); await planDone(f);
   const current = owner + ':implement';
   const spawned = await f.spawn([task(current)]); const id = spawned.agent_ids[0]; await f.wait(id);
@@ -86,9 +86,15 @@ test('unavailable implementation sessions guide a fresh worker rather than revie
     if (command === 'send') { const error = new Error('cannot resume'); error.code = 'TERMINAL_SEND_UNSUPPORTED'; throw error; }
     return f.rpc(command, args);
   };
-  await assert.rejects(() => send(f.repo, f.session, { agent_id: id, content: 'repair the bounded implementation' }, rpc), (error) => /fresh worker/.test(error.instruction) && /No replacement declaration/.test(error.instruction));
+  const failed = await send(f.repo, f.session, { agent_id: id, content: 'repair the bounded implementation' }, rpc);
+  assert.equal(failed.ok, false);
+  assert.match(failed.instruction, /capability gap/);
+  assert.equal((await f.state()).implementationCycles[owner].repair, id);
   const next = (await f.compile()).navigation.next.find((item) => item.node === current);
-  assert.match(next.note, /fresh implementation worker/);
-  assert.doesNotMatch(next.note, /replacement:\{/);
-  assert.equal((await f.spawn([task(current)])).ok, true);
+  assert.equal(next.repair.agent_id, id);
+  assert.equal(f.calls.filter((item) => item.command === 'spawn').length, 3);
+  // An explicitly declared new implementation is a different cycle, not an automatic repair fallback.
+  const fresh = await f.spawn([{ ...task(current), purpose: 'implementation' }]);
+  assert.equal(fresh.ok, true);
+  assert.notEqual((await f.state()).implementationCycles[owner].original, id);
 });

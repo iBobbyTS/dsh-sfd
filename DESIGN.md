@@ -2,66 +2,48 @@
 
 ## Ownership
 
-Main owns the plan, graph progress, semantic dispositions, model routes and acceptance. The plugin owns compilation, canonical review/acceptance structure, order validation, actual subagent transport and instructions. It does not parse reports, infer findings, choose models, invalidate evidence, or decide whether a review passed.
+Main owns plan/scope, graph progress, report meaning, review spawn/send decisions and review targets. The plugin owns compilation, current-graph prerequisite/consistency checks, actual subagent transport and next-step instructions. Its only program-selected assignment is implementation repair routing within the current per-unit implementation cycle.
 
-## Modules
+## Active modules
 
-- [Entry](index.js) registers the skill provider, non-mutating `/sfd` command, scoped host adapter and tools.
-- [Compiler](lib/compiler.js) reads canonical Feature → Section → Subsection Markdown and produces deterministic graph nodes with located structural errors. A declared subsection always gets an implement node and a checkpoint review.
-- [Graph store](lib/graph-store.js) owns `SFD-GRAPH.json`, `SFD-GRAPH.prev.json`, atomic writes, structural comparison, backup and validation. It never changes statuses.
-- [Session store](lib/session-store.js) owns actual actor/round/group/page facts in `ACTORS.json`; it does not own progress.
-- [Execution](lib/execution.js) owns spawn/wait/result/send/cancel/observe, partial-dispatch facts and graph prerequisite checks.
-- [Guidance](lib/guidance.js) generates role-specific instructions, first-role authority and the next mandatory review.
-- [ES transport](lib/es-cli.js) is the sole active process boundary. [Scoped host](lib/scoped-host.js) owns activation/hiding. [Skill provider](lib/skill-provider.js) serves exact canonical snapshots plus the separate adaptation.
+- [Entry](index.js) registers the skill provider, `/sfd`, scoped host adapter and tools.
+- [Compiler](lib/compiler.js) reads canonical Feature → Section → Subsection Markdown and builds complete default obligations.
+- [Graph store](lib/graph-store.js) owns graph identity, backup, atomic writes, topology/status validation and true report references; it never changes progress automatically.
+- [Session store](lib/session-store.js) owns actual actors/rounds/groups/pages and the current implementation-cycle index in ACTORS.json. This is dispatch lineage, not a second acceptance state.
+- [Execution](lib/execution.js) prevalidates and dispatches batches, selects impl repair actors, records real transport facts, waits/reads/continues/responds/cancels/observes and never infers review outcomes.
+- [Guidance](lib/guidance.js) explains current report handling, effective successors and concrete ready Main-stage duties. Reviewer candidates are suggestions, never dispatch restrictions.
+- [ES transport](lib/es-cli.js) is the sole process boundary; [scoped host](lib/scoped-host.js) manages current-session activation; [skill provider](lib/skill-provider.js) serves canonical bytes plus the separate DSH addendum.
 
-## Graph and progress
+## Plan versus process changes
 
-One per-session editable graph is the progress authority. Nodes have stable IDs, canonical `needs` and `mandatory` flags. Main edits `status`, `evidence` and `note` directly. The compiler-generated topology is immutable except that Main may add custom nodes and extra prerequisites.
+PLAN-FULL owns functional scope, Feature/Section/child membership, implementation tiers and declared dependencies. Remove/change functionality there, compile again and reconcile evidence/waivers against the old graph. Canonical graph ownership/dependencies continue matching that current plan.
 
-`status` values:
+The graph owns execution progress and added workflow obligations. Main can skip **any** process node with `skipped_by_user` plus user source/reason, add custom review/repair nodes and edit their extra prerequisites. A skipped task does not implicitly skip its unfinished ancestors and is never CLEAN. Reopen guidance lists completed descendants and preserved skips; Main decides which evidence applies and edits progress.
 
-- `pending` / `failed`: not satisfied;
-- `done`: satisfied; review/implementation requires real actor/round/report; Main node requires a reason;
-- `skipped_by_user`: the only skip; requires user provenance and reason; may be recorded before predecessors finish. Its unfinished non-waived ancestors still gate successors; it is never CLEAN.
+Unchanged compile validates and returns navigation without writing. Changed compile backs up the old graph and writes a pending graph with reconciled=false. Main restores only still-valid evidence/waivers and explicitly reconciles; no automatic invalidation/retention engine is introduced.
 
-The graph validation rejects missing/mutated mandatory nodes, removed canonical prerequisites, cycles, unknown prerequisites, done nodes whose prerequisites are unsatisfied, and review evidence that is not a settled successful authored report.
+## Review dispatch
 
-## Compile and backup
+Main selects fresh spawn or a known review actor to send. There is no reviewer continuity rejection, replacement declaration, first-pass-name prohibition or role/Section-based send-target enforcement. The canonical skill explains why independence/continuity may matter, but Main decides the current assignment. A task still needs pending/failed status, satisfied graph prerequisites, a real known actor/session for send and no live overlapping work. Review contexts remain distinct from implementation task kind.
 
-Compilation is deterministic for the current plan and canonical structure. If the target already has the same plan digest and canonical topology, compile returns `already up to date, do not compile again` and does not write, reset status or back up. Progress and custom nodes survive.
+Actor current scope follows a selected send; each real round keeps its actual node/role. Old rounds and reports remain available. A newer reviewer does not make an older known actor unselectable.
 
-If the plan/structure changed, the previous target is copied to `SFD-GRAPH.prev.json` (overwriting an earlier backup), a pending graph is written to `SFD-GRAPH.json`, `reconciled=false`, and the result instructs Main to compare previous graph, new graph and `PLAN-FULL.md`. Main copies only still-valid evidence, leaves affected work pending, sets `reconciled=true`, and continues. There is no automatic invalidation or evidence-cone calculation.
+## Implementation cycles
 
-A plan edit without recompilation is detected by the graph plan digest; spawn/send reject stale execution.
+Implementation dispatch declares purpose=implementation or repair. Spawn defaults to implementation; send defaults to repair, with an explicit custom node purpose used when present. New implementation requires its planned tier and begins a new cycle for that owning unit. Repair never rewrites the plan tier.
 
-## Dispatch and evidence
+ACTORS.json stores `implementationCycles[unit] = {original, repair, repairRoute}`. For original large, repair=original. For original std, repair starts empty; first repair spawns one large actor using an explicitly supplied large route and saves it. Later repairs always continue that actual actor, even if Main calls spawn or names the original std actor in send. The next explicit new implementation resets the index; old actors remain history. Children have independent unit cycles.
 
-Spawn prevalidates every task before the first RPC: node exists, not done/skipped, every prerequisite done/skipped, no live actor on the node, valid route and assignment. It never changes status. Partial dispatch preserves actual created IDs and uncertain/unattempted failures without retry or automatic cancellation.
+A caller may save repair_route on new implementation or supply route/repair_route at the first std repair. The program fixes the logical repair tier and session but does not invent concrete models or inspect external preset contents. Missing routes give actionable instructions. Known unknown spawn outcomes prevent duplicate implementation dispatch until actual task facts are reconciled. Unsupported repair continuation reports a capability gap without silently replacing its session; a definitively rejected new-implementation send does not end the existing cycle.
 
-Wait expands all batch peers, applies only the requested rounds, and withholds result instructions until every target ends. Partial targets list remaining IDs; failures, pending input, cancellation and abnormal exits are not successful evidence. The graph remains untouched.
+## Reports and instructions
 
-Send prefers the same real session. It requires a pending node, satisfied prerequisites, settled actor group, verified session identity, matching kind/role and the owning implementation unit; base blind and first-pass Plan reviews require fresh spawns. It never changes graph status.
+A node marked done references real actor/round/report evidence; a Main node supplies reason. Reports must be complete and successful with a settled batch. Cross-node report sharing also records `evidence.conclusion`, explicitly accounting for that additional obligation. This permits one final child checkpoint report to satisfy parent reconciliation without a redundant physical call; report text is never parsed for automatic approval.
 
-## Mandatory reviews and guidance
+Wait/result first instruct Main to inspect and record returned reports, not to redispatch nodes whose progress is still pending. Successor actions carry concrete stage instructions, including risk selection/specialists, same-head repair reconciliation, Section finding/check/integration closure, residual Feature composition checks and final delivery/actor cleanup. User-waived steps stay waived; no step-specific skip API is introduced.
 
-The graph carries Plan A/B, Section Code A/B, subsection checkpoints, parent reconciliation, Section/Feature acceptance and delivery. `section:accept` depends on the Section reconciliation and Code B chain; `S01.B:implement` depends on `S01.A:checkpoint`. No report keyword or terminal process status satisfies acceptance.
+## Runtime and packaging boundaries
 
-The first return for a role/layer supplies canonical default handling text with explicit effective-graph waiver/replacement precedence. Later returns are short state-specific instructions with actual actor/session IDs and graph successors. Wait and result explicitly name the next mandatory review, including blind Code B and subsection checkpoints, but never mark it done.
+Batches validate before dispatch and checkpoint IDs, cycle selection and message UUIDs before the next irreversible call. Continuations verify the same actual session and reject stale receipt/result reuse. Wait runs outside the state-write queue so observe/cancel remain usable. Pending responses preserve actual effective policy outcomes and require fresh wait.
 
-## Transport and host scope
-
-Every batch item is validated before the first spawn. Known IDs and uncertain operations are kept. Wait polls outside the actor-state write queue; observe/cancel remain usable. UUID-bound send receipts, result pages and session identity prevent stale replies from fabricating new rounds.
-
-Activation uses per-agent tool restrictions and a non-invocable ES skill shadow. Replayable membership restores effects; other sessions remain unchanged; unknown/same-layer restrictions fail honestly. Raw shell bypass, already-seen prompt content and residual MCP instructions are outside the hiding guarantee.
-
-## Packaging and evidence
-
-The package allowlist ships the nine active library modules and canonical skill snapshots. Historical source/tests remain in the repository but are not part of the active package or official test entry. Fake ES plus actual Cordis scope/registry integration verify the local contract; real installed DSH/ES behavior remains a separate end-to-end check.
-
-## Dynamic workflow recovery
-
-- The skip decision itself has no execution prerequisites. Effective prerequisite lookup traverses waived nodes so their unfinished ancestors are not accidentally waived too.
-- Reopen validation reports every transitively affected completed node and preserved user waiver. Main applies pending/evidence=null edits; the plugin does not infer semantic invalidation or silently reset progress.
-- Spawn accepts replacement:{agent_id,reason} for an unavailable terminal reviewer. Replacements retain role/scope, preserve old facts and link both records. Guidance prefers the latest non-replaced reviewer.
-- Respond forwards the four public ES fields and preserves the effective policy outcome. Pending requests lead to respond instructions; response acknowledgement never clears local blocked evidence without a fresh wait.
-- Success and execution-error returns include state-specific instructions. Graph errors remain recoverable through explicit edits; stale-plan errors direct compilation and reconciliation, including still-applicable user waivers. Compilation of an unchanged graph validates and returns current navigation without writing progress.
+Per-agent activation/hiding uses replayable host membership; peers remain unaffected. The package allowlist ships only the nine active modules and canonical snapshots. Fake ES and real Cordis registry/scope tests establish the local contract; real installed DSH/ES activation/resume/CLI behavior remains a separate end-to-end check.
