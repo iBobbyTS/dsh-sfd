@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import { rm } from 'node:fs/promises';
 import { registerWorkflowTools } from '../../lib/workflow-tools.js';
 import { fixture, plan, planDone } from './fixtures.js';
+import { Context } from '@deepseek-ai/cordis';
+import { ToolRuntime } from '@deepseek-ai/dsh-tools';
+import { SkillRegistry } from '@deepseek-ai/dsh-skill';
+import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection';
+import { createScope } from '@deepseek-ai/dsh-scope';
+import { apply, inject } from '../../index.js';
 
 const cleanup = async (f) => rm(f.repo, { recursive: true, force: true });
 
@@ -58,4 +64,30 @@ test('public tool schemas preserve configured routes and return the redirected r
     assert.equal(later.operations[0].action, 'send');
     assert.deepEqual(later.agent_ids, first.agent_ids);
   } finally { await cleanup(f); }
+});
+
+test('entry registers the current tool surface and its command never touches the repository', async () => {
+  const ctx = new Context();
+  ctx.provide('systemPrompt', { tools: () => () => {}, section: () => () => {} });
+  new ToolRuntime(ctx); new SkillRegistry(ctx); new SessionProjectionRegistry(ctx);
+  ctx.provide('agents', { list: () => [] });
+  ctx.provide('workingDirectory', { ensure: async () => { throw new Error('command must not touch repository'); } });
+  const commands = [];
+  ctx.provide('commands', { register: command => commands.push(command) });
+  const key = {};
+  const plugin = createScope(ctx, key);
+  try {
+    apply(plugin.ctx);
+    const names = ctx.tools.schemas(key).map(tool => tool.name);
+    assert.equal(inject.includes('gitCommit'), false);
+    assert.equal(names.length, 8);
+    assert.ok(names.includes('sfd_workflow_compile'));
+    assert.ok(names.includes('sfd_subagent_respond'));
+    assert.ok(!names.includes('sfd_start'));
+    let queued;
+    const result = await commands[0].handler({ agent: { followup: message => { queued = message; } }, signal: new AbortController().signal });
+    assert.equal(result.kind, 'success');
+    assert.equal(queued.source.kind, 'skill-invocation');
+    assert.equal(queued.source.name, 'sectioned-feature-development');
+  } finally { await plugin.dispose(); }
 });

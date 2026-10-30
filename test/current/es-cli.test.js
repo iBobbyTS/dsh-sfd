@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dirname } from 'node:path';
-import { createEsTransport,parseEsJson,runEs,resolveBinary,launcherEnvironment } from '../lib/es-cli.js';
+import { createEsTransport,parseEsJson,runEs,resolveBinary,launcherEnvironment } from '../../lib/es-cli.js';
 test('GUI minimal PATH resolves configured/known launcher and includes its Node interpreter',async()=>{
  const env={PATH:'/usr/bin:/bin',EXTERNAL_SUBAGENT_BIN:'/chosen/bin/external-subagent'};
  assert.equal(resolveBinary(env),env.EXTERNAL_SUBAGENT_BIN);assert.ok(launcherEnvironment(env).PATH.includes(dirname(process.execPath)));
@@ -22,5 +22,5 @@ test('valid long polls exceed requested daemon wait, flat array and scalar envel
  assert.deepEqual(await rpc('wait',{agent_id:[10000001],wait_time:290}),response);assert.equal(seen.options.timeoutMs,310000);
  assert.equal(JSON.parse(seen.args[2]).wait_time,290);
  await assert.rejects(()=>rpc('wait',{agent_id:Array(17).fill(10000001)}),/1..16/);await assert.rejects(()=>rpc('wait',{agent_id:10000001,wait_time:291}),/0..290/);
- await assert.rejects(()=>rpc('respond',{}),/unsupported/);
+ await assert.rejects(()=>rpc('unknown',{}),/unsupported/);
 });

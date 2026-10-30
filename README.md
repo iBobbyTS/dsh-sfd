@@ -81,7 +81,7 @@ Wait/result first ask Main to inspect and record returned reports, not to redisp
 
 Pending questions direct Main to respond; inspect ES's effective permission decision and wait for fresh state. Cancel/observe/respond never mark graph completion. Batch validation and checkpoints retain actual IDs, message UUIDs and cycle facts across partial dispatch. Wait runs outside the state write queue so diagnostics/cancel remain usable.
 
-Activation hides raw ES tools and its skill only in the current session; other sessions are unaffected. Supported resume/dispose boundaries restore those effects. The nine active library modules are packaged; historical implementations/tests are not in the official package/test entry.
+Activation hides raw ES tools and its skill only in the current session; other sessions are unaffected. Supported resume/dispose boundaries restore those effects. Only the nine active library modules remain. Retired implementations/tests were removed; all supported tests are in [the current suite](test/current/).
 
 ## Verification
 

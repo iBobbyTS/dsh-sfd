@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sfdSkillProvider } from '../lib/skill-provider.js';
+import { sfdSkillProvider } from '../../lib/skill-provider.js';
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 

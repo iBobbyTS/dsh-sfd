@@ -11,7 +11,7 @@ Main owns plan/scope, graph progress, report meaning, review spawn/send decision
 - [Graph store](lib/graph-store.js) owns graph identity, backup, atomic writes, topology/status validation and true report references; it never changes progress automatically.
 - [Session store](lib/session-store.js) owns actual actors/rounds/groups/pages and the current implementation-cycle index in ACTORS.json. This is dispatch lineage, not a second acceptance state.
 - [Execution](lib/execution.js) prevalidates and dispatches batches, selects impl repair actors, records real transport facts, waits/reads/continues/responds/cancels/observes and never infers review outcomes.
-- [Guidance](lib/guidance.js) explains current report handling, effective successors and concrete ready Main-stage duties. Reviewer candidates are suggestions, never dispatch restrictions.
+- [Guidance](lib/guidance.js) explains current report handling, effective successors and concrete ready Main-stage duties. Summaries name actions without repeating their duties; first-role authority adds applicable references, not another root skill copy. Reviewer candidates are suggestions, never dispatch restrictions.
 - [ES transport](lib/es-cli.js) is the sole process boundary; [scoped host](lib/scoped-host.js) manages current-session activation; [skill provider](lib/skill-provider.js) serves canonical bytes plus the separate DSH addendum.
 
 ## Plan versus process changes

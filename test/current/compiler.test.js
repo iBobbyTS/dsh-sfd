@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compilePlan } from '../lib/compiler.js';
-import { label,feature,section,plan } from './plan-fixtures.js';
+import { compilePlan } from '../../lib/compiler.js';
+import { label,feature,section,plan } from './fixtures.js';
 test('two Features, peer Sections and real child obligations have distinct acceptance boundaries',()=>{
   const text=`# Plan\n### Feature ${feature(1)} — Editor\nEditor journey\n### Feature ${feature(2)} — Export\nExport journey\n`+section(1,{featureId:feature(1)})+section(2,{featureId:feature(1),children:true})+section(3,{featureId:feature(1)})+section(4,{featureId:feature(2)});
   const graph=compilePlan(text);assert.equal(graph.features.length,2);assert.equal(graph.units.length,6);
