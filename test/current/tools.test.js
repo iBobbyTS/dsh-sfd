@@ -6,7 +6,7 @@ import { fixture } from './fixtures.js';
 
 const cleanup = async (f) => rm(f.repo, { recursive: true, force: true });
 
-test('tool surface is exactly compile plus six subagent tools and no confirm/status/update', async () => {
+test('tool surface is exactly compile plus seven subagent tools and no confirm/status/update', async () => {
   const f = await fixture();
   try {
     const definitions = new Map();
@@ -14,6 +14,7 @@ test('tool surface is exactly compile plus six subagent tools and no confirm/sta
     assert.deepEqual([...definitions.keys()].sort(), [
       'sfd_subagent_cancel',
       'sfd_subagent_observe',
+      'sfd_subagent_respond',
       'sfd_subagent_result',
       'sfd_subagent_send',
       'sfd_subagent_spawn',

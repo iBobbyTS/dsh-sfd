@@ -62,6 +62,18 @@ export async function fixture(text = plan()) {
       };
     }
     if (command === 'send') { task.message_id = args.message_id; task.turn++; return { message_id: args.message_id, disposition: 'delivered' }; }
+    if (command === 'respond') {
+      task.responses ??= new Map();
+      const prior = task.responses.get(args.request_id);
+      if (prior) return { ...prior, requested_decision: args.decision, disposition: 'already_responded' };
+      const request = task.pending_requests?.find((item) => item.request_id === args.request_id);
+      if (!request) throw new Error('unknown pending request');
+      if (request.kind === 'permission' ? !['allow', 'deny'].includes(args.decision) : args.decision !== 'answer') throw new Error('wrong request decision');
+      const response = { disposition: 'responded', requested_decision: args.decision, effective_decision: args.decision, policy_overrode: false, policy_reason_code: null };
+      task.responses.set(args.request_id, response);
+      task.pending_requests = task.pending_requests.filter((item) => item.request_id !== args.request_id);
+      return response;
+    }
     if (command === 'observe') return { coverage: { tools: 'available' }, reasoning: null };
     if (command === 'cancel') { task.status = 'cancelled'; task.outcome = 'CANCELLED'; return { task: { agent_id: args.agent_id, status: 'cancelled' } }; }
     throw new Error(command);

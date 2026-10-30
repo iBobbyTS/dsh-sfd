@@ -13,6 +13,7 @@ Load the bundled `sectioned-feature-development` skill, or use `/sfd` to queue t
 | `sfd_subagent_wait` | Wait for every requested actor and batch peer; list remaining IDs and next review |
 | `sfd_subagent_result` | Read the next report page for the current actor round |
 | `sfd_subagent_send` | Continue an existing session for a declared recheck or repair |
+| `sfd_subagent_respond` | Answer a pending question or allow/deny a permission request, then wait for fresh state |
 | `sfd_subagent_cancel` | Request cancellation of one explicitly named actor |
 | `sfd_subagent_observe` | Read actor diagnostics without changing progress |
 
@@ -44,7 +45,7 @@ Nodes carry `kind`, `role`, `needs`, `mandatory`, `status` and `evidence`. Main 
 
 - `done` on a review/implementation node requires a real `actor_id`, `round` and `report`; the actor record must have a settled successful authored report.
 - `done` on a Main node requires `evidence.reason`.
-- `skipped_by_user` is the **only** skip. It requires `evidence.user_source` and `evidence.reason`, counts as satisfied for successors, and is never CLEAN.
+- `skipped_by_user` is the **only** skip. It requires `evidence.user_source` and `evidence.reason` and may be recorded upfront for all user-waived reviews. It removes that task, not its unfinished prerequisites: successors still await non-waived upstream work. It is never CLEAN.
 - `pending`/failed nodes do not satisfy successors.
 - The compiler-generated mandatory nodes and their canonical `needs` are immutable. Main may add custom review/repair nodes and extra prerequisites, but cannot remove a required Code A/B/checkpoint review. Custom review/repair nodes should carry `unit`, `section` and `feature` so continuation identity can be checked.
 
@@ -56,7 +57,7 @@ If `SFD-GRAPH.json` already exists and the plan plus canonical structure are unc
 
 and does not write or reset progress.
 
-If the plan/structure changed, the previous graph is copied to `SFD-GRAPH.prev.json` (overwriting an earlier backup), a new pending graph is written to `SFD-GRAPH.json`, `reconciled` becomes `false`, and compile returns an instruction to compare the previous graph, the new graph and `PLAN-FULL.md`. Main copies only still-valid `done` evidence, leaves affected work pending, sets `reconciled: true`, and continues.
+If the plan/structure changed, the previous graph is copied to `SFD-GRAPH.prev.json` (overwriting an earlier backup), a new pending graph is written to `SFD-GRAPH.json`, `reconciled` becomes `false`, and compile returns an instruction to compare the previous graph, the new graph and `PLAN-FULL.md`. Main copies only still-valid `done` evidence and still-applicable user waivers, leaves affected work pending, sets `reconciled: true`, and continues.
 
 No automatic invalidation, no automatic evidence cone, no `retain`/hold/risk controller.
 
@@ -91,3 +92,19 @@ npm run verify:skills -- --source /Users/ibobby/Projects/skills/sectioned-featur
 ```
 
 `npm test` covers the current graph/status/dispatch contract with fake ES. Canonical SFD 5.6.0 and sibling code-review resources are byte-for-byte snapshots. Real installed DSH/ES activation/resume/CLI behavior still requires a separately observed end-to-end run; this repository cannot substitute for it.
+
+## Dynamic changes and recovery
+
+Main may record an explicit request such as “skip all blind reviews” on every affected node immediately, even before planning or implementation finishes. Tool navigation names the effective remaining reviews and acknowledges waived nodes instead of restoring default reminders.
+
+To reopen completed work, set the changed node and the completed descendants whose evidence must be re-established to pending with evidence=null. A dispatch/continuation attempted too early returns recovery.changed_nodes, recovery.reset_nodes and recovery.preserve_skips plus an instruction to repair the graph in one edit. This is a dependency-based repair recipe, not automatic semantic invalidation; Main still judges the actual impact. The plugin never resets statuses itself.
+
+If an original reviewer cannot continue, spawn the pending review with an explicit replacement declaration:
+
+```json
+{"tasks":[{"node":"plan:initial","assignment":"Complete current plan and all required closure scope", "route":{"profile":"caller-selected-reviewer"},"replacement":{"agent_id":"10000001","reason":"original reviewer cannot resume"}}]}
+```
+
+The prior reviewer must not have live/uncertain work; cancel and wait if needed. The replacement keeps the review role and owning scope. Old rounds and reports remain recorded; future continuation guidance selects the replacement. Prefer continuity when available; never relabel an old report as the new review.
+
+When wait returns pending_requests, its instruction points to sfd_subagent_respond, not another blind wait. For permission use allow/deny; for user_input use answer with non-empty content. Preserve any human-owned decision. The response contains ES disposition, requested_decision, effective_decision and policy override facts; already_responded/in_flight are not new approvals. Always wait for fresh task state afterwards. Respond remains usable while a graph or plan is being repaired and never marks work complete.

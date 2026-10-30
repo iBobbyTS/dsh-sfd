@@ -22,7 +22,7 @@ One per-session editable graph is the progress authority. Nodes have stable IDs,
 
 - `pending` / `failed`: not satisfied;
 - `done`: satisfied; review/implementation requires real actor/round/report; Main node requires a reason;
-- `skipped_by_user`: the only skip; requires user provenance and reason; satisfied for order but not CLEAN.
+- `skipped_by_user`: the only skip; requires user provenance and reason; may be recorded before predecessors finish. Its unfinished non-waived ancestors still gate successors; it is never CLEAN.
 
 The graph validation rejects missing/mutated mandatory nodes, removed canonical prerequisites, cycles, unknown prerequisites, done nodes whose prerequisites are unsatisfied, and review evidence that is not a settled successful authored report.
 
@@ -40,13 +40,13 @@ Spawn prevalidates every task before the first RPC: node exists, not done/skippe
 
 Wait expands all batch peers, applies only the requested rounds, and withholds result instructions until every target ends. Partial targets list remaining IDs; failures, pending input, cancellation and abnormal exits are not successful evidence. The graph remains untouched.
 
-Send continues the same real session. It requires a pending node, satisfied prerequisites, settled actor group, verified session identity, matching kind/role and the owning implementation unit; base blind and first-pass Plan reviews require fresh spawns. It never changes graph status.
+Send prefers the same real session. It requires a pending node, satisfied prerequisites, settled actor group, verified session identity, matching kind/role and the owning implementation unit; base blind and first-pass Plan reviews require fresh spawns. It never changes graph status.
 
 ## Mandatory reviews and guidance
 
 The graph carries Plan A/B, Section Code A/B, subsection checkpoints, parent reconciliation, Section/Feature acceptance and delivery. `section:accept` depends on the Section reconciliation and Code B chain; `S01.B:implement` depends on `S01.A:checkpoint`. No report keyword or terminal process status satisfies acceptance.
 
-The first return for a role/layer supplies canonical handling text. Later returns are short state-specific instructions with actual actor/session IDs and graph successors. Wait and result explicitly name the next mandatory review, including blind Code B and subsection checkpoints, but never mark it done.
+The first return for a role/layer supplies canonical default handling text with explicit effective-graph waiver/replacement precedence. Later returns are short state-specific instructions with actual actor/session IDs and graph successors. Wait and result explicitly name the next mandatory review, including blind Code B and subsection checkpoints, but never mark it done.
 
 ## Transport and host scope
 
@@ -57,3 +57,11 @@ Activation uses per-agent tool restrictions and a non-invocable ES skill shadow.
 ## Packaging and evidence
 
 The package allowlist ships the nine active library modules and canonical skill snapshots. Historical source/tests remain in the repository but are not part of the active package or official test entry. Fake ES plus actual Cordis scope/registry integration verify the local contract; real installed DSH/ES behavior remains a separate end-to-end check.
+
+## Dynamic workflow recovery
+
+- The skip decision itself has no execution prerequisites. Effective prerequisite lookup traverses waived nodes so their unfinished ancestors are not accidentally waived too.
+- Reopen validation reports every transitively affected completed node and preserved user waiver. Main applies pending/evidence=null edits; the plugin does not infer semantic invalidation or silently reset progress.
+- Spawn accepts replacement:{agent_id,reason} for an unavailable terminal reviewer. Replacements retain role/scope, preserve old facts and link both records. Guidance prefers the latest non-replaced reviewer.
+- Respond forwards the four public ES fields and preserves the effective policy outcome. Pending requests lead to respond instructions; response acknowledgement never clears local blocked evidence without a fresh wait.
+- Success and execution-error returns include state-specific instructions. Graph errors remain recoverable through explicit edits; stale-plan errors direct compilation and reconciliation, including still-applicable user waivers. Compilation of an unchanged graph validates and returns current navigation without writing progress.

@@ -11,7 +11,7 @@ export function apply(ctx){
   ctx.commands.register({name:'sfd',description:'Load the SFD wrapper in this session; never change Git or install anything.',recordInput:false,
     handler:async({agent,signal})=>{
       signal?.throwIfAborted();
-      const text='Read the sectioned-feature-development skill, write or update PLAN-FULL, then call sfd_workflow_compile. Main edits SFD-GRAPH.json progress and owns semantic decisions; mandatory Plan/Code reviews must not be skipped. Other sessions are unaffected.';
+      const text='Read the sectioned-feature-development skill, write or update PLAN-FULL, then call sfd_workflow_compile. Main edits SFD-GRAPH.json progress and owns semantic decisions; follow the effective graph and record explicit user waivers; do not accidentally omit remaining reviews. Other sessions are unaffected.';
       agent.followup(createUserMessage({content:[{type:'text',text}],source:{kind:'skill-invocation',name:SKILL}}));
       return {kind:'success',text};
     },
