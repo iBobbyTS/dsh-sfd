@@ -50,6 +50,10 @@ Main chooses fresh spawn versus send and each actual review target. An older rev
 
 Graph prerequisites, pending status, real actor/session identity, complete batch settlement and no live writer/reader overlap still apply. Review and implementation task kinds remain distinct. Old rounds/reports stay historical facts even when Main chooses a new reviewer.
 
+## Section scheduling
+
+Sections run one at a time in the shared workspace: dispatch for another Section is rejected while a Section has live work, and no review overlaps a live implementation. Same-Section review batches remain available. The canonical skill's parallel-worktree execution is not offered by this wrapper; treat a parallel-Sections request as a capability gap rather than a bypass.
+
 ## Implementation and repair cycles
 
 Each implementation unit, including each child, has its own current cycle. Dispatch with purpose=implementation for new work, purpose=repair for fixes. Spawn defaults to implementation; send defaults to repair, unless the node explicitly declares its purpose.

@@ -24,6 +24,10 @@ Main chooses **every** plan/code/custom review spawn versus send and the actual 
 
 Pending-node prerequisites, task kind, real session identity and live-work/reader-writer safety still apply. Wait/result instructions follow the effective graph and do not restore waived steps. Their current report must first be read and recorded; a pending graph status alone is not a reason to repeat the dispatch.
 
+## Section scheduling
+
+This wrapper serializes Sections in the shared workspace: while any Section has live work, dispatch for another Section is rejected (`no parallel Sections`), and no review overlaps a live implementation. The canonical parallel-execution reference (independent worktrees) is not provided by this wrapper; if parallel Sections are requested, report that capability gap instead of bypassing the wrapper.
+
 ## Program-owned implementation repair routing
 
 Declare `purpose:"implementation"` for a new implementation and `purpose:"repair"` for fixes. Spawn defaults to new implementation; send defaults to repair unless a custom node declares its own purpose. Reopen affected completed nodes or add pending repair nodes before dispatch. Repair nodes name their owning unit/section/feature; their purpose can also be recorded on the node.

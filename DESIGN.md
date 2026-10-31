@@ -26,6 +26,8 @@ Unchanged compile validates and returns navigation without writing. Changed comp
 
 Main selects fresh spawn or a known review actor to send. There is no reviewer continuity rejection, replacement declaration, first-pass-name prohibition or role/Section-based send-target enforcement. The canonical skill explains why independence/continuity may matter, but Main decides the current assignment. A task still needs pending/failed status, satisfied graph prerequisites, a real known actor/session for send and no live overlapping work. Review contexts remain distinct from implementation task kind.
 
+Sections serialize in the shared workspace: while a Section has live work, dispatch for another Section is rejected, and no review overlaps a live implementation. The canonical parallel-worktree flow is a capability gap here, never a wrapper bypass.
+
 Actor current scope follows a selected send; each real round keeps its actual node/role. Old rounds and reports remain available. A newer reviewer does not make an older known actor unselectable.
 
 ## Implementation cycles

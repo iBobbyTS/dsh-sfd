@@ -8,9 +8,9 @@ const cleanup = async (f) => rm(f.repo, { recursive: true, force: true });
 const route = { subagent: 'fake', model: 'caller/model' };
 const task = (node) => ({ node, assignment: 'bounded assignment', route });
 
-async function addCustomReview(f, id, needs, role = 'specialist-review') {
+async function addCustomReview(f, id, needs, role = 'specialist-review', section = null) {
   const graph = await f.graph();
-  graph.nodes[id] = { id, kind: 'review', role, needs, mandatory: false, status: 'pending', evidence: null, note: '' };
+  graph.nodes[id] = { id, kind: 'review', role, needs, mandatory: false, status: 'pending', evidence: null, note: '', ...(section ? { section } : {}) };
   await f.save(graph);
 }
 
@@ -42,6 +42,21 @@ test('multi spawn/wait holds result instructions until every batch peer ends; pr
     const graph = await f.graph();
     assert.equal(graph.nodes['custom-a'].status, 'pending');
     assert.equal(graph.nodes['custom-b'].status, 'pending');
+  } finally { await cleanup(f); }
+});
+
+test('serialized Sections reject another Section dispatch until live work settles', async () => {
+  const f = await fixture(plan(2));
+  try {
+    await f.compile();
+    await planDone(f);
+    await addCustomReview(f, 'custom-a', ['plan:final'], 'specialist-review', 'S01');
+    await addCustomReview(f, 'custom-b', ['plan:final'], 'specialist-review', 'S02');
+    const first = await f.spawn([task('custom-a')]);
+    await assert.rejects(() => f.spawn([task('S02:implement')]), /writer\/reviewer overlap/);
+    await assert.rejects(() => f.spawn([task('custom-b')]), /no parallel Sections/);
+    await f.wait(first.agent_ids[0]);
+    assert.equal((await f.spawn([task('custom-b')])).ok, true);
   } finally { await cleanup(f); }
 });
 
