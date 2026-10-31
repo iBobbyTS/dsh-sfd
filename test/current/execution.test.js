@@ -60,6 +60,22 @@ test('serialized Sections reject another Section dispatch until live work settle
   } finally { await cleanup(f); }
 });
 
+test('profile routes keep the dispatch prompt task-facts-only; inline routes carry standing law', async () => {
+  const f = await fixture();
+  try {
+    await f.compile();
+    await planDone(f);
+    const inline = await f.spawn([task('S01:implement')]);
+    assert.match(f.calls.filter((call) => call.command === 'spawn').at(-1).args.prompt, /Do not commit, manage branches/);
+    await f.wait(inline.agent_ids[0]);
+    const profiled = await f.spawn([{ node: 'S01:implement', assignment: 'bounded assignment', route: { profile: 'sfd-dsh-dispatch' } }]);
+    assert.equal(profiled.ok, true);
+    const prompt = f.calls.filter((call) => call.command === 'spawn').at(-1).args.prompt;
+    assert.doesNotMatch(prompt, /Do not commit/);
+    assert.match(prompt, /Node: S01:implement/);
+  } finally { await cleanup(f); }
+});
+
 test('partial spawn preserves actual IDs and never retries or auto-cancels', async () => {
   const f = await fixture();
   try {

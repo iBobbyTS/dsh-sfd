@@ -20,7 +20,14 @@ Unchanged compile validates/returns navigation without writing progress. Changed
 
 ## Dynamic review decisions
 
-Main chooses **every** plan/code/custom review spawn versus send and the actual send target. The wrapper does not refuse fresh spawn because an old reviewer exists, enforce replacement declarations, or infer continuation from names/roles. Canonical independence/continuity text is decision guidance, not a hard session selector. Supply the chosen reviewer its actual current contract and closure scope; preserve true identities and old reports.
+The canonical skill remains the norm for **who reviews when**; this wrapper is only the DSH execution flow. Main chooses the transport for each review (fresh spawn versus send) and names the actual target; the program checks only pending status, graph prerequisites, task kind, real session identity and live-work safety, and never enforces reviewer continuity itself. That program neutrality does not relax the canonical session obligations, which still bind Main:
+
+- first-pass discovery and every blind B1 (including each post-repair restart) use a fresh isolated context; B stays distinct from every writer and A reviewer, and PLAN reviewers never code-review the same Feature;
+- B2 continues its own B1 session; it is not a new reviewer or another discovery pass;
+- CLOSURE_VERIFY, REPAIR_DELTA and PLAN_DELTA rechecks return to the reviewer session that produced the finding or frozen report;
+- one parent-slot R01 session spans all child checkpoints of a Section.
+
+Supply each reviewer exactly the scope its stage allows: withhold A findings, dispositions and repair history from B1 until its own findings are frozen. When a session can no longer continue, apply the canonical recorded-gap fallback: exactly one new same-route session receives the frozen report/finding IDs, and the lineage break is recorded (graph note or ACTORS lineage); never report different actual agents as one session. Preserve true identities and old reports.
 
 Pending-node prerequisites, task kind, real session identity and live-work/reader-writer safety still apply. Wait/result instructions follow the effective graph and do not restore waived steps. Their current report must first be read and recorded; a pending graph status alone is not a reason to repeat the dispatch.
 
@@ -28,19 +35,24 @@ Pending-node prerequisites, task kind, real session identity and live-work/reade
 
 This wrapper serializes Sections in the shared workspace: while any Section has live work, dispatch for another Section is rejected (`no parallel Sections`), and no review overlaps a live implementation. The canonical parallel-execution reference (independent worktrees) is not provided by this wrapper; if parallel Sections are requested, report that capability gap instead of bypassing the wrapper.
 
-## Program-owned implementation repair routing
+## Dispatch profiles
 
-Declare `purpose:"implementation"` for a new implementation and `purpose:"repair"` for fixes. Spawn defaults to new implementation; send defaults to repair unless a custom node declares its own purpose. Reopen affected completed nodes or add pending repair nodes before dispatch. Repair nodes name their owning unit/section/feature; their purpose can also be recorded on the node.
+SFD role law reaches workers through profile developer instructions, never through the dispatch prompt: the prompt stays bounded TASK facts (node, logical role, purpose, assignment, report path). `sfd-dsh-dispatch` is this plugin's baseline DSH profile, carrying the complete role bundle mirrored from the snapshot's ROLE-INSTRUCTIONS.md; role-specific installed profiles (for example tiered implementer routes, sfd-codex-code-review, sfd-zcode-plan-review) remain the preferred choice when they fit. Route a spawn with `route:{profile:"..."}`. With a profile route the wrapper keeps the prompt task-facts-only; with an inline route the assignment itself must carry the applicable role law and report convention.
 
-Each unit has one current implementation cycle:
+## Implementation repair routing
 
-- original impl_std: first repair spawns **one impl_large actor**; every later repair in this cycle continues the same actor/session;
-- original impl_large: every repair continues the original actor/session;
+The wrapper never selects or redirects a dispatch session: **spawn always creates a fresh actor; send continues exactly the named actor.** Declare `purpose:"implementation"` for a new implementation and `purpose:"repair"` for fixes. Spawn defaults to new implementation; send defaults to repair unless a custom node declares its own purpose. Reopen affected completed nodes or add pending repair nodes before dispatch. Repair nodes name their owning unit/section/feature; their purpose can also be recorded on the node.
+
+Canonical repair routing (model-routing.md) binds Main; ACTORS.json only records the lineage facts each unit's cycle needs:
+
+- original impl_std: repairs go to **one impl_large repair session** — the first repair spawn creates and records it, later repairs send to that recorded actor;
+- original impl_large: repairs return to the **original implementer session**;
+- a later repair spawn replaces the recorded repair actor as the recorded-gap fallback when that session can no longer continue; the previous actor remains history;
 - the next actual new-implementation dispatch starts a new cycle; children have separate cycles.
 
-Provide the configured large `repair_route` with the new implementation, or `route`/`repair_route` at the first std repair. Do not invent models or silently reuse std for repairs. Later repair calls reuse the saved actor rather than the supplied route. Calling spawn for a repair may therefore send instead; calling send with the original std ID may spawn the first large worker or redirect to its saved ID. **Use the returned actual IDs/actions for wait/result.**
+Provide the configured large `repair_route` with the new implementation, or `route`/`repair_route` for a repair spawn; a repair spawn without any route is rejected. Do not invent models or silently reuse std for repairs. **Use the returned actual IDs/actions for wait/result.** Route arguments apply to spawns only.
 
-Unknown dispatch results must be reconciled against actual ES facts before another implementation spawn. An unavailable repair session is a capability gap, not permission to silently create another repair actor; Main resolves the gap with the user. A new implementation must be explicitly declared, never used as a disguised repair fallback.
+Unknown dispatch results must be reconciled against actual ES facts before another implementation spawn. A new implementation must be explicitly declared, never used as a disguised repair fallback.
 
 ## Stage navigation and runtime
 

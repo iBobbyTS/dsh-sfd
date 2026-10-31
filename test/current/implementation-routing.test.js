@@ -21,7 +21,7 @@ async function dispatchAndWait(f, entry) {
   return { id, dispatched };
 }
 
-test('std repairs spawn large once and reuse its exact session through spawn and send entry points', async (t) => {
+test('repair spawn always creates a fresh actor; send continues exactly the named actor without redirection', async (t) => {
   const f = await setup(t);
   const original = await dispatchAndWait(f, task(implement));
   const first = await dispatchAndWait(f, task(implement, { purpose: 'repair', route: large }));
@@ -41,54 +41,61 @@ test('std repairs spawn large once and reuse its exact session through spawn and
     Object.assign(state.actors[first.id], { originNode: implement, ordinal: 1 });
     state.groups[first.dispatched.groupId].dispatchComplete = false;
   });
-  const second = await dispatchAndWait(f, task(implement, { purpose: 'repair', route: standard }));
-  assert.equal(second.id, first.id);
-  assert.equal(second.dispatched.operations[0].action, 'send');
-  const third = await send(f.repo, f.session, { agent_id: original.id, content: 'another admitted repair', route: standard }, f.rpc);
-  assert.equal(third.ok, true);
-  assert.equal(third.requested_actor_id, original.id);
-  assert.equal(third.actor_id, first.id);
-  await f.wait(third.actor_id);
+  const second = await send(f.repo, f.session, { agent_id: first.id, content: 'later repair in the escalated session' }, f.rpc);
+  assert.equal(second.ok, true);
+  assert.equal(second.requested_actor_id, first.id);
+  assert.equal(second.actor_id, first.id);
+  await f.wait(second.actor_id);
+  const stdContinued = await send(f.repo, f.session, { agent_id: original.id, content: 'agent-chosen repair continuation', purpose: 'repair' }, f.rpc);
+  assert.equal(stdContinued.actor_id, original.id);
+  await f.wait(stdContinued.actor_id);
+  const replacement = await dispatchAndWait(f, task(implement, { purpose: 'repair', route: large }));
+  assert.notEqual(replacement.id, first.id);
   const state = await f.state();
-  assert.deepEqual(state.implementationCycles[owner], { original: original.id, repair: first.id, repairRoute: { ...large, permission_mode: 'yolo' } });
-  assert.equal(state.actors[original.id].rounds.length, 1);
-  assert.equal(state.actors[first.id].rounds.length, 3);
+  assert.deepEqual(state.implementationCycles[owner], { original: original.id, repair: replacement.id, repairRoute: { ...large, permission_mode: 'yolo' } });
+  assert.equal(state.actors[original.id].rounds.length, 2);
+  assert.equal(state.actors[first.id].rounds.length, 2);
+  assert.equal(state.actors[replacement.id].rounds.length, 1);
   assert.equal(state.actors[first.id].originNode, implement);
   assert.equal(state.actors[first.id].ordinal, 1);
   assert.equal(state.groups[first.dispatched.groupId].dispatchComplete, false);
-  assert.equal(Object.hasOwn(state.groups[second.dispatched.groupId], 'dispatchComplete'), false);
-  assert.equal(Object.hasOwn(state.groups[third.groupId], 'dispatchComplete'), false);
   const latest = state.actors[first.id].rounds.at(-1);
   assert.equal(latest.receipt.message_id, latest.messageId);
   assert.ok(latest.pages.length > 0);
   const implementationSpawns = f.calls.filter((item) => item.command === 'spawn' && item.args.prompt.includes('logical role: impl_'));
-  assert.deepEqual(implementationSpawns.map((item) => item.args.model), [standard.model, large.model]);
+  assert.deepEqual(implementationSpawns.map((item) => item.args.model), [standard.model, large.model, large.model]);
   const sentIds = f.calls.filter((item) => item.command === 'send').map((item) => String(item.args.agent_id));
-  assert.deepEqual(sentIds, [first.id, first.id]);
+  assert.deepEqual(sentIds, [first.id, original.id]);
 });
 
-test('large repairs always return to the original actor without spawning another implementer', async (t) => {
+test('large-cycle repairs continue the original actor through send; a repair spawn is a fresh gap replacement', async (t) => {
   const f = await setup(t, plan());
   const original = await dispatchAndWait(f, task(implement, { route: large }));
-  const first = await dispatchAndWait(f, task(implement, { purpose: 'repair', route: standard }));
-  const second = await send(f.repo, f.session, { agent_id: original.id, content: 'repair again' }, f.rpc);
-  assert.equal(first.id, original.id);
-  assert.equal(second.actor_id, original.id);
-  assert.equal(first.dispatched.operations[0].action, 'send');
-  assert.equal(f.calls.filter((item) => item.command === 'spawn').length, 3);
-  await f.wait(second.actor_id);
-  assert.equal((await f.state()).actors[original.id].rounds.length, 3);
+  const continued = await send(f.repo, f.session, { agent_id: original.id, content: 'repair again in the original session' }, f.rpc);
+  assert.equal(continued.actor_id, original.id);
+  assert.equal(continued.operations[0].action, 'send');
+  await f.wait(continued.actor_id);
+  const state = await f.state();
+  assert.equal(state.implementationCycles[owner].repair, original.id);
+  assert.equal(state.actors[original.id].rounds.length, 2);
+  const replacement = await dispatchAndWait(f, task(implement, { purpose: 'repair', route: large }));
+  assert.notEqual(replacement.id, original.id);
+  assert.equal(f.calls.filter((item) => item.command === 'spawn').length, 4);
+  assert.equal((await f.state()).implementationCycles[owner].repair, replacement.id);
 });
 
-test('first std repair through send can spawn large from a saved route and reports the actual actor ID', async (t) => {
+test('send continues the named std actor; the saved route drives the canonical escalated repair spawn', async (t) => {
   const f = await setup(t);
   const original = await dispatchAndWait(f, task(implement, { repair_route: large }));
-  const repaired = await f.send(original.id, implement, 'repair the standard implementation');
-  assert.equal(repaired.ok, true);
-  assert.notEqual(repaired.actor_id, original.id);
-  assert.equal(repaired.operations[0].action, 'spawn');
-  assert.equal(f.calls.at(-1).args.model, large.model);
-  assert.equal((await f.state()).actors[repaired.actor_id].role, 'impl_large');
+  const continued = await f.send(original.id, implement, 'repair the standard implementation');
+  assert.equal(continued.ok, true);
+  assert.equal(continued.actor_id, original.id);
+  await f.wait(continued.actor_id);
+  const escalated = await dispatchAndWait(f, { node: implement, assignment: 'escalated repair without an explicit route', purpose: 'repair' });
+  assert.notEqual(escalated.id, original.id);
+  assert.equal(escalated.dispatched.operations[0].action, 'spawn');
+  assert.equal(f.calls.filter((item) => item.command === 'spawn').at(-1).args.model, large.model);
+  assert.equal((await f.state()).actors[escalated.id].role, 'impl_large');
 });
 
 test('a new implementation starts a new cycle and never inherits the prior escalated repair actor', async (t) => {
@@ -122,11 +129,10 @@ test('missing large route or original implementation is actionable and makes no 
   assert.equal(f.calls.length, before);
   const original = await dispatchAndWait(f, task(implement));
   const after = f.calls.length;
-  await assert.rejects(() => f.send(original.id, implement, 'repair without configured large route'), (error) => error.code === 'IMPL_ROUTE_REQUIRED' && /impl_large/.test(error.instruction));
+  await assert.rejects(() => f.spawn([{ node: implement, assignment: 'repair without any configured route', purpose: 'repair' }]), (error) => error.code === 'IMPL_ROUTE_REQUIRED' && /impl_large/.test(error.instruction));
   assert.equal(f.calls.length, after);
-  const fixed = await send(f.repo, f.session, { agent_id: original.id, content: 'repair with configured large route', route: large }, f.rpc);
-  assert.equal(fixed.ok, true);
-  assert.notEqual(fixed.actor_id, original.id);
+  const fixed = await dispatchAndWait(f, task(implement, { purpose: 'repair', route: large }));
+  assert.notEqual(fixed.id, original.id);
 });
 
 test('child owning units keep separate repair cycles even inside the same Section', async (t) => {
@@ -148,7 +154,7 @@ test('child owning units keep separate repair cycles even inside the same Sectio
   assert.equal(cycles[consumer].repair, repairedConsumer.id);
 });
 
-test('uncertain repair send preserves the selected actor and cannot silently start a replacement', async (t) => {
+test('an uncertain repair send preserves the selected actor and cannot silently start a replacement', async (t) => {
   const f = await setup(t);
   await dispatchAndWait(f, task(implement, { repair_route: large }));
   const repair = await dispatchAndWait(f, task(implement, { purpose: 'repair' }));
@@ -156,7 +162,7 @@ test('uncertain repair send preserves the selected actor and cannot silently sta
     if (command === 'send') throw new Error('lost receipt');
     return f.rpc(command, args);
   };
-  const failed = await spawn(f.repo, f.session, { tasks: [task(implement, { purpose: 'repair' })] }, rpc);
+  const failed = await send(f.repo, f.session, { agent_id: repair.id, content: 'another repair' }, rpc);
   assert.equal(failed.ok, false);
   assert.equal(failed.agent_ids[0], repair.id);
   const state = await f.state();
@@ -204,8 +210,7 @@ test('known actor IDs and cycle choices are checkpointed before the next irrever
     return f.rpc(command, args);
   };
   const original = await dispatchAndWait(f, task(implement, { repair_route: large }));
-  const repaired = await send(f.repo, f.session, { agent_id: original.id, content: 'first repair' }, rpc);
-  await f.wait(repaired.actor_id);
-  const continued = await send(f.repo, f.session, { agent_id: original.id, content: 'later repair' }, rpc);
+  const escalated = await dispatchAndWait(f, task(implement, { purpose: 'repair' }));
+  const continued = await send(f.repo, f.session, { agent_id: escalated.id, content: 'later repair' }, rpc);
   assert.equal(continued.ok, true);
 });

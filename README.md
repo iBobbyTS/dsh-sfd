@@ -1,6 +1,6 @@
 # @ibobbyts/dsh-sfd
 
-A thin PLAN-FULL graph compiler and current-session external-subagent wrapper for DeepSeek Harness. The graph is the checklist; Main edits progress and dynamically chooses review sessions. The plugin checks current prerequisites, records real task facts and gives concrete next-step instructions. Only implementation repair-session selection is program-owned.
+A thin PLAN-FULL graph compiler and current-session external-subagent wrapper for DeepSeek Harness. The graph is the checklist; Main edits progress and dynamically chooses review sessions. The plugin checks current prerequisites, records real task facts and gives concrete next-step instructions. It never selects or redirects dispatch sessions: spawn always creates a fresh actor, send continues exactly the named actor.
 
 Load the bundled sectioned-feature-development skill or use `/sfd`, write PLAN-FULL, then call sfd_workflow_compile.
 
@@ -9,10 +9,10 @@ Load the bundled sectioned-feature-development skill or use `/sfd`, write PLAN-F
 | Tool | Purpose |
 | --- | --- |
 | sfd_workflow_compile | Compile/reconcile the editable graph; unchanged compile validates/returns navigation without resetting progress |
-| sfd_subagent_spawn | Dispatch graph nodes; review spawn is freely chosen by Main; impl repair may continue an existing actor |
+| sfd_subagent_spawn | Dispatch graph nodes; always creates fresh actors — purpose=repair spawns and records the escalated repair session |
 | sfd_subagent_wait | Wait for requested actors and batch peers; return reports, remaining IDs and current/successor instructions |
 | sfd_subagent_result | Read the next current-round report page |
-| sfd_subagent_send | Send to Main's chosen review actor, or program-select the current impl repair actor |
+| sfd_subagent_send | Continue exactly the named actor — review or implementation targets are always Main's decision |
 | sfd_subagent_respond | Answer pending questions/permission requests, then wait for fresh state |
 | sfd_subagent_cancel | Request cancellation of one named actor |
 | sfd_subagent_observe | Read diagnostics without changing graph progress |
@@ -46,7 +46,7 @@ Changed compile backs up the old graph, creates a pending graph and sets reconci
 
 ## Dynamic reviews
 
-Main chooses fresh spawn versus send and each actual review target. An older reviewer does not prohibit a fresh spawn; role/Section or node names do not select or restrict a send target. No replacement declaration is required. The original skill explains independence and continuity considerations, but the wrapper leaves the decision to Main.
+Main chooses fresh spawn versus send and each actual review target; the program never enforces reviewer continuity. The canonical skill's session obligations still bind Main: B1 always fresh and blind, B2 in its own B1 session, closure/recheck in the discovering session, one parent-slot R01 lineage per Section. A session that cannot continue takes the recorded-gap fallback — exactly one same-route replacement with the lineage break recorded, never a silent swap.
 
 Graph prerequisites, pending status, real actor/session identity, complete batch settlement and no live writer/reader overlap still apply. Review and implementation task kinds remain distinct. Old rounds/reports stay historical facts even when Main chooses a new reviewer.
 
@@ -63,7 +63,7 @@ Each implementation unit, including each child, has its own current cycle. Dispa
 | impl_std | Spawn one impl_large actor at first repair; send every later repair to that same actor/session |
 | impl_large | Send every repair to the original implementation actor/session |
 
-The next new implementation resets the cycle; it does not erase history or rewrite the plan's tier. The plugin chooses the actor, not a guessed concrete model. Supply the configured large route as optional repair_route on new implementation, or as route/repair_route at the first std repair.
+The next new implementation resets the cycle; it does not erase history or rewrite the plan's tier. The plugin never picks the actor or a guessed model; it only records what actually ran. Supply the configured large route as optional repair_route on new implementation, or as route/repair_route for a repair spawn.
 
 Example dispatch shapes (replace node and configured profile names with the actual plan/host values):
 
@@ -75,13 +75,13 @@ Example dispatch shapes (replace node and configured profile names with the actu
 {"tasks":[{"node":"<pending-repair-node>","purpose":"repair","assignment":"fix admitted findings"}]}
 ```
 
-A custom repair node has kind=implementation, purpose=repair and its owning unit/section/feature. To repair a completed canonical implementation node instead, first reopen it and reconcile affected descendants. Calling spawn for a repair may send to the cycle actor; calling send with the original std ID may spawn the first large repair actor or redirect to its recorded ID. **Read the returned actual IDs/actions and wait on those IDs.** Subsequent route arguments do not replace the selected repair actor.
+A custom repair node has kind=implementation, purpose=repair and its owning unit/section/feature. To repair a completed canonical implementation node instead, first reopen it and reconcile affected descendants. Spawn always creates a fresh actor; send continues exactly the actor you name. **Read the returned actual IDs/actions and wait on those IDs.** Route arguments apply to spawns only.
 
-Missing large-route configuration gives an actionable error. Unknown spawn outcomes must be reconciled against actual ES task facts before retry. Unsupported repair continuation reports a capability gap rather than silently creating another repair session. Genuinely new implementation requires an explicit declaration, not a hidden repair fallback.
+Missing large-route configuration gives an actionable error for a repair spawn. Unknown spawn outcomes must be reconciled against actual ES task facts before retry. A repair session that cannot continue is replaced through the recorded-gap fallback: one same-route repair spawn with the lineage break recorded. Genuinely new implementation requires an explicit declaration, not a hidden repair fallback.
 
 ## Reports, stage instructions and host scope
 
-Wait/result first ask Main to inspect and record returned reports, not to redispatch their still-pending nodes. Successors and ready Main actions include concrete risk/specialist selection, repair reconciliation, Section finding/check/integration closure, Feature journey/composition and delivery/actor-cleanup duties. The effective graph and explicit arbitrary step waivers take precedence over default reminders. COMPLETED is never CLEAN.
+SFD role law reaches workers through profile developer instructions — `sfd-dsh-dispatch` is the plugin's baseline DSH profile (role-specific installed profiles remain preferred), so profile-routed prompts stay bounded TASK facts; inline routes must carry the role law in the assignment. Wait/result first ask Main to inspect and record returned reports, not to redispatch their still-pending nodes. Successors and ready Main actions include concrete risk/specialist selection, repair reconciliation, Section finding/check/integration closure, Feature journey/composition and delivery/actor-cleanup duties. The effective graph and explicit arbitrary step waivers take precedence over default reminders. COMPLETED is never CLEAN.
 
 Pending questions direct Main to respond; inspect ES's effective permission decision and wait for fresh state. Cancel/observe/respond never mark graph completion. Batch validation and checkpoints retain actual IDs, message UUIDs and cycle facts across partial dispatch. Wait runs outside the state write queue so diagnostics/cancel remain usable.
 

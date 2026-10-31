@@ -30,6 +30,7 @@
     "lib/session-store.js",
     "lib/skill-provider.js",
     "lib/workflow-tools.js",
+    "profiles/",
     "skills/",
     "!skills/**/__pycache__/**",
     "!skills/**/*.pyc",

@@ -77,7 +77,7 @@ test('failed terminal work gives failure recovery, not successful-report progres
   assert.equal((await f.graph()).nodes['plan:initial'].status, 'pending');
 });
 
-test('unavailable repair sessions preserve their cycle and report a capability gap rather than silently spawning', async (t) => {
+test('unavailable repair sessions preserve their cycle and direct a recorded-gap replacement', async (t) => {
   const f = await setup(t); await planDone(f);
   const current = owner + ':implement';
   const spawned = await f.spawn([task(current)]); const id = spawned.agent_ids[0]; await f.wait(id);
@@ -88,7 +88,8 @@ test('unavailable repair sessions preserve their cycle and report a capability g
   };
   const failed = await send(f.repo, f.session, { agent_id: id, content: 'repair the bounded implementation' }, rpc);
   assert.equal(failed.ok, false);
-  assert.match(failed.instruction, /capability gap/);
+  assert.match(failed.instruction, /recorded-gap fallback/);
+  assert.match(failed.instruction, /same-route replacement/);
   assert.equal((await f.state()).implementationCycles[owner].repair, id);
   const next = (await f.compile()).navigation.next.find((item) => item.node === current);
   assert.equal(next.repair.agent_id, id);

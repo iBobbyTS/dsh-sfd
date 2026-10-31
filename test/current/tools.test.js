@@ -41,7 +41,7 @@ test('tool surface is exactly compile plus seven subagent tools and no confirm/s
   } finally { await cleanup(f); }
 });
 
-test('public tool schemas preserve configured routes and return the redirected repair actor', async () => {
+test('public tool schemas preserve configured routes and continue exactly the named actor', async () => {
   const f = await fixture(plan().replaceAll('impl_large', 'impl_std'));
   try {
     const definitions = new Map();
@@ -54,15 +54,16 @@ test('public tool schemas preserve configured routes and return the redirected r
     const node = Object.values(compiled.graph.nodes).find(item => item.kind === 'implementation').id;
     const original = await call('sfd_subagent_spawn', { tasks: [{ node, assignment: 'new implementation', route: { profile: 'configured-standard' }, repair_route: { profile: 'configured-large' } }] });
     await call('sfd_subagent_wait', { agent_ids: original.agent_ids, wait_time: 0 });
-    const first = await call('sfd_subagent_send', { agent_id: original.agent_ids[0], node, content: 'repair current implementation', purpose: 'repair' });
-    assert.equal(first.ok, true);
-    assert.notEqual(first.actor_id, original.agent_ids[0]);
+    const continued = await call('sfd_subagent_send', { agent_id: original.agent_ids[0], node, content: 'repair current implementation', purpose: 'repair' });
+    assert.equal(continued.ok, true);
+    assert.equal(continued.actor_id, original.agent_ids[0]);
+    assert.equal(continued.operations[0].action, 'send');
+    await call('sfd_subagent_wait', { agent_ids: continued.agent_ids, wait_time: 0 });
+    const escalated = await call('sfd_subagent_spawn', { tasks: [{ node, assignment: 'escalated repair', purpose: 'repair' }] });
+    assert.equal(escalated.ok, true);
+    assert.equal(escalated.operations[0].action, 'spawn');
     assert.equal(f.calls.at(-1).args.profile, 'configured-large');
-    await call('sfd_subagent_wait', { agent_ids: first.agent_ids, wait_time: 0 });
-    const later = await call('sfd_subagent_spawn', { tasks: [{ node, assignment: 'another repair', purpose: 'repair' }] });
-    assert.equal(later.ok, true);
-    assert.equal(later.operations[0].action, 'send');
-    assert.deepEqual(later.agent_ids, first.agent_ids);
+    assert.notDeepEqual(escalated.agent_ids, original.agent_ids);
   } finally { await cleanup(f); }
 });
 

@@ -2,7 +2,7 @@
 
 ## Ownership
 
-Main owns plan/scope, graph progress, report meaning, review spawn/send decisions and review targets. The plugin owns compilation, current-graph prerequisite/consistency checks, actual subagent transport and next-step instructions. Its only program-selected assignment is implementation repair routing within the current per-unit implementation cycle.
+Main owns plan/scope, graph progress, report meaning and every dispatch-session choice. The plugin owns compilation, current-graph prerequisite/consistency checks, actual subagent transport and next-step instructions; it selects no session and redirects no dispatch.
 
 ## Active modules
 
@@ -24,7 +24,7 @@ Unchanged compile validates and returns navigation without writing. Changed comp
 
 ## Review dispatch
 
-Main selects fresh spawn or a known review actor to send. There is no reviewer continuity rejection, replacement declaration, first-pass-name prohibition or role/Section-based send-target enforcement. The canonical skill explains why independence/continuity may matter, but Main decides the current assignment. A task still needs pending/failed status, satisfied graph prerequisites, a real known actor/session for send and no live overlapping work. Review contexts remain distinct from implementation task kind.
+Main selects fresh spawn or a known review actor to send. There is no reviewer continuity rejection, replacement declaration, first-pass-name prohibition or role/Section-based send-target enforcement. The canonical skill explains why independence/continuity may matter; Main decides the current assignment within the canonical session rules (fresh blind B1, B2 in its own B1 session, discovering-session closure, one parent-slot R01 lineage). A session that cannot continue takes the recorded-gap fallback: one same-route replacement with the break recorded. A task still needs pending/failed status, satisfied graph prerequisites, a real known actor/session for send and no live overlapping work. Review contexts remain distinct from implementation task kind.
 
 Sections serialize in the shared workspace: while a Section has live work, dispatch for another Section is rejected, and no review overlaps a live implementation. The canonical parallel-worktree flow is a capability gap here, never a wrapper bypass.
 
@@ -32,11 +32,11 @@ Actor current scope follows a selected send; each real round keeps its actual no
 
 ## Implementation cycles
 
-Implementation dispatch declares purpose=implementation or repair. Spawn defaults to implementation; send defaults to repair, with an explicit custom node purpose used when present. New implementation requires its planned tier and begins a new cycle for that owning unit. Repair never rewrites the plan tier.
+Implementation dispatch declares purpose=implementation or repair. Spawn defaults to implementation and **always creates a fresh actor**; send continues **exactly the named actor** and defaults to repair, with an explicit custom node purpose used when present. New implementation requires its planned tier and begins a new cycle for that owning unit. Repair never rewrites the plan tier, and no dispatch is ever redirected to a different session.
 
-ACTORS.json stores `implementationCycles[unit] = {original, repair, repairRoute}`. For original large, repair=original. For original std, repair starts empty; first repair spawns one large actor using an explicitly supplied large route and saves it. Later repairs always continue that actual actor, even if Main calls spawn or names the original std actor in send. The next explicit new implementation resets the index; old actors remain history. Children have independent unit cycles.
+ACTORS.json stores `implementationCycles[unit] = {original, repair, repairRoute}` as recorded lineage facts. Canonical routing binds Main: an original impl_std repairs in one escalated impl_large session (the first repair spawn creates and records it; later repairs send to that recorded actor); an original impl_large repairs in its original implementer session. A later repair spawn replaces the recorded repair actor — the recorded-gap fallback for a session that can no longer continue — and the previous actor remains history. The next explicit new implementation resets the cycle; children keep independent unit cycles.
 
-A caller may save repair_route on new implementation or supply route/repair_route at the first std repair. The program fixes the logical repair tier and session but does not invent concrete models or inspect external preset contents. Missing routes give actionable instructions. Known unknown spawn outcomes prevent duplicate implementation dispatch until actual task facts are reconciled. Unsupported repair continuation reports a capability gap without silently replacing its session; a definitively rejected new-implementation send does not end the existing cycle.
+A caller may save repair_route on new implementation or supply route/repair_route for a repair spawn; a repair spawn without any route is rejected with an actionable instruction. The program fixes the logical repair tier but does not invent concrete models or inspect external preset contents. Known unknown spawn outcomes prevent duplicate implementation dispatch until actual task facts are reconciled. A definitively rejected new-implementation send does not end the existing cycle.
 
 ## Reports and instructions
 
@@ -48,4 +48,4 @@ Wait/result first instruct Main to inspect and record returned reports, not to r
 
 Batches validate before dispatch and checkpoint IDs, cycle selection and message UUIDs before the next irreversible call. Continuations verify the same actual session and reject stale receipt/result reuse. Wait runs outside the state-write queue so observe/cancel remain usable. Pending responses preserve actual effective policy outcomes and require fresh wait.
 
-Per-agent activation/hiding uses replayable host membership; peers remain unaffected. The package allowlist ships only the nine active modules and canonical snapshots. Fake ES and real Cordis registry/scope tests establish the local contract; real installed DSH/ES activation/resume/CLI behavior remains a separate end-to-end check.
+Role law ships in profile developer instructions (plugin baseline `sfd-dsh-dispatch`; role-specific installed profiles preferred), keeping profile-routed prompts task-facts-only; inline routes carry the law in the assignment. Per-agent activation/hiding uses replayable host membership; peers remain unaffected. The package allowlist ships only the nine active modules and canonical snapshots. Fake ES and real Cordis registry/scope tests establish the local contract; real installed DSH/ES activation/resume/CLI behavior remains a separate end-to-end check.

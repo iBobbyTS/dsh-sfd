@@ -75,7 +75,7 @@ test('reopening completed work returns every completed descendant, preserves wai
   const reopened = (await f.compile()).navigation.next.find((item) => item.node === node('implement'));
   assert.equal(reopened.action, 'dispatch-implementation');
   assert.equal(reopened.repair.agent_id, implementation.id);
-  assert.match(reopened.instruction, /program selects the cycle repair actor/);
+  assert.match(reopened.instruction, /Spawn always creates a fresh actor/);
   assert.equal((await f.send(implementation.id, node('implement'), 'change the implementation')).ok, true);
   assert.equal((await f.graph()).nodes[node('blind')].status, 'skipped_by_user');
 });
@@ -93,7 +93,7 @@ test('reopen traversal includes transitive dependents and custom gates without t
   assert.ok(!recovery.reset_nodes.includes(label(2) + ':accept'));
 });
 
-test('unavailable reviewers can be freshly spawned without replacement declarations and old actors remain selectable', async (t) => {
+test('unavailable reviewer sessions use the recorded-gap fallback and old actors remain selectable', async (t) => {
   const f = await setup(t);
   const prior = await spawnWaitDone(f, 'plan:initial');
   const rpc = async (command, args) => {
@@ -102,7 +102,8 @@ test('unavailable reviewers can be freshly spawned without replacement declarati
   };
   const failed = await send(f.repo, f.session, { agent_id: prior.id, node: 'plan:initial', content: 'recheck changes' }, rpc);
   assert.equal(failed.ok, false);
-  assert.match(failed.instruction, /No replacement declaration/);
+  assert.match(failed.instruction, /recorded-gap fallback/);
+  assert.match(failed.instruction, /Never report different actual agents as one session/);
   const fresh = await f.spawn([task('plan:initial')]);
   const id = fresh.agent_ids[0];
   assert.notEqual(id, prior.id);
