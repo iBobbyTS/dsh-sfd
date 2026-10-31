@@ -23,4 +23,18 @@ async function scan(dir,prefix=''){
   }
 }
 for(const name of ['sectioned-feature-development','code-review'])await scan(new URL(name+'/',root),name+'/');
-console.log(`Verified ${count} canonical skill files (${manifest.version}).`);
+const adaptationRoot=new URL('../adaptation/',import.meta.url);
+const adaptation=JSON.parse(await readFile(new URL('manifest.json',adaptationRoot),'utf8'));
+if(adaptation.skill_version!==manifest.version)throw new Error(`adaptation binds skill ${adaptation.skill_version} but snapshot is ${manifest.version}`);
+let targetFound=false;
+for(const entry of await readdir(root,{withFileTypes:true})){
+  if(!entry.isDirectory()||entry.name==='.DS_Store')continue;
+  const skill=await readFile(new URL(entry.name+'/SKILL.md',root),'utf8').catch(()=>null);
+  if(skill&&(/^name:\s*(.+)$/m.exec(skill)?.[1]??'').trim().replace(/^"(.*)"$/,'$1')===adaptation.target)targetFound=true;
+}
+if(!targetFound)throw new Error(`adaptation target skill not found: ${adaptation.target}`);
+for(const op of adaptation.operations??[]){
+  if(op.op!=='append')throw new Error(`unsupported adaptation op: ${op.op}`);
+  await readFile(new URL(op.file,adaptationRoot));
+}
+console.log(`Verified ${count} canonical skill files (${manifest.version}); adaptation bound to ${adaptation.target}@${adaptation.skill_version}.`);

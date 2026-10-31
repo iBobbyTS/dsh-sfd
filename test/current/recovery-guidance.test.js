@@ -17,7 +17,7 @@ for (const problem of ['identity', 'pagination', 'transport']) {
     const response = await f.spawn([task('plan:initial')]); const id = response.agent_ids[0];
     const runtime = f.tasks.get(id);
     if (problem === 'identity') runtime.session_id = 'replaced-session';
-    if (problem === 'pagination') runtime.next_offset = 2;
+    if (problem === 'pagination') runtime.offset = 2;
     let waited;
     if (problem === 'transport') {
       const { wait } = await import('../../lib/execution.js');

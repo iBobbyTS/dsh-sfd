@@ -30,13 +30,11 @@
     "lib/session-store.js",
     "lib/skill-provider.js",
     "lib/workflow-tools.js",
-    "profiles/",
+    "adaptation/",
     "skills/",
     "!skills/**/__pycache__/**",
     "!skills/**/*.pyc",
-    "scripts/verify-skill-snapshot.js",
-    "DESIGN.md",
-    "REQUIREMENTS.md"
+    "scripts/verify-skill-snapshot.js"
   ],
   "dsh": {
     "bundle": {

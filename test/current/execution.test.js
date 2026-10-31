@@ -68,7 +68,7 @@ test('profile routes keep the dispatch prompt task-facts-only; inline routes car
     const inline = await f.spawn([task('S01:implement')]);
     assert.match(f.calls.filter((call) => call.command === 'spawn').at(-1).args.prompt, /Do not commit, manage branches/);
     await f.wait(inline.agent_ids[0]);
-    const profiled = await f.spawn([{ node: 'S01:implement', assignment: 'bounded assignment', route: { profile: 'sfd-dsh-dispatch' } }]);
+    const profiled = await f.spawn([{ node: 'S01:implement', assignment: 'bounded assignment', route: { profile: 'sfd-codex-impl-large' } }]);
     assert.equal(profiled.ok, true);
     const prompt = f.calls.filter((call) => call.command === 'spawn').at(-1).args.prompt;
     assert.doesNotMatch(prompt, /Do not commit/);

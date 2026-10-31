@@ -1,6 +1,6 @@
-# DSH editable-graph addendum
+# Editable-graph execution addendum
 
-The preceding body is the exact canonical skill snapshot. This addendum adapts execution decisions to DSH and the current user contract; it does not extend Git permissions. Load the skill, write PLAN-FULL and call sfd_workflow_compile. Compilation checks structure, never semantic approval.
+The preceding body is the exact canonical skill snapshot. This addendum adapts execution decisions to this environment and the current user contract; it does not extend Git permissions. Load the skill, write PLAN-FULL and call sfd_workflow_compile. Compilation checks structure, never semantic approval.
 
 ## Plan changes versus process steps
 
@@ -20,7 +20,7 @@ Unchanged compile validates/returns navigation without writing progress. Changed
 
 ## Dynamic review decisions
 
-The canonical skill remains the norm for **who reviews when**; this wrapper is only the DSH execution flow. Main chooses the transport for each review (fresh spawn versus send) and names the actual target; the program checks only pending status, graph prerequisites, task kind, real session identity and live-work safety, and never enforces reviewer continuity itself. That program neutrality does not relax the canonical session obligations, which still bind Main:
+The canonical skill remains the norm for **who reviews when**; this wrapper is only this environment's execution flow. Main chooses the transport for each review (fresh spawn versus send) and names the actual target; the program checks only pending status, graph prerequisites, task kind, real session identity and live-work safety, and never enforces reviewer continuity itself. That program neutrality does not relax the canonical session obligations, which still bind Main:
 
 - first-pass discovery and every blind B1 (including each post-repair restart) use a fresh isolated context; B stays distinct from every writer and A reviewer, and PLAN reviewers never code-review the same Feature;
 - B2 continues its own B1 session; it is not a new reviewer or another discovery pass;
@@ -35,9 +35,20 @@ Pending-node prerequisites, task kind, real session identity and live-work/reade
 
 This wrapper serializes Sections in the shared workspace: while any Section has live work, dispatch for another Section is rejected (`no parallel Sections`), and no review overlaps a live implementation. The canonical parallel-execution reference (independent worktrees) is not provided by this wrapper; if parallel Sections are requested, report that capability gap instead of bypassing the wrapper.
 
-## Dispatch profiles
+## Dispatch routes
 
-SFD role law reaches workers through profile developer instructions, never through the dispatch prompt: the prompt stays bounded TASK facts (node, logical role, purpose, assignment, report path). `sfd-dsh-dispatch` is this plugin's baseline DSH profile, carrying the complete role bundle mirrored from the snapshot's ROLE-INSTRUCTIONS.md; role-specific installed profiles (for example tiered implementer routes, sfd-codex-code-review, sfd-zcode-plan-review) remain the preferred choice when they fit. Route a spawn with `route:{profile:"..."}`. With a profile route the wrapper keeps the prompt task-facts-only; with an inline route the assignment itself must carry the applicable role law and report convention.
+Role law reaches workers through profile developer instructions, never through the dispatch prompt: a profile-routed spawn keeps the prompt bounded TASK facts (node, logical role, purpose, assignment, report path). This environment's dispatch profile (the per-host table pattern of model-routing.md) routes every SFD role through an installed external-subagent profile or one explicit inline route:
+
+| Logical role | Route |
+|---|---|
+| PLAN review A | `route:{profile:"sfd-zcode-plan-review"}` |
+| PLAN review B | `route:{profile:"sfd-codex-plan-review"}` |
+| impl_std | `route:{subagent:"zcode", model:"deepseek/deepseek-flash"}` |
+| impl_large | `route:{profile:"sfd-codex-impl-large"}` |
+| code review A | `route:{profile:"sfd-zcode-code-review"}` |
+| code review B | `route:{profile:"sfd-codex-code-review"}` |
+
+Where a canonical dispatch table spells `external_subagent_spawn(profile="...")`, pass the same profile to `sfd_subagent_spawn` as `route:{profile:"..."}`. If `external-subagent profile list` lacks a named profile, the route is a capability blocker: report it and reinstall the SFD profiles; never invent a substitute route or silently reroute to another model. The inline impl_std route carries the impl_std role law and report convention in the assignment itself; every profile row's law already ships in its profile.
 
 ## Implementation repair routing
 

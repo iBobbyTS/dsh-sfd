@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "target": "sectioned-feature-development",
+  "skill_version": "5.6.0",
+  "operations": [
+    { "op": "append", "file": "dsh-wrapper.md" }
+  ]
+}

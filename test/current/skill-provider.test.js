@@ -29,10 +29,17 @@ test('provider get() returns the body without frontmatter', async () => {
   assert.equal(def.name, 'sectioned-feature-development');
   assert.ok(!def.content.startsWith('---'), 'frontmatter must be stripped from body');
   assert.ok(def.content.includes('# Sectioned Feature Development'));
+  assert.ok(def.content.includes('# Editable-graph execution addendum'), 'manifest append applied to target skill');
   assert.deepEqual(def.invocation, { modelInvocable: true, userInvocable: true });
   // mirror validateDefinition rules: content must be a non-empty string
   assert.equal(typeof def.content, 'string');
   assert.ok(def.content.length > 0);
+});
+
+test('code-review skill ships without the host addendum', async () => {
+  const c = (await sfdSkillProvider.list()).find(c=>c.name==='code-review');
+  const def = await sfdSkillProvider.get(c);
+  assert.ok(!def.content.includes('Editable-graph execution addendum'));
 });
 
 test('references directory ships next to the skill', async () => {
