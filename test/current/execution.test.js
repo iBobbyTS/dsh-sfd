@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rm } from 'node:fs/promises';
 import { fixture, plan, section, planDone, spawnWaitDone, markDone, markMain } from './fixtures.js';
+import { send } from '../../lib/execution.js';
 
 const cleanup = async (f) => rm(f.repo, { recursive: true, force: true });
 const route = { subagent: 'fake', model: 'caller/model' };
@@ -110,6 +111,27 @@ test('implementation retains its owning unit while Main chooses plan and code re
     assert.equal(selected.ok, true);
     assert.equal(selected.actor_id, blind.id);
   } finally { await cleanup(blindTest); }
+});
+
+test('shared dispatch rejects invalid send inputs and pending prerequisites before any RPC', async (t) => {
+  const f = await fixture(); t.after(() => cleanup(f));
+  await f.compile();
+  const original = await spawnWaitDone(f, 'plan:initial');
+  const before = f.calls.length;
+  const cases = [
+    [{ content: '' }, /assignment is required/],
+    [{ content: 'bounded recheck', mode: 'invalid' }, /mode must be queue or steer/],
+    [{ content: 'bounded recheck', node: 'missing-review' }, /unknown node missing-review/],
+    [{ content: 'bounded recheck', node: 'plan:final' }, /requires plan:initial/],
+  ];
+  for (const [args, expected] of cases) {
+    await assert.rejects(() => send(f.repo, f.session, { agent_id: original.id, ...args }, f.rpc), expected);
+    assert.equal(f.calls.length, before);
+    assert.equal((await f.state()).actors[original.id].rounds.length, 1);
+  }
+  await markDone(f, 'plan:initial', original.id, 1);
+  await assert.rejects(() => f.send(original.id, 'plan:initial', 'recheck completed work'), error => error.code === 'NODE_REOPEN_REQUIRED' && error.recovery.reset_nodes.includes('plan:initial'));
+  assert.equal(f.calls.length, before);
 });
 
 test('cancel and observe never mark graph progress', async () => {

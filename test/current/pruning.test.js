@@ -38,7 +38,7 @@ test('unchanged detection and validation share canonical comparisons while allow
   for (const [key, value] of [['mandatory', false], ['kind', 'review'], ['role', 'other'], ['unit', 'other'], ['section', 'other'], ['feature', 'other'], ['needs', []]]) {
     const graph = structuredClone(initial); graph.nodes[implementation][key] = value;
     assert.equal(structuralSame(graph, base), false, key);
-    assert.throws(() => validateGraph(graph, base, {}, { file: 'current-graph' }), error => error.code === 'GRAPH_INVALID' && error.locations[0].startsWith('current-graph:'), key);
+    assert.throws(() => validateGraph(graph, base, {}, { file: 'current-graph' }), error => error.code === 'GRAPH_INVALID' && error.locations[0].startsWith('current-graph:') && !Object.hasOwn(error, 'node'), key);
   }
   const missing = structuredClone(initial); delete missing.nodes[implementation];
   assert.equal(structuralSame(missing, base), false);

@@ -11,7 +11,7 @@ test('GUI minimal PATH resolves configured/known launcher and includes its Node 
  assert.equal(value,'{"ok":true,"result":{}}');assert.equal(seen.binary,env.EXTERNAL_SUBAGENT_BIN);assert.equal(seen.options.timeout,30000);assert.ok(seen.options.env.PATH.includes('/chosen/bin'));
 });
 test('CLI envelope errors and launch failures retain honest diagnostics despite exit zero',async()=>{
- assert.throws(()=>parseEsJson('{"ok":false,"error":{"code":"DENIED","message":"No access"}}'),e=>e.code==='DENIED'&&e.message==='No access');
+ assert.throws(()=>parseEsJson('{"ok":false,"error":{"code":"DENIED","message":"No access"}}'),e=>e.code==='DENIED'&&e.message==='No access'&&!Object.hasOwn(e,'detail'));
  for(const raw of ['null','[]','not json'])assert.throws(()=>parseEsJson(raw),/document|non-JSON/);
  const rpc=createEsTransport({run:async()=>'{"ok":true}'});await assert.rejects(()=>rpc('spawn',{}),/missing result/);
  await assert.rejects(()=>runEs([],{invoke:(_bin,_args,_options,cb)=>cb(Object.assign(new Error('missing'),{code:'ENOENT'}),'','')}),e=>e.code==='ES_MISSING');

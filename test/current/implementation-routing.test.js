@@ -28,6 +28,19 @@ test('std repairs spawn large once and reuse its exact session through spawn and
   assert.notEqual(first.id, original.id);
   assert.equal(first.dispatched.operations[0].action, 'spawn');
   assert.equal(first.dispatched.operations[0].role, 'impl_large');
+  const fresh = await f.state();
+  for (const actor of Object.values(fresh.actors)) {
+    assert.equal(Object.hasOwn(actor, 'originNode'), false);
+    assert.equal(Object.hasOwn(actor, 'ordinal'), false);
+    assert.equal(typeof actor.createdAt, 'number');
+    assert.ok(actor.rounds[0].node);
+  }
+  for (const group of Object.values(fresh.groups)) assert.equal(Object.hasOwn(group, 'dispatchComplete'), false);
+  // Existing records may still contain these fields; do not migrate or depend on them.
+  await withSession(f.repo, f.session, async state => {
+    Object.assign(state.actors[first.id], { originNode: implement, ordinal: 1 });
+    state.groups[first.dispatched.groupId].dispatchComplete = false;
+  });
   const second = await dispatchAndWait(f, task(implement, { purpose: 'repair', route: standard }));
   assert.equal(second.id, first.id);
   assert.equal(second.dispatched.operations[0].action, 'send');
@@ -40,6 +53,14 @@ test('std repairs spawn large once and reuse its exact session through spawn and
   assert.deepEqual(state.implementationCycles[owner], { original: original.id, repair: first.id, repairRoute: { ...large, permission_mode: 'yolo' } });
   assert.equal(state.actors[original.id].rounds.length, 1);
   assert.equal(state.actors[first.id].rounds.length, 3);
+  assert.equal(state.actors[first.id].originNode, implement);
+  assert.equal(state.actors[first.id].ordinal, 1);
+  assert.equal(state.groups[first.dispatched.groupId].dispatchComplete, false);
+  assert.equal(Object.hasOwn(state.groups[second.dispatched.groupId], 'dispatchComplete'), false);
+  assert.equal(Object.hasOwn(state.groups[third.groupId], 'dispatchComplete'), false);
+  const latest = state.actors[first.id].rounds.at(-1);
+  assert.equal(latest.receipt.message_id, latest.messageId);
+  assert.ok(latest.pages.length > 0);
   const implementationSpawns = f.calls.filter((item) => item.command === 'spawn' && item.args.prompt.includes('logical role: impl_'));
   assert.deepEqual(implementationSpawns.map((item) => item.args.model), [standard.model, large.model]);
   const sentIds = f.calls.filter((item) => item.command === 'send').map((item) => String(item.args.agent_id));
